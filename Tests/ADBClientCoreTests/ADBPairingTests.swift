@@ -150,6 +150,39 @@ final class ADBPairingTests: XCTestCase {
         }
     }
 
+    func testPairingIdentityMaterialBuildsPeerInfoFromADBPublicKey() throws {
+        let identity = try ADBPairingIdentityMaterial(
+            authenticationPublicKey: ADBAuthenticationPublicKey("AAAA adb@ios"),
+            certificatePEM: Array("-----BEGIN CERTIFICATE-----".utf8),
+            privateKeyPEM: Array("-----BEGIN PRIVATE KEY-----".utf8)
+        )
+
+        XCTAssertEqual(identity.peerInfo.type, .adbRSAPublicKey)
+        XCTAssertEqual(identity.peerInfo.data, Array("AAAA adb@ios".utf8))
+        XCTAssertEqual(identity.certificatePEM, Array("-----BEGIN CERTIFICATE-----".utf8))
+        XCTAssertEqual(identity.privateKeyPEM, Array("-----BEGIN PRIVATE KEY-----".utf8))
+    }
+
+    func testPairingIdentityMaterialRejectsMissingPEMInputs() throws {
+        let peerInfo = try ADBPairingPeerInfo(type: .adbRSAPublicKey, data: [1, 2, 3])
+
+        XCTAssertThrowsError(try ADBPairingIdentityMaterial(
+            peerInfo: peerInfo,
+            certificatePEM: [],
+            privateKeyPEM: [1]
+        )) { error in
+            XCTAssertEqual(error as? ADBPairingIdentityMaterialError, .emptyCertificatePEM)
+        }
+
+        XCTAssertThrowsError(try ADBPairingIdentityMaterial(
+            peerInfo: peerInfo,
+            certificatePEM: [1],
+            privateKeyPEM: []
+        )) { error in
+            XCTAssertEqual(error as? ADBPairingIdentityMaterialError, .emptyPrivateKeyPEM)
+        }
+    }
+
     func testPairingProtocolSessionExchangesSPAKE2ThenEncryptedPeerInfo() throws {
         let localPeerInfo = try ADBPairingPeerInfo(type: .adbRSAPublicKey, data: [10, 11])
         let remotePeerInfo = try ADBPairingPeerInfo(type: .adbRSAPublicKey, data: [20, 21])
@@ -181,6 +214,30 @@ final class ADBPairingTests: XCTestCase {
         ))
         XCTAssertEqual(result, remotePeerInfo)
         XCTAssertEqual(session.state, .finished)
+    }
+
+    func testPairingProtocolSessionCanUseIdentityMaterialPeerInfo() throws {
+        let identity = try ADBPairingIdentityMaterial(
+            authenticationPublicKey: ADBAuthenticationPublicKey("AAAA adb@ios"),
+            certificatePEM: [1],
+            privateKeyPEM: [2]
+        )
+        var session = ADBPairingProtocolSession(
+            identityMaterial: identity,
+            keyExchange: TestPairingKeyExchange(
+                localMessage: [1, 2, 3],
+                expectedPeerMessage: [4, 5, 6],
+                cipher: TestPairingCipher()
+            )
+        )
+
+        _ = try session.start()
+        let peerInfoPacket = try session.handlePeerSPAKE2Packet(ADBPairingPacket(
+            type: .spake2Message,
+            payload: [4, 5, 6]
+        ))
+
+        XCTAssertEqual(peerInfoPacket.payload, TestPairingCipher.encryptionPrefix + identity.peerInfo.encoded())
     }
 
     func testPairingProtocolSessionRejectsInvalidStateAndPacketType() throws {

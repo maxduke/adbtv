@@ -228,6 +228,46 @@ public enum ADBPairingPeerInfoError: Error, Equatable, Sendable {
     case dataTooLarge(Int)
 }
 
+public struct ADBPairingIdentityMaterial: Equatable, Sendable {
+    public var peerInfo: ADBPairingPeerInfo
+    public var certificatePEM: [UInt8]
+    public var privateKeyPEM: [UInt8]
+
+    public init(
+        authenticationPublicKey: ADBAuthenticationPublicKey,
+        certificatePEM: [UInt8],
+        privateKeyPEM: [UInt8]
+    ) throws {
+        try self.init(
+            peerInfo: ADBPairingPeerInfo(authenticationPublicKey: authenticationPublicKey),
+            certificatePEM: certificatePEM,
+            privateKeyPEM: privateKeyPEM
+        )
+    }
+
+    public init(
+        peerInfo: ADBPairingPeerInfo,
+        certificatePEM: [UInt8],
+        privateKeyPEM: [UInt8]
+    ) throws {
+        guard !certificatePEM.isEmpty else {
+            throw ADBPairingIdentityMaterialError.emptyCertificatePEM
+        }
+        guard !privateKeyPEM.isEmpty else {
+            throw ADBPairingIdentityMaterialError.emptyPrivateKeyPEM
+        }
+
+        self.peerInfo = peerInfo
+        self.certificatePEM = certificatePEM
+        self.privateKeyPEM = privateKeyPEM
+    }
+}
+
+public enum ADBPairingIdentityMaterialError: Error, Equatable, Sendable {
+    case emptyCertificatePEM
+    case emptyPrivateKeyPEM
+}
+
 public protocol ADBPairingKeyExchange: Sendable {
     mutating func localSPAKE2Message() throws -> [UInt8]
     mutating func initializeCipher(peerSPAKE2Message: [UInt8]) throws -> any ADBPairingCipher
@@ -251,6 +291,10 @@ public struct ADBPairingProtocolSession: Sendable {
     private let localPeerInfo: ADBPairingPeerInfo
     private var keyExchange: any ADBPairingKeyExchange
     private var cipher: (any ADBPairingCipher)?
+
+    public init(identityMaterial: ADBPairingIdentityMaterial, keyExchange: any ADBPairingKeyExchange) {
+        self.init(localPeerInfo: identityMaterial.peerInfo, keyExchange: keyExchange)
+    }
 
     public init(localPeerInfo: ADBPairingPeerInfo, keyExchange: any ADBPairingKeyExchange) {
         self.state = .ready
