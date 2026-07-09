@@ -58,7 +58,7 @@ public struct ADBDeviceSession: Sendable {
         var events = encoding.events
         let maxPayloadByteCount = try streamWritePayloadByteCount()
 
-        for chunk in encoding.encodedBytes().chunks(maxByteCount: maxPayloadByteCount) {
+        for chunk in try encoding.encodedBytes().chunks(maxByteCount: maxPayloadByteCount) {
             _ = try await transportSession.writeStream(localID: localID, payload: chunk)
             try await waitForStreamWritable(localID: localID)
         }
