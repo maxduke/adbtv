@@ -122,6 +122,70 @@ final class ADBDeviceSessionTests: XCTestCase {
         }
     }
 
+    func testPushFileOpensSyncServiceWritesChunksAndReturnsCompletedEvent() async throws {
+        let remotePath = try ADBRemotePath("/data/local/tmp/adbtv/app.apk")
+        let plan = try ADBSyncPushPlan(
+            remotePath: remotePath,
+            modificationTime: 123,
+            totalByteCount: 3
+        )
+        let contents: [UInt8] = [1, 2, 3]
+        let syncBytes = try plan.encode(contents: contents).encodedBytes()
+        let maxData: UInt32 = 12
+        let syncWriteChunks = syncBytes.chunks(maxByteCount: Int(maxData))
+        let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
+            writeChunkCount: syncWriteChunks.count,
+            responsePayload: ADBSyncFrame(id: .okay, value: 0).encoded()
+        ))
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: maxData))),
+            transport: transport
+        )
+
+        let events = try await session.pushFile(contents: contents, plan: plan)
+        let sentChunks = await transport.sentChunks()
+        let sentPackets = try sentChunks.map { try $0.decodedPacket() }
+        let writePackets = sentPackets.filter { $0.command == .write }
+        let transferPayload = writePackets.dropLast().flatMap { $0.payload }
+
+        XCTAssertEqual(events, [
+            .started(remotePath: remotePath, totalByteCount: 3),
+            .progress(sentByteCount: 3, totalByteCount: 3),
+            .finishedSending(sentByteCount: 3, totalByteCount: 3),
+            .completed
+        ])
+        XCTAssertEqual(sentPackets.first, ADBPacket(
+            command: .open,
+            arg0: 1,
+            arg1: 0,
+            payload: Array("sync:".utf8) + [0]
+        ))
+        XCTAssertEqual(transferPayload, syncBytes)
+        XCTAssertEqual(writePackets.last?.payload, try ADBSyncFrame.quit().encoded())
+        XCTAssertEqual(sentPackets[sentPackets.count - 3], ADBPacket(command: .okay, arg0: 1, arg1: 42))
+        XCTAssertEqual(sentPackets.last, ADBPacket(command: .close, arg0: 1, arg1: 42))
+    }
+
+    func testPushFileReturnsFailedEventFromSyncFailResponse() async throws {
+        let remotePath = try ADBRemotePath("/data/local/tmp/adbtv/app.apk")
+        let plan = try ADBSyncPushPlan(remotePath: remotePath, totalByteCount: 0)
+        let syncBytes = try plan.encode(contents: []).encodedBytes()
+        let maxData: UInt32 = 16
+        let failMessage = Array("permission denied".utf8)
+        let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
+            writeChunkCount: syncBytes.chunks(maxByteCount: Int(maxData)).count,
+            responsePayload: ADBSyncFrame(id: .fail, value: UInt32(failMessage.count), payload: failMessage).encoded()
+        ))
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: maxData))),
+            transport: transport
+        )
+
+        let events = try await session.pushFile(contents: [], plan: plan)
+
+        XCTAssertEqual(events.last, .failed(message: "permission denied"))
+    }
+
     func testTransportSessionOutputExtractsConnectedDeviceAndFinishedShellOutput() throws {
         let connectedOutput = try ADBTransportSessionOutput(driverOutput: ADBClientDriverOutput(
             actions: [
@@ -145,19 +209,35 @@ final class ADBDeviceSessionTests: XCTestCase {
         XCTAssertEqual(finishedOutput.finishedShellOutput, shellOutput)
     }
 
-    private func deviceConnectPacket() -> ADBPacket {
+    private func connectedState(maxData: UInt32 = ADBConnectionState.defaultMaxData) -> ADBConnectionState {
+        var state = ADBConnectionState()
+        _ = try? state.receive(deviceConnectPacket(maxData: maxData))
+        return state
+    }
+
+    private func deviceConnectPacket(maxData: UInt32 = ADBConnectionState.defaultMaxData) -> ADBPacket {
         ADBPacket(
             command: .connect,
             arg0: ADBConnectionState.defaultProtocolVersion,
-            arg1: ADBConnectionState.defaultMaxData,
+            arg1: maxData,
             payload: Array("device::ro.product.name=tv".utf8) + [0]
         )
     }
 
-    private func connectedState() -> ADBConnectionState {
-        var state = ADBConnectionState()
-        _ = try? state.receive(deviceConnectPacket())
-        return state
+    private func syncPushInboundChunks(writeChunkCount: Int, responsePayload: [UInt8]) throws -> [[UInt8]] {
+        var chunks = [
+            try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
+        ]
+        chunks.append(contentsOf: try (0..<writeChunkCount).map { _ in
+            try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
+        })
+        chunks.append(
+            try ADBPacket(command: .write, arg0: 42, arg1: 1, payload: responsePayload).encoded()
+        )
+        chunks.append(
+            try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
+        )
+        return chunks
     }
 }
 
@@ -190,5 +270,21 @@ private actor InMemoryADBByteTransport: ADBByteTransport {
 private extension Array where Element == UInt8 {
     func decodedPacket() throws -> ADBPacket {
         try ADBPacket.decodeFrame(from: self).packet
+    }
+
+    func chunks(maxByteCount: Int) -> [[UInt8]] {
+        guard !isEmpty else {
+            return []
+        }
+
+        var result: [[UInt8]] = []
+        var offset = 0
+        while offset < count {
+            let end = Swift.min(offset + maxByteCount, count)
+            result.append(Array(self[offset..<end]))
+            offset = end
+        }
+
+        return result
     }
 }

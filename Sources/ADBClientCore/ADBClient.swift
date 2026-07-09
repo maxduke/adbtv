@@ -24,6 +24,21 @@ public struct ADBClient: Sendable {
         return ADBClientAction(packetsToSend: [packet])
     }
 
+    public mutating func startService(_ service: String) throws -> ADBClientAction {
+        let packet = try connection.open(service: service)
+        return ADBClientAction(packetsToSend: [packet])
+    }
+
+    public mutating func writeStream(localID: UInt32, payload: [UInt8]) throws -> ADBClientAction {
+        let packet = try connection.write(localID: localID, payload: payload)
+        return ADBClientAction(packetsToSend: [packet])
+    }
+
+    public mutating func closeStream(localID: UInt32) throws -> ADBClientAction {
+        let packet = try connection.close(localID: localID)
+        return ADBClientAction(packetsToSend: [packet])
+    }
+
     public mutating func receive(_ packet: ADBPacket) throws -> ADBClientAction {
         let result = try connection.receive(packet)
         var shellResults: [ADBShellCommandSessionResult] = []

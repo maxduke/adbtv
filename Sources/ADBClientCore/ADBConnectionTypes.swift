@@ -11,6 +11,14 @@ public enum ADBConnectionPhase: Equatable, Sendable {
 
         return false
     }
+
+    public var maxData: UInt32? {
+        if case .connected(_, let maxData, _) = self {
+            return maxData
+        }
+
+        return nil
+    }
 }
 
 public struct ADBConnectionReceiveResult: Equatable, Sendable {

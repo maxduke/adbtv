@@ -68,6 +68,20 @@ final class ADBClientDriverTests: XCTestCase {
         XCTAssertEqual(driver.client.shellSession(localID: 1)?.phase, .opening(localID: 1))
     }
 
+    func testStartServiceReturnsEncodedOpenPacket() throws {
+        var driver = ADBClientDriver(client: ADBClient(connection: connectedState()))
+
+        let output = try driver.startService("sync:")
+        let decoded = try ADBPacket.decodeFrame(from: output.bytesToSend)
+
+        XCTAssertEqual(decoded.packet, ADBPacket(
+            command: .open,
+            arg0: 1,
+            arg1: 0,
+            payload: Array("sync:".utf8) + [0]
+        ))
+    }
+
     func testReceiveBytesProcessesPacketAndReturnsEncodedAck() throws {
         var driver = ADBClientDriver(client: ADBClient(connection: connectedState()))
         _ = try driver.startShellCommand(try ADBShellCommand("getprop ro.product.model"))

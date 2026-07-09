@@ -37,6 +37,28 @@ final class ADBTransportSessionTests: XCTestCase {
         ))
     }
 
+    func testStartServiceWriteStreamAndCloseStreamSendEncodedPackets() async throws {
+        let transport = InMemoryADBByteTransport()
+        var session = ADBTransportSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState())),
+            transport: transport
+        )
+
+        _ = try await session.startService("sync:")
+        await transport.enqueue(try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded())
+        _ = try await session.receiveNext()
+        _ = try await session.writeStream(localID: 1, payload: [1, 2, 3])
+        _ = try await session.closeStream(localID: 1)
+        let sentChunks = await transport.sentChunks()
+        let sentPackets = try sentChunks.map { try $0.decodedPacket() }
+
+        XCTAssertEqual(sentPackets, [
+            ADBPacket(command: .open, arg0: 1, arg1: 0, payload: Array("sync:".utf8) + [0]),
+            ADBPacket(command: .write, arg0: 1, arg1: 42, payload: [1, 2, 3]),
+            ADBPacket(command: .close, arg0: 1, arg1: 42)
+        ])
+    }
+
     func testReceiveNextReturnsNilWhenTransportEnds() async throws {
         let transport = InMemoryADBByteTransport()
         var session = ADBTransportSession(transport: transport)

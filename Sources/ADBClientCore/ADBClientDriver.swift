@@ -27,6 +27,21 @@ public struct ADBClientDriver: Sendable {
         return try ADBClientDriverOutput(actions: [action])
     }
 
+    public mutating func startService(_ service: String) throws -> ADBClientDriverOutput {
+        let action = try client.startService(service)
+        return try ADBClientDriverOutput(actions: [action])
+    }
+
+    public mutating func writeStream(localID: UInt32, payload: [UInt8]) throws -> ADBClientDriverOutput {
+        let action = try client.writeStream(localID: localID, payload: payload)
+        return try ADBClientDriverOutput(actions: [action])
+    }
+
+    public mutating func closeStream(localID: UInt32) throws -> ADBClientDriverOutput {
+        let action = try client.closeStream(localID: localID)
+        return try ADBClientDriverOutput(actions: [action])
+    }
+
     public mutating func receiveBytes(_ bytes: [UInt8]) throws -> ADBClientDriverOutput {
         let packets = try decoder.append(bytes)
         var actions: [ADBClientAction] = []

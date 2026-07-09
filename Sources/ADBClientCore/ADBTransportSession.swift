@@ -19,6 +19,24 @@ public struct ADBTransportSession: Sendable {
         return ADBTransportSessionOutput(driverOutput: output)
     }
 
+    public mutating func startService(_ service: String) async throws -> ADBTransportSessionOutput {
+        let output = try driver.startService(service)
+        try await send(output)
+        return ADBTransportSessionOutput(driverOutput: output)
+    }
+
+    public mutating func writeStream(localID: UInt32, payload: [UInt8]) async throws -> ADBTransportSessionOutput {
+        let output = try driver.writeStream(localID: localID, payload: payload)
+        try await send(output)
+        return ADBTransportSessionOutput(driverOutput: output)
+    }
+
+    public mutating func closeStream(localID: UInt32) async throws -> ADBTransportSessionOutput {
+        let output = try driver.closeStream(localID: localID)
+        try await send(output)
+        return ADBTransportSessionOutput(driverOutput: output)
+    }
+
     public mutating func receiveNext() async throws -> ADBTransportSessionOutput? {
         guard let bytes = try await transport.receive() else {
             return nil

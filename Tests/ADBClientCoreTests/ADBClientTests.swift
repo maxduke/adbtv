@@ -30,6 +30,25 @@ final class ADBClientTests: XCTestCase {
         XCTAssertEqual(client.shellSession(localID: 1)?.phase, .opening(localID: 1))
     }
 
+    func testStartServiceWriteStreamAndCloseStreamUseConnectionPackets() throws {
+        var client = ADBClient(connection: connectedState())
+
+        let openAction = try client.startService("sync:")
+        _ = try client.receive(ADBPacket(command: .okay, arg0: 42, arg1: 1))
+        let writeAction = try client.writeStream(localID: 1, payload: [1, 2, 3])
+        let closeAction = try client.closeStream(localID: 1)
+
+        XCTAssertEqual(openAction.packetsToSend, [
+            ADBPacket(command: .open, arg0: 1, arg1: 0, payload: Array("sync:".utf8) + [0])
+        ])
+        XCTAssertEqual(writeAction.packetsToSend, [
+            ADBPacket(command: .write, arg0: 1, arg1: 42, payload: [1, 2, 3])
+        ])
+        XCTAssertEqual(closeAction.packetsToSend, [
+            ADBPacket(command: .close, arg0: 1, arg1: 42)
+        ])
+    }
+
     func testReceiveAuthTokenWithoutResponderOnlyPublishesEvent() throws {
         var client = ADBClient()
 

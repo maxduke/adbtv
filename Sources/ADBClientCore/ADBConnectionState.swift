@@ -31,6 +31,10 @@ public struct ADBConnectionState: Sendable {
             throw ADBConnectionStateError.notConnected
         }
 
+        guard !service.isEmpty, !service.utf8.contains(0) else {
+            throw ADBConnectionStateError.invalidServiceName(service)
+        }
+
         let localID = reserveLocalStreamID()
         streamsByLocalID[localID] = ADBStream(
             localID: localID,
