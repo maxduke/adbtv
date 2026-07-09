@@ -54,6 +54,10 @@ public struct ADBTVRootView: View {
                 DeviceDetailView(
                     device: device,
                     installDraft: model.installDraft,
+                    installURLString: Binding(
+                        get: { model.installDraft.urlString },
+                        set: { model.setInstallURLString($0) }
+                    ),
                     remoteStatus: model.remoteStatus,
                     canInstall: model.canInstallSelectedPackage,
                     chooseAPK: {
@@ -377,6 +381,7 @@ private struct DeviceRow: View {
 private struct DeviceDetailView: View {
     var device: ADBTVDeviceSummary
     var installDraft: ADBTVInstallDraft
+    var installURLString: Binding<String>
     var remoteStatus: ADBTVRemoteStatus
     var canInstall: Bool
     var chooseAPK: () -> Void
@@ -389,6 +394,7 @@ private struct DeviceDetailView: View {
                 DeviceHeader(device: device)
                 APKInstallPanel(
                     installDraft: installDraft,
+                    installURLString: installURLString,
                     canInstall: canInstall,
                     chooseAPK: chooseAPK,
                     install: install
@@ -425,6 +431,7 @@ private struct DeviceHeader: View {
 
 private struct APKInstallPanel: View {
     var installDraft: ADBTVInstallDraft
+    var installURLString: Binding<String>
     var canInstall: Bool
     var chooseAPK: () -> Void
     var install: () -> Void
@@ -451,6 +458,16 @@ private struct APKInstallPanel: View {
                 .disabled(!canInstall || installDraft.status.isRunning)
             }
 
+            TextField("https://example.com/app.apk", text: installURLString)
+                .autocorrectionDisabled()
+                .textFieldStyle(.roundedBorder)
+
+            if !installURLString.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+               !installDraft.canBuildInstallPlan {
+                Label("Enter a direct HTTP or HTTPS APK URL", systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.secondary)
+            }
+
             if let package = installDraft.selectedPackage {
                 LabeledContent("Package", value: package.fileName)
                 if let byteCount = package.byteCount {
@@ -459,6 +476,8 @@ private struct APKInstallPanel: View {
                 if let fileURL = package.fileURL {
                     LabeledContent("Source", value: fileURL.lastPathComponent)
                 }
+            } else if let url = installDraft.validatedURL {
+                LabeledContent("Source", value: url.absoluteString)
             }
 
             InstallStatusView(status: installDraft.status)

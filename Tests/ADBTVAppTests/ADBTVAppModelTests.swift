@@ -51,6 +51,13 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertNil(ADBTVInstallDraft(urlString: "https:///app.apk").validatedURL)
     }
 
+    func testPackageDraftBuildsInstallReadinessFromAPKURL() {
+        let draft = ADBTVInstallDraft(urlString: "https://example.com/releases/Example%20App.apk")
+
+        XCTAssertTrue(draft.canBuildInstallPlan)
+        XCTAssertEqual(draft.urlFileName, "Example App.apk")
+    }
+
     func testModelCanInstallOnlyWithDeviceAndValidPackage() {
         let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
         var model = ADBTVAppModel(devices: [device])
@@ -60,6 +67,17 @@ final class ADBTVAppModelTests: XCTestCase {
         model.selectPackage(fileName: "app.apk", byteCount: 7)
 
         XCTAssertTrue(model.canInstallSelectedPackage)
+
+        model.setInstallURLString("https://example.com/app.apk")
+
+        XCTAssertTrue(model.canInstallSelectedPackage)
+        XCTAssertNil(model.installDraft.selectedPackage)
+        XCTAssertEqual(model.installDraft.status, .ready)
+
+        model.setInstallURLString("https://example.com/app.apks")
+
+        XCTAssertFalse(model.canInstallSelectedPackage)
+        XCTAssertEqual(model.installDraft.status, .idle)
     }
 
     func testModelAddsAndRemovesDevices() {
@@ -106,7 +124,21 @@ final class ADBTVAppModelTests: XCTestCase {
             fileURL: url,
             byteCount: 123
         ))
+        XCTAssertEqual(model.installDraft.urlString, "")
         XCTAssertEqual(model.installDraft.status, .ready)
+    }
+
+    func testModelClearsURLWhenSelectingFilePackage() {
+        var model = ADBTVAppModel()
+
+        model.setInstallURLString("https://example.com/app.apk")
+        model.selectPackage(fileName: "local.apk", byteCount: 12)
+
+        XCTAssertEqual(model.installDraft.urlString, "")
+        XCTAssertEqual(model.installDraft.selectedPackage, ADBTVInstallPackageDraft(
+            fileName: "local.apk",
+            byteCount: 12
+        ))
     }
 
     func testInstallEventsUpdatePresentationStatus() {

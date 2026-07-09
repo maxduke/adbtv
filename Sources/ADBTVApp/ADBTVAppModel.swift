@@ -50,16 +50,20 @@ public struct ADBTVAppModel: Equatable, Sendable {
 
     public mutating func selectPackage(fileName: String, byteCount: Int64?) {
         installDraft.selectedPackage = ADBTVInstallPackageDraft(fileName: fileName, byteCount: byteCount)
+        installDraft.urlString = ""
         installDraft.status = .ready
     }
 
     public mutating func selectPackage(fileURL: URL, byteCount: Int64?) {
         installDraft.selectedPackage = ADBTVInstallPackageDraft(fileURL: fileURL, byteCount: byteCount)
+        installDraft.urlString = ""
         installDraft.status = .ready
     }
 
     public mutating func setInstallURLString(_ value: String) {
         installDraft.urlString = value
+        installDraft.selectedPackage = nil
+        installDraft.status = installDraft.canBuildInstallPlan ? .ready : .idle
     }
 
     public mutating func recordInstallEvent(_ event: ADBAPKInstallEvent) {
@@ -157,11 +161,15 @@ public struct ADBTVInstallDraft: Equatable, Sendable {
     }
 
     public var canBuildInstallPlan: Bool {
-        guard selectedPackage != nil else {
+        if selectedPackage != nil {
+            return (try? installPlan()) != nil
+        }
+
+        guard let urlFileName else {
             return false
         }
 
-        return (try? installPlan()) != nil
+        return (try? ADBAPKInstallPlan.singleAPK(fileName: urlFileName)) != nil
     }
 
     public func installPlan() throws -> ADBAPKInstallPlan {
@@ -186,6 +194,15 @@ public struct ADBTVInstallDraft: Equatable, Sendable {
         }
 
         return url
+    }
+
+    public var urlFileName: String? {
+        guard let validatedURL else {
+            return nil
+        }
+
+        let fileName = validatedURL.lastPathComponent.removingPercentEncoding ?? validatedURL.lastPathComponent
+        return fileName.isEmpty ? nil : fileName
     }
 }
 

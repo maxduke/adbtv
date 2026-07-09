@@ -32,6 +32,37 @@ final class ADBTVInstallOperationTests: XCTestCase {
         XCTAssertEqual(connection.modificationTimes, [123])
     }
 
+    func testInstallSelectedPackageDownloadsURLAndCallsConnection() async throws {
+        let url = URL(string: "https://example.com/Remote%20App.apk")!
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        let model = ADBTVAppModel(
+            devices: [device],
+            installDraft: ADBTVInstallDraft(urlString: url.absoluteString)
+        )
+        var connection = RecordingInstallConnection(result: .success)
+        let operation = ADBTVInstallOperation(
+            readFile: { _ in
+                XCTFail("URL installs should not read a local file.")
+                return []
+            },
+            downloadPackage: { downloadURL in
+                XCTAssertEqual(downloadURL, url)
+                return ADBTVDownloadedPackage(contents: [9, 8, 7], fileName: "Remote App.apk")
+            },
+            modificationTime: { 456 }
+        )
+
+        let report = try await operation.installSelectedPackage(from: model, using: &connection)
+
+        XCTAssertEqual(report.result, .success)
+        XCTAssertEqual(connection.installedContents, [[9, 8, 7]])
+        XCTAssertEqual(connection.installedPlans.map(\.remoteAPKPath.rawValue), [
+            "/data/local/tmp/adbtv/Remote_App.apk"
+        ])
+        XCTAssertEqual(connection.installedPlans.map(\.package.byteCount), [Optional(Int64(3))])
+        XCTAssertEqual(connection.modificationTimes, [456])
+    }
+
     func testInstallSelectedPackageRejectsMissingDevicePackageAndFileURL() async throws {
         let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
         var connection = RecordingInstallConnection(result: .success)
