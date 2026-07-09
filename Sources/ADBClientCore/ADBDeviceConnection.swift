@@ -83,5 +83,20 @@ public struct ADBDeviceConnection: Sendable {
         start()
         return try await session.runShellCommand(command)
     }
+
+    public mutating func installAPK(
+        contents: [UInt8],
+        plan: ADBAPKInstallPlan,
+        modificationTime: UInt32 = 0,
+        installer: ADBAPKInstaller = ADBAPKInstaller()
+    ) async throws -> ADBAPKInstallReport {
+        start()
+        return try await session.installAPK(
+            contents: contents,
+            plan: plan,
+            modificationTime: modificationTime,
+            installer: installer
+        )
+    }
 }
 #endif

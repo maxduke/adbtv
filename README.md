@@ -1,10 +1,15 @@
 # ADB TV
 
-ADB TV is a planned native SwiftUI iOS app for managing Android TV devices over Wireless Debugging using a native ADB client.
+ADB TV is a native SwiftUI iOS app in progress for managing Android TV devices over Wireless Debugging using a native ADB client.
 
 ## Status
 
-The project is in product and architecture planning. No Xcode project has been scaffolded yet.
+The project is in an early protocol and app-shell phase. It currently builds as Swift packages:
+
+- `ADBClientCore`: native ADB packet, stream, shell, sync, remote-control, and APK install foundations.
+- `ADBTVApp`: initial SwiftUI app shell and value models for device selection and APK install readiness.
+
+No Xcode app project or signing workflow has been scaffolded yet.
 
 Current direction:
 
@@ -28,7 +33,7 @@ Current direction:
 
 ## Development
 
-The SwiftUI app target has not been created yet. The current implementation starts with a Swift package for the native ADB protocol spike.
+The current implementation is a Swift package that contains the protocol core plus the first SwiftUI app-shell module.
 
 On a machine with Swift 5.9+ installed:
 
@@ -36,4 +41,4 @@ On a machine with Swift 5.9+ installed:
 swift test
 ```
 
-The package currently contains `ADBClientCore`, which covers ADB packet framing foundations and related tests.
+The package currently contains `ADBClientCore` and `ADBTVApp`. GitHub Actions runs the same test command on macOS.

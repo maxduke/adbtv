@@ -1,0 +1,62 @@
+import XCTest
+@testable import ADBTVApp
+
+final class ADBTVAppModelTests: XCTestCase {
+    func testInitialModelSelectsFirstDevice() {
+        let first = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
+        let second = ADBTVDeviceSummary(displayName: "Bedroom", host: "192.168.1.51", port: 5555)
+
+        let model = ADBTVAppModel(devices: [first, second])
+
+        XCTAssertEqual(model.selectedDevice, first)
+    }
+
+    func testPackageDraftBuildsAPKInstallPlan() throws {
+        let draft = ADBTVInstallDraft(
+            selectedPackage: ADBTVInstallPackageDraft(fileName: "Example App.apk", byteCount: 42)
+        )
+
+        let plan = try draft.installPlan()
+
+        XCTAssertTrue(draft.canBuildInstallPlan)
+        XCTAssertEqual(plan.package.fileName, "Example App.apk")
+        XCTAssertEqual(plan.package.byteCount, 42)
+        XCTAssertEqual(plan.remoteAPKPath.rawValue, "/data/local/tmp/adbtv/Example_App.apk")
+    }
+
+    func testPackageDraftRejectsMissingAndNonAPKPackages() {
+        XCTAssertThrowsError(try ADBTVInstallDraft().installPlan()) { error in
+            XCTAssertEqual(error as? ADBTVInstallDraftError, .missingPackage)
+        }
+
+        let draft = ADBTVInstallDraft(
+            selectedPackage: ADBTVInstallPackageDraft(fileName: "bundle.apks")
+        )
+
+        XCTAssertFalse(draft.canBuildInstallPlan)
+    }
+
+    func testInstallURLValidationAllowsHTTPAndHTTPSOnly() {
+        XCTAssertEqual(
+            ADBTVInstallDraft(urlString: "https://example.com/app.apk").validatedURL?.absoluteString,
+            "https://example.com/app.apk"
+        )
+        XCTAssertEqual(
+            ADBTVInstallDraft(urlString: " http://192.168.1.2/app.apk ").validatedURL?.absoluteString,
+            "http://192.168.1.2/app.apk"
+        )
+        XCTAssertNil(ADBTVInstallDraft(urlString: "ftp://example.com/app.apk").validatedURL)
+        XCTAssertNil(ADBTVInstallDraft(urlString: "https:///app.apk").validatedURL)
+    }
+
+    func testModelCanInstallOnlyWithDeviceAndValidPackage() {
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        var model = ADBTVAppModel(devices: [device])
+
+        XCTAssertFalse(model.canInstallSelectedPackage)
+
+        model.selectPackage(fileName: "app.apk", byteCount: 7)
+
+        XCTAssertTrue(model.canInstallSelectedPackage)
+    }
+}
