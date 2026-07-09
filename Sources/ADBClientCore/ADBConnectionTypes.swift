@@ -28,6 +28,18 @@ public enum ADBConnectionEvent: Equatable, Sendable {
     case streamWritable(localID: UInt32, remoteID: UInt32)
     case streamData(localID: UInt32, remoteID: UInt32, payload: [UInt8])
     case streamClosed(localID: UInt32, remoteID: UInt32)
+
+    public var localStreamID: UInt32? {
+        switch self {
+        case .connected:
+            return nil
+        case .streamReady(let localID, _),
+                .streamWritable(let localID, _),
+                .streamData(let localID, _, _),
+                .streamClosed(let localID, _):
+            return localID
+        }
+    }
 }
 
 public struct ADBStream: Equatable, Sendable {

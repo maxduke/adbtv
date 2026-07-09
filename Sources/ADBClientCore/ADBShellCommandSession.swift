@@ -80,6 +80,14 @@ public enum ADBShellCommandSessionResult: Equatable, Sendable {
     case updated
     case finished(ADBShellOutput)
     case ignored
+
+    public var isFinished: Bool {
+        if case .finished = self {
+            return true
+        }
+
+        return false
+    }
 }
 
 public enum ADBShellCommandSessionError: Error, Equatable, Sendable {
