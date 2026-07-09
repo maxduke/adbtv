@@ -48,4 +48,12 @@ To build the iOS app for the simulator with Xcode:
 xcodebuild -project ADBTV.xcodeproj -scheme ADBTV -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
-The package currently contains `ADBClientCore` and `ADBTVApp`. GitHub Actions runs package tests and an unsigned iOS simulator build on macOS.
+To create an unsigned IPA artifact for later signing:
+
+```sh
+scripts/package-unsigned-ipa.sh
+```
+
+The unsigned IPA is not installable on a stock iOS device until it is signed with a valid Apple certificate and provisioning profile. GitHub Actions exposes the same packaging path through the manual **iOS Unsigned IPA** workflow.
+
+The package currently contains `ADBClientCore` and `ADBTVApp`. GitHub Actions runs package tests, an unsigned iOS simulator build, and the manual unsigned IPA package workflow on macOS.
