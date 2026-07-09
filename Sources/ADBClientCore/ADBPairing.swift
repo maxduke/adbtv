@@ -12,7 +12,7 @@ public struct ADBPairingCode: Equatable, Sendable {
             throw ADBPairingCodeError.invalidDigitCount(normalized.count)
         }
 
-        guard normalized.allSatisfy(\.isNumber) else {
+        guard normalized.utf8.allSatisfy({ (48 ... 57).contains($0) }) else {
             throw ADBPairingCodeError.containsNonDigit
         }
 
@@ -58,6 +58,129 @@ public enum ADBPairingQRCodeError: Error, Equatable, Sendable {
     case unsupportedAuthenticationType(String?)
     case missingServiceName
     case missingPassword
+}
+
+public enum ADBPairingPacketType: UInt8, Equatable, Sendable {
+    case spake2Message = 0
+    case peerInfo = 1
+}
+
+public struct ADBPairingPacketHeader: Equatable, Sendable {
+    public static let currentVersion: UInt8 = 1
+    public static let encodedByteCount = 6
+    public static let maximumPayloadSize = UInt32(ADBPairingPeerInfo.encodedByteCount * 2)
+
+    public var version: UInt8
+    public var type: ADBPairingPacketType
+    public var payloadSize: UInt32
+
+    public init(
+        version: UInt8 = Self.currentVersion,
+        type: ADBPairingPacketType,
+        payloadSize: UInt32
+    ) throws {
+        guard version == Self.currentVersion else {
+            throw ADBPairingPacketHeaderError.unsupportedVersion(version)
+        }
+
+        guard payloadSize > 0 else {
+            throw ADBPairingPacketHeaderError.emptyPayload
+        }
+
+        guard payloadSize <= Self.maximumPayloadSize else {
+            throw ADBPairingPacketHeaderError.payloadTooLarge(payloadSize)
+        }
+
+        self.version = version
+        self.type = type
+        self.payloadSize = payloadSize
+    }
+
+    public init(encodedBytes bytes: [UInt8]) throws {
+        guard bytes.count == Self.encodedByteCount else {
+            throw ADBPairingPacketHeaderError.invalidByteCount(bytes.count)
+        }
+
+        guard let packetType = ADBPairingPacketType(rawValue: bytes[1]) else {
+            throw ADBPairingPacketHeaderError.invalidPacketType(bytes[1])
+        }
+
+        let payloadSize = UInt32(bytes[2]) << 24
+            | UInt32(bytes[3]) << 16
+            | UInt32(bytes[4]) << 8
+            | UInt32(bytes[5])
+
+        try self.init(version: bytes[0], type: packetType, payloadSize: payloadSize)
+    }
+
+    public func encoded() -> [UInt8] {
+        [
+            version,
+            type.rawValue,
+            UInt8((payloadSize >> 24) & 0xFF),
+            UInt8((payloadSize >> 16) & 0xFF),
+            UInt8((payloadSize >> 8) & 0xFF),
+            UInt8(payloadSize & 0xFF)
+        ]
+    }
+}
+
+public enum ADBPairingPacketHeaderError: Error, Equatable, Sendable {
+    case invalidByteCount(Int)
+    case unsupportedVersion(UInt8)
+    case invalidPacketType(UInt8)
+    case emptyPayload
+    case payloadTooLarge(UInt32)
+}
+
+public enum ADBPairingPeerInfoType: UInt8, Equatable, Sendable {
+    case adbRSAPublicKey = 0
+    case adbDeviceGUID = 1
+}
+
+public struct ADBPairingPeerInfo: Equatable, Sendable {
+    public static let encodedByteCount = 8192
+    public static let maximumDataByteCount = encodedByteCount - 1
+
+    public var type: ADBPairingPeerInfoType
+    public var data: [UInt8]
+
+    public init(type: ADBPairingPeerInfoType, data: [UInt8]) throws {
+        guard data.count <= Self.maximumDataByteCount else {
+            throw ADBPairingPeerInfoError.dataTooLarge(data.count)
+        }
+
+        self.type = type
+        self.data = data
+    }
+
+    public init(encodedBytes bytes: [UInt8]) throws {
+        guard bytes.count == Self.encodedByteCount else {
+            throw ADBPairingPeerInfoError.invalidByteCount(bytes.count)
+        }
+
+        guard let type = ADBPairingPeerInfoType(rawValue: bytes[0]) else {
+            throw ADBPairingPeerInfoError.invalidPeerInfoType(bytes[0])
+        }
+
+        let data = Array(bytes.dropFirst()).trimmingTrailingZeroes()
+        try self.init(type: type, data: data)
+    }
+
+    public func encoded() -> [UInt8] {
+        var bytes = [type.rawValue]
+        bytes.append(contentsOf: data)
+        if bytes.count < Self.encodedByteCount {
+            bytes.append(contentsOf: repeatElement(0, count: Self.encodedByteCount - bytes.count))
+        }
+        return bytes
+    }
+}
+
+public enum ADBPairingPeerInfoError: Error, Equatable, Sendable {
+    case invalidByteCount(Int)
+    case invalidPeerInfoType(UInt8)
+    case dataTooLarge(Int)
 }
 
 private struct ADBPairingQRCodeFields {
@@ -153,5 +276,15 @@ private struct ADBPairingQRCodeFields {
         }
 
         return output
+    }
+}
+
+private extension Array where Element == UInt8 {
+    func trimmingTrailingZeroes() -> [UInt8] {
+        guard let lastNonZeroIndex = lastIndex(where: { $0 != 0 }) else {
+            return []
+        }
+
+        return Array(self[...lastNonZeroIndex])
     }
 }
