@@ -42,9 +42,10 @@ final class ADBTransportSessionTests: XCTestCase {
         var session = ADBTransportSession(transport: transport)
 
         let output = try await session.receiveNext()
+        let sentChunks = await transport.sentChunks()
 
         XCTAssertNil(output)
-        XCTAssertEqual(await transport.sentChunks(), [])
+        XCTAssertEqual(sentChunks, [])
     }
 
     func testReceiveNextProcessesInboundBytesAndSendsAck() async throws {

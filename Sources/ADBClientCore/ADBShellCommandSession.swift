@@ -40,7 +40,7 @@ public struct ADBShellCommandSession: Sendable {
                 phase = .running(localID: eventLocalID, remoteID: remoteID)
                 return .opened(localID: eventLocalID, remoteID: remoteID)
 
-            case .streamClosed(let eventLocalID, _), .streamData(let eventLocalID, _, _):
+            case .streamClosed, .streamData:
                 throw ADBShellCommandSessionError.unexpectedEvent(event, expectedLocalID: localID)
 
             case .connected, .streamWritable:
