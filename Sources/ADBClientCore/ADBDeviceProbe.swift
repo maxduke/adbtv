@@ -1,8 +1,7 @@
 import Foundation
 
-public protocol ADBDeviceProbingSession: Sendable {
+public protocol ADBDeviceProbingSession: ADBShellCommandRunningSession {
     mutating func connect(systemIdentity: String) async throws -> ADBConnectedDevice
-    mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput
 }
 
 extension ADBDeviceSession: ADBDeviceProbingSession {}
