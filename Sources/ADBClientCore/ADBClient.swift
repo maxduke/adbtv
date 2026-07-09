@@ -14,7 +14,7 @@ public struct ADBClient: Sendable {
 
     public mutating func makeConnectPacket(systemIdentity: String = "host::") -> ADBPacket {
         authenticationResponder?.reset()
-        connection.makeConnectPacket(systemIdentity: systemIdentity)
+        return connection.makeConnectPacket(systemIdentity: systemIdentity)
     }
 
     public mutating func startShellCommand(_ command: ADBShellCommand) throws -> ADBClientAction {
