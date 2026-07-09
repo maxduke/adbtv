@@ -1,4 +1,4 @@
-name: Swift Package CI
+name: CI
 
 on:
   pull_request:
@@ -21,3 +21,23 @@ jobs:
 
       - name: Run tests
         run: swift test
+
+  ios-simulator-build:
+    name: iOS Simulator Build
+    runs-on: macos-15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build app for simulator
+        run: |
+          xcodebuild \
+            -project ADBTV.xcodeproj \
+            -scheme ADBTV \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build
