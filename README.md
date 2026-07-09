@@ -28,4 +28,12 @@ Current direction:
 
 ## Development
 
-The SwiftUI project has not been created yet. The first implementation milestone should be the native ADB protocol spike described in the architecture plan.
+The SwiftUI app target has not been created yet. The current implementation starts with a Swift package for the native ADB protocol spike.
+
+On a machine with Swift 5.9+ installed:
+
+```sh
+swift test
+```
+
+The package currently contains `ADBClientCore`, which covers ADB packet framing foundations and related tests.
