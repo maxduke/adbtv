@@ -242,4 +242,30 @@ final class ADBTVAppModelTests: XCTestCase {
             diagnosticDetail: diagnosticDetail
         ))
     }
+
+    func testPairingDraftValidatesManualCodeAndQRCodePayload() {
+        var model = ADBTVAppModel()
+
+        XCTAssertFalse(model.pairingDraft.canStartManualPairing)
+        XCTAssertFalse(model.pairingDraft.canStartQRPairing)
+
+        model.setPairingCodeString("123 456")
+
+        XCTAssertEqual(model.pairingDraft.pairingCode?.rawValue, "123456")
+        XCTAssertTrue(model.pairingDraft.canStartManualPairing)
+
+        model.setPairingQRCodePayload("WIFI:T:ADB;S:Living Room TV;P:pair-secret;;")
+
+        XCTAssertEqual(model.pairingDraft.pairingQRCode, try? ADBPairingQRCode(
+            serviceName: "Living Room TV",
+            password: "pair-secret"
+        ))
+        XCTAssertTrue(model.pairingDraft.canStartQRPairing)
+
+        model.setPairingCodeString("12345")
+        model.setPairingQRCodePayload("WIFI:T:WPA;S:Network;P:secret;;")
+
+        XCTAssertFalse(model.pairingDraft.canStartManualPairing)
+        XCTAssertFalse(model.pairingDraft.canStartQRPairing)
+    }
 }

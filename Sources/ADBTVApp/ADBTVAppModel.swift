@@ -8,6 +8,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
     public var remoteStatus: ADBTVRemoteStatus
     public var discoveryStatus: ADBTVDiscoveryStatus
     public var discoveredServices: [ADBDiscoveredService]
+    public var pairingDraft: ADBTVPairingDraft
 
     public init(
         devices: [ADBTVDeviceSummary] = [],
@@ -15,7 +16,8 @@ public struct ADBTVAppModel: Equatable, Sendable {
         installDraft: ADBTVInstallDraft = ADBTVInstallDraft(),
         remoteStatus: ADBTVRemoteStatus = .idle,
         discoveryStatus: ADBTVDiscoveryStatus = .idle,
-        discoveredServices: [ADBDiscoveredService] = []
+        discoveredServices: [ADBDiscoveredService] = [],
+        pairingDraft: ADBTVPairingDraft = ADBTVPairingDraft()
     ) {
         self.devices = devices
         self.selectedDeviceID = selectedDeviceID ?? devices.first?.id
@@ -23,6 +25,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
         self.remoteStatus = remoteStatus
         self.discoveryStatus = discoveryStatus
         self.discoveredServices = discoveredServices.sortedForPresentation()
+        self.pairingDraft = pairingDraft
     }
 
     public var selectedDevice: ADBTVDeviceSummary? {
@@ -129,6 +132,14 @@ public struct ADBTVAppModel: Equatable, Sendable {
 
     public mutating func failDiscovery(userMessage: String, diagnosticDetail: DiagnosticDetail) {
         discoveryStatus = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+    }
+
+    public mutating func setPairingCodeString(_ value: String) {
+        pairingDraft.codeString = value
+    }
+
+    public mutating func setPairingQRCodePayload(_ value: String) {
+        pairingDraft.qrPayload = value
     }
 }
 
@@ -327,5 +338,31 @@ public enum ADBTVDiscoveryStatus: Equatable, Sendable {
         }
 
         return false
+    }
+}
+
+public struct ADBTVPairingDraft: Equatable, Sendable {
+    public var codeString: String
+    public var qrPayload: String
+
+    public init(codeString: String = "", qrPayload: String = "") {
+        self.codeString = codeString
+        self.qrPayload = qrPayload
+    }
+
+    public var pairingCode: ADBPairingCode? {
+        try? ADBPairingCode(codeString)
+    }
+
+    public var pairingQRCode: ADBPairingQRCode? {
+        try? ADBPairingQRCode(payload: qrPayload)
+    }
+
+    public var canStartManualPairing: Bool {
+        pairingCode != nil
+    }
+
+    public var canStartQRPairing: Bool {
+        pairingQRCode != nil
     }
 }
