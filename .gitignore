@@ -1,0 +1,38 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# logs / temp
+*.log
+tmp/
+temp/
+.cache/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node
+node_modules/
+dist/
+build/
+.next/
+.vite/
+coverage/
+
+# Codex / local
+.codex-local/
