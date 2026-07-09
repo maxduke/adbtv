@@ -133,6 +133,47 @@ public enum ADBPairingPacketHeaderError: Error, Equatable, Sendable {
     case payloadTooLarge(UInt32)
 }
 
+public struct ADBPairingPacket: Equatable, Sendable {
+    public var header: ADBPairingPacketHeader
+    public var payload: [UInt8]
+
+    public init(type: ADBPairingPacketType, payload: [UInt8]) throws {
+        let header = try ADBPairingPacketHeader(type: type, payloadSize: UInt32(payload.count))
+        try self.init(header: header, payload: payload)
+    }
+
+    public init(header: ADBPairingPacketHeader, payload: [UInt8]) throws {
+        guard header.payloadSize == UInt32(payload.count) else {
+            throw ADBPairingPacketError.payloadSizeMismatch(
+                expected: header.payloadSize,
+                actual: payload.count
+            )
+        }
+
+        self.header = header
+        self.payload = payload
+    }
+
+    public init(encodedBytes bytes: [UInt8]) throws {
+        guard bytes.count >= ADBPairingPacketHeader.encodedByteCount else {
+            throw ADBPairingPacketError.invalidByteCount(bytes.count)
+        }
+
+        let headerBytes = Array(bytes.prefix(ADBPairingPacketHeader.encodedByteCount))
+        let payload = Array(bytes.dropFirst(ADBPairingPacketHeader.encodedByteCount))
+        try self.init(header: ADBPairingPacketHeader(encodedBytes: headerBytes), payload: payload)
+    }
+
+    public func encoded() -> [UInt8] {
+        header.encoded() + payload
+    }
+}
+
+public enum ADBPairingPacketError: Error, Equatable, Sendable {
+    case invalidByteCount(Int)
+    case payloadSizeMismatch(expected: UInt32, actual: Int)
+}
+
 public enum ADBPairingPeerInfoType: UInt8, Equatable, Sendable {
     case adbRSAPublicKey = 0
     case adbDeviceGUID = 1
@@ -181,6 +222,96 @@ public enum ADBPairingPeerInfoError: Error, Equatable, Sendable {
     case invalidByteCount(Int)
     case invalidPeerInfoType(UInt8)
     case dataTooLarge(Int)
+}
+
+public protocol ADBPairingKeyExchange: Sendable {
+    mutating func localSPAKE2Message() throws -> [UInt8]
+    mutating func initializeCipher(peerSPAKE2Message: [UInt8]) throws -> any ADBPairingCipher
+}
+
+public protocol ADBPairingCipher: Sendable {
+    func encrypt(_ plaintext: [UInt8]) throws -> [UInt8]
+    func decrypt(_ ciphertext: [UInt8]) throws -> [UInt8]
+}
+
+public enum ADBPairingProtocolSessionState: Equatable, Sendable {
+    case ready
+    case waitingForSPAKE2Message
+    case waitingForPeerInfo
+    case finished
+}
+
+public struct ADBPairingProtocolSession: Sendable {
+    public private(set) var state: ADBPairingProtocolSessionState
+
+    private let localPeerInfo: ADBPairingPeerInfo
+    private var keyExchange: any ADBPairingKeyExchange
+    private var cipher: (any ADBPairingCipher)?
+
+    public init(localPeerInfo: ADBPairingPeerInfo, keyExchange: any ADBPairingKeyExchange) {
+        self.state = .ready
+        self.localPeerInfo = localPeerInfo
+        self.keyExchange = keyExchange
+    }
+
+    public mutating func start() throws -> ADBPairingPacket {
+        guard state == .ready else {
+            throw ADBPairingProtocolSessionError.invalidState(state)
+        }
+
+        let message = try keyExchange.localSPAKE2Message()
+        state = .waitingForSPAKE2Message
+        return try ADBPairingPacket(type: .spake2Message, payload: message)
+    }
+
+    public mutating func handlePeerSPAKE2Packet(_ packet: ADBPairingPacket) throws -> ADBPairingPacket {
+        guard state == .waitingForSPAKE2Message else {
+            throw ADBPairingProtocolSessionError.invalidState(state)
+        }
+        guard packet.header.type == .spake2Message else {
+            throw ADBPairingProtocolSessionError.unexpectedPacketType(
+                expected: .spake2Message,
+                actual: packet.header.type
+            )
+        }
+
+        let initializedCipher = try keyExchange.initializeCipher(peerSPAKE2Message: packet.payload)
+        self.cipher = initializedCipher
+
+        let encryptedPeerInfo = try initializedCipher.encrypt(localPeerInfo.encoded())
+        state = .waitingForPeerInfo
+        return try ADBPairingPacket(type: .peerInfo, payload: encryptedPeerInfo)
+    }
+
+    public mutating func handlePeerInfoPacket(_ packet: ADBPairingPacket) throws -> ADBPairingPeerInfo {
+        guard state == .waitingForPeerInfo else {
+            throw ADBPairingProtocolSessionError.invalidState(state)
+        }
+        guard packet.header.type == .peerInfo else {
+            throw ADBPairingProtocolSessionError.unexpectedPacketType(
+                expected: .peerInfo,
+                actual: packet.header.type
+            )
+        }
+        guard let cipher else {
+            throw ADBPairingProtocolSessionError.missingCipher
+        }
+
+        let decryptedPeerInfo = try cipher.decrypt(packet.payload)
+        guard decryptedPeerInfo.count == ADBPairingPeerInfo.encodedByteCount else {
+            throw ADBPairingProtocolSessionError.invalidDecryptedPeerInfoByteCount(decryptedPeerInfo.count)
+        }
+
+        state = .finished
+        return try ADBPairingPeerInfo(encodedBytes: decryptedPeerInfo)
+    }
+}
+
+public enum ADBPairingProtocolSessionError: Error, Equatable, Sendable {
+    case invalidState(ADBPairingProtocolSessionState)
+    case unexpectedPacketType(expected: ADBPairingPacketType, actual: ADBPairingPacketType)
+    case missingCipher
+    case invalidDecryptedPeerInfoByteCount(Int)
 }
 
 private struct ADBPairingQRCodeFields {

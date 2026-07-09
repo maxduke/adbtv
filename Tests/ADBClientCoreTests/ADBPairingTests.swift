@@ -83,6 +83,34 @@ final class ADBPairingTests: XCTestCase {
         }
     }
 
+    func testPairingPacketEncodesHeaderAndPayload() throws {
+        let packet = try ADBPairingPacket(type: .spake2Message, payload: [7, 8, 9])
+
+        XCTAssertEqual(packet.encoded(), [1, 0, 0, 0, 0, 3, 7, 8, 9])
+        XCTAssertEqual(try ADBPairingPacket(encodedBytes: [1, 0, 0, 0, 0, 3, 7, 8, 9]), packet)
+    }
+
+    func testPairingPacketRejectsMalformedFrames() throws {
+        XCTAssertThrowsError(try ADBPairingPacket(encodedBytes: [1, 0, 0])) { error in
+            XCTAssertEqual(error as? ADBPairingPacketError, .invalidByteCount(3))
+        }
+
+        let header = try ADBPairingPacketHeader(type: .spake2Message, payloadSize: 4)
+        XCTAssertThrowsError(try ADBPairingPacket(header: header, payload: [1, 2, 3])) { error in
+            XCTAssertEqual(
+                error as? ADBPairingPacketError,
+                .payloadSizeMismatch(expected: 4, actual: 3)
+            )
+        }
+
+        XCTAssertThrowsError(try ADBPairingPacket(encodedBytes: [1, 0, 0, 0, 0, 4, 1, 2, 3])) { error in
+            XCTAssertEqual(
+                error as? ADBPairingPacketError,
+                .payloadSizeMismatch(expected: 4, actual: 3)
+            )
+        }
+    }
+
     func testPairingPeerInfoEncodesTypeAndPaddedData() throws {
         let peerInfo = try ADBPairingPeerInfo(type: .adbRSAPublicKey, data: [1, 2, 3])
         let encoded = peerInfo.encoded()
@@ -113,4 +141,109 @@ final class ADBPairingTests: XCTestCase {
             )
         }
     }
+
+    func testPairingProtocolSessionExchangesSPAKE2ThenEncryptedPeerInfo() throws {
+        let localPeerInfo = try ADBPairingPeerInfo(type: .adbRSAPublicKey, data: [10, 11])
+        let remotePeerInfo = try ADBPairingPeerInfo(type: .adbRSAPublicKey, data: [20, 21])
+        var session = ADBPairingProtocolSession(
+            localPeerInfo: localPeerInfo,
+            keyExchange: TestPairingKeyExchange(
+                localMessage: [1, 2, 3],
+                expectedPeerMessage: [4, 5, 6],
+                cipher: TestPairingCipher()
+            )
+        )
+
+        let localSPAKE2Packet = try session.start()
+        XCTAssertEqual(localSPAKE2Packet.header.type, .spake2Message)
+        XCTAssertEqual(localSPAKE2Packet.payload, [1, 2, 3])
+        XCTAssertEqual(session.state, .waitingForSPAKE2Message)
+
+        let peerInfoPacket = try session.handlePeerSPAKE2Packet(ADBPairingPacket(
+            type: .spake2Message,
+            payload: [4, 5, 6]
+        ))
+        XCTAssertEqual(peerInfoPacket.header.type, .peerInfo)
+        XCTAssertEqual(peerInfoPacket.payload, TestPairingCipher.encryptionPrefix + localPeerInfo.encoded())
+        XCTAssertEqual(session.state, .waitingForPeerInfo)
+
+        let result = try session.handlePeerInfoPacket(ADBPairingPacket(
+            type: .peerInfo,
+            payload: TestPairingCipher.encryptionPrefix + remotePeerInfo.encoded()
+        ))
+        XCTAssertEqual(result, remotePeerInfo)
+        XCTAssertEqual(session.state, .finished)
+    }
+
+    func testPairingProtocolSessionRejectsInvalidStateAndPacketType() throws {
+        let localPeerInfo = try ADBPairingPeerInfo(type: .adbRSAPublicKey, data: [10, 11])
+        var session = ADBPairingProtocolSession(
+            localPeerInfo: localPeerInfo,
+            keyExchange: TestPairingKeyExchange(
+                localMessage: [1, 2, 3],
+                expectedPeerMessage: [4, 5, 6],
+                cipher: TestPairingCipher()
+            )
+        )
+
+        XCTAssertThrowsError(try session.handlePeerSPAKE2Packet(ADBPairingPacket(
+            type: .spake2Message,
+            payload: [4, 5, 6]
+        ))) { error in
+            XCTAssertEqual(error as? ADBPairingProtocolSessionError, .invalidState(.ready))
+        }
+
+        _ = try session.start()
+        XCTAssertThrowsError(try session.handlePeerSPAKE2Packet(ADBPairingPacket(
+            type: .peerInfo,
+            payload: [7]
+        ))) { error in
+            XCTAssertEqual(
+                error as? ADBPairingProtocolSessionError,
+                .unexpectedPacketType(expected: .spake2Message, actual: .peerInfo)
+            )
+        }
+    }
+}
+
+private struct TestPairingKeyExchange: ADBPairingKeyExchange {
+    var localMessage: [UInt8]
+    var expectedPeerMessage: [UInt8]
+    var cipher: any ADBPairingCipher
+
+    mutating func localSPAKE2Message() throws -> [UInt8] {
+        localMessage
+    }
+
+    mutating func initializeCipher(peerSPAKE2Message: [UInt8]) throws -> any ADBPairingCipher {
+        if peerSPAKE2Message != expectedPeerMessage {
+            throw TestPairingKeyExchangeError.unexpectedPeerMessage(peerSPAKE2Message)
+        }
+
+        return cipher
+    }
+}
+
+private enum TestPairingKeyExchangeError: Error, Equatable {
+    case unexpectedPeerMessage([UInt8])
+}
+
+private struct TestPairingCipher: ADBPairingCipher {
+    static let encryptionPrefix: [UInt8] = [0xEE]
+
+    func encrypt(_ plaintext: [UInt8]) throws -> [UInt8] {
+        Self.encryptionPrefix + plaintext
+    }
+
+    func decrypt(_ ciphertext: [UInt8]) throws -> [UInt8] {
+        guard ciphertext.starts(with: Self.encryptionPrefix) else {
+            throw TestPairingCipherError.missingPrefix
+        }
+
+        return Array(ciphertext.dropFirst(Self.encryptionPrefix.count))
+    }
+}
+
+private enum TestPairingCipherError: Error, Equatable {
+    case missingPrefix
 }
