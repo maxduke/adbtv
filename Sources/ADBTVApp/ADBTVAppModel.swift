@@ -37,8 +37,36 @@ public struct ADBTVAppModel: Equatable, Sendable {
         installDraft.status = .ready
     }
 
+    public mutating func selectPackage(fileURL: URL, byteCount: Int64?) {
+        installDraft.selectedPackage = ADBTVInstallPackageDraft(fileURL: fileURL, byteCount: byteCount)
+        installDraft.status = .ready
+    }
+
     public mutating func setInstallURLString(_ value: String) {
         installDraft.urlString = value
+    }
+
+    public mutating func recordInstallEvent(_ event: ADBAPKInstallEvent) {
+        installDraft.status = ADBTVInstallStatus(event: event)
+    }
+
+    public mutating func finishInstall(result: ADBAPKInstallResult) {
+        switch result {
+        case .success:
+            installDraft.status = .succeeded
+        case .failure(let message):
+            installDraft.status = .failed(
+                userMessage: "APK install failed.",
+                diagnosticDetail: DiagnosticDetail(
+                    summary: message,
+                    context: ["phase": "installPackage"]
+                )
+            )
+        }
+    }
+
+    public mutating func failInstall(userMessage: String, diagnosticDetail: DiagnosticDetail) {
+        installDraft.status = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
     }
 }
 
@@ -54,7 +82,10 @@ public extension ADBTVAppModel {
             )
         ],
         installDraft: ADBTVInstallDraft(
-            selectedPackage: ADBTVInstallPackageDraft(fileName: "example.apk", byteCount: 42),
+            selectedPackage: ADBTVInstallPackageDraft(
+                fileURL: URL(fileURLWithPath: "/tmp/example.apk"),
+                byteCount: 42
+            ),
             status: .ready
         )
     )
@@ -128,11 +159,17 @@ public struct ADBTVInstallDraft: Equatable, Sendable {
 
 public struct ADBTVInstallPackageDraft: Equatable, Sendable {
     public var fileName: String
+    public var fileURL: URL?
     public var byteCount: Int64?
 
-    public init(fileName: String, byteCount: Int64? = nil) {
+    public init(fileName: String, fileURL: URL? = nil, byteCount: Int64? = nil) {
         self.fileName = fileName
+        self.fileURL = fileURL
         self.byteCount = byteCount
+    }
+
+    public init(fileURL: URL, byteCount: Int64? = nil) {
+        self.init(fileName: fileURL.lastPathComponent, fileURL: fileURL, byteCount: byteCount)
     }
 }
 
@@ -142,6 +179,47 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
     case running(ADBAPKInstallPhase)
     case succeeded
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
+
+    public init(event: ADBAPKInstallEvent) {
+        switch event {
+        case .phaseStarted(let phase):
+            self = .running(phase)
+        case .phaseFinished(let phase):
+            self = .running(phase)
+        case .transfer(let transferEvent):
+            self = .running(.transferPackage)
+            if case .failed(let message) = transferEvent {
+                self = .failed(
+                    userMessage: "APK transfer failed.",
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: message,
+                        context: ["phase": "transferPackage"]
+                    )
+                )
+            }
+        case .installResult(let result):
+            switch result {
+            case .success:
+                self = .running(.cleanup)
+            case .failure(let message):
+                self = .failed(
+                    userMessage: "APK install failed.",
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: message,
+                        context: ["phase": "installPackage"]
+                    )
+                )
+            }
+        }
+    }
+
+    public var isRunning: Bool {
+        if case .running = self {
+            return true
+        }
+
+        return false
+    }
 }
 
 public enum ADBTVInstallDraftError: Error, Equatable, Sendable {

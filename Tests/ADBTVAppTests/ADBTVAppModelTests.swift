@@ -1,3 +1,5 @@
+import ADBClientCore
+import Foundation
 import XCTest
 @testable import ADBTVApp
 
@@ -58,5 +60,44 @@ final class ADBTVAppModelTests: XCTestCase {
         model.selectPackage(fileName: "app.apk", byteCount: 7)
 
         XCTAssertTrue(model.canInstallSelectedPackage)
+    }
+
+    func testModelSelectsPackageFromFileURL() {
+        var model = ADBTVAppModel()
+        let url = URL(fileURLWithPath: "/tmp/Example App.apk")
+
+        model.selectPackage(fileURL: url, byteCount: 123)
+
+        XCTAssertEqual(model.installDraft.selectedPackage, ADBTVInstallPackageDraft(
+            fileName: "Example App.apk",
+            fileURL: url,
+            byteCount: 123
+        ))
+        XCTAssertEqual(model.installDraft.status, .ready)
+    }
+
+    func testInstallEventsUpdatePresentationStatus() {
+        var model = ADBTVAppModel()
+
+        model.recordInstallEvent(.phaseStarted(.transferPackage))
+        XCTAssertEqual(model.installDraft.status, .running(.transferPackage))
+
+        model.recordInstallEvent(.transfer(.failed(message: "remote rejected write")))
+        XCTAssertEqual(model.installDraft.status, .failed(
+            userMessage: "APK transfer failed.",
+            diagnosticDetail: DiagnosticDetail(
+                summary: "remote rejected write",
+                context: ["phase": "transferPackage"]
+            )
+        ))
+
+        model.finishInstall(result: .failure(message: "INSTALL_FAILED_INVALID_APK"))
+        XCTAssertEqual(model.installDraft.status, .failed(
+            userMessage: "APK install failed.",
+            diagnosticDetail: DiagnosticDetail(
+                summary: "INSTALL_FAILED_INVALID_APK",
+                context: ["phase": "installPackage"]
+            )
+        ))
     }
 }
