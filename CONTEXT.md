@@ -1,0 +1,109 @@
+# ADB TV
+
+ADB TV is an iOS app for managing Android TV devices over the local network using Android Debug Bridge concepts.
+
+## Language
+
+**Sideloaded Build**:
+An iOS app build installed outside the App Store using a user's own sideloading workflow.
+_Avoid_: Self-signed app, public IPA
+
+**Android TV Device**:
+An Android-powered television, streaming box, or TV dongle that is the primary management target for this app.
+_Avoid_: Android device when specifically referring to the TV-first target
+
+**Managed Device**:
+An Android TV device that the app can pair with, connect to, and operate through ADB.
+_Avoid_: Client, endpoint
+
+**Wireless Debugging**:
+The Android developer feature that allows ADB pairing and connections over the local network.
+_Avoid_: Wi-Fi ADB when referring to Android's pairing-based flow
+
+**Native ADB Client**:
+The app's built-in implementation of the ADB client behavior needed to pair with and manage Android TV devices directly from iOS.
+_Avoid_: Bundled adb, embedded adb binary
+
+**Protocol Spike**:
+The first implementation milestone that proves Wireless Debugging pairing, TLS reconnect, and a simple ADB stream against real Android TV hardware.
+_Avoid_: Prototype when referring to the first required feasibility milestone
+
+**Pairing Session**:
+A short-lived setup interaction where the app and an Android TV device establish trust using Wireless Debugging.
+_Avoid_: Login, authentication
+
+**Pairing Code**:
+A numeric code shown by an Android TV device during a Pairing Session and entered manually into the app.
+_Avoid_: Password, PIN
+
+**Pairing QR Code**:
+A QR code shown by an Android TV device during a Pairing Session and scanned by the app to start pairing.
+_Avoid_: QR login, camera login
+
+**Device Credential**:
+The stored trust material that allows the app to reconnect to a Managed Device after a successful Pairing Session.
+_Avoid_: Password, token
+
+**Synced ADB Identity**:
+A Device Credential stored so it can sync across the user's iOS devices through iCloud Keychain.
+_Avoid_: Shared login, account
+
+**Device Library**:
+The set of Managed Devices remembered by the app for a user.
+_Avoid_: Fleet, inventory
+
+**APK Installation**:
+An ADB Operation that transfers and installs an Android application package onto a Managed Device.
+_Avoid_: Sideloading when discussing iOS app distribution
+
+**APK Source**:
+A place the user provides an Android package from, initially the iOS Files picker or a direct URL download.
+_Avoid_: App store, catalog
+
+**URL Install**:
+An APK Installation flow where the app downloads an Install Package from a direct URL and then installs it.
+_Avoid_: Remote install
+
+**Install URL**:
+A user-provided HTTP or HTTPS URL that the app downloads as an Install Package.
+_Avoid_: Feed, repository URL
+
+**Install Package**:
+The Android package artifact selected for APK Installation. The initial version treats a single `.apk` file as the supported Install Package.
+_Avoid_: APK when referring to split package formats
+
+**Operation Progress**:
+User-visible status for a running ADB Operation, ideally including progress when the underlying operation can report it.
+_Avoid_: Loading state when the operation has meaningful progress
+
+**User Error**:
+A short, understandable explanation of an ADB Operation failure.
+_Avoid_: Exception message
+
+**Diagnostic Detail**:
+Technical failure information that can be expanded or copied when troubleshooting is needed.
+_Avoid_: User error
+
+**ADB Operation**:
+An action requested by the user against a managed device through ADB, such as shell commands, APK installation, screenshots, remote input, logs, or file transfer.
+_Avoid_: Command when the action is broader than a shell command
+
+**Structured Action**:
+An ADB Operation exposed as a specific app control instead of free-form shell input.
+_Avoid_: Shortcut, macro
+
+**TV Remote Action**:
+A Structured Action that sends Android TV remote input such as D-pad navigation, select, back, home, settings, text input, volume, or power.
+_Avoid_: Remote command
+
+**Device Discovery**:
+The app's attempt to find Android TV devices available for Wireless Debugging on the local network.
+_Avoid_: Scan when referring to the overall discovery experience
+
+**Manual Connection**:
+A fallback connection flow where the user enters a device address and port when Device Discovery does not find the device.
+_Avoid_: Manual discovery
+
+**Saved Device**:
+A Device Library entry kept by the user even when the app cannot currently discover or connect to the device.
+_Avoid_: Bookmark, favorite
