@@ -94,7 +94,7 @@ public struct ADBTVInstallDraft: Equatable, Sendable {
     }
 
     public var canBuildInstallPlan: Bool {
-        guard let selectedPackage else {
+        guard selectedPackage != nil else {
             return false
         }
 
@@ -117,7 +117,8 @@ public struct ADBTVInstallDraft: Equatable, Sendable {
               let scheme = components.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let url = components.url,
-              components.host != nil else {
+              let host = components.host,
+              !host.isEmpty else {
             return nil
         }
 
