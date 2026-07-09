@@ -38,6 +38,39 @@ final class ADBConnectionStateTests: XCTestCase {
         XCTAssertEqual(result.packetsToSend, [])
     }
 
+    func testReceiveAuthTokenMovesConnectionToAuthorizing() throws {
+        var state = ADBConnectionState()
+        _ = state.makeConnectPacket()
+
+        let result = try state.receive(
+            ADBPacket(command: .auth, arg0: ADBAuthenticationType.token.rawValue, arg1: 0, payload: [1, 2, 3])
+        )
+
+        XCTAssertEqual(state.phase, .authorizing)
+        XCTAssertEqual(result.events, [.authenticationToken([1, 2, 3])])
+        XCTAssertEqual(result.packetsToSend, [])
+    }
+
+    func testReceiveUnexpectedAuthTypeIsRejected() throws {
+        var state = ADBConnectionState()
+
+        XCTAssertThrowsError(
+            try state.receive(
+                ADBPacket(
+                    command: .auth,
+                    arg0: ADBAuthenticationType.signature.rawValue,
+                    arg1: 0,
+                    payload: [1, 2, 3]
+                )
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? ADBConnectionStateError,
+                .unexpectedAuthenticationType(ADBAuthenticationType.signature.rawValue)
+            )
+        }
+    }
+
     func testOpenRequiresConnectedConnection() {
         var state = ADBConnectionState()
 

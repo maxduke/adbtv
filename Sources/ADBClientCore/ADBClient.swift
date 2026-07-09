@@ -1,13 +1,19 @@
 public struct ADBClient: Sendable {
     public private(set) var connection: ADBConnectionState
     private var shellSessionsByLocalID: [UInt32: ADBShellCommandSession]
+    private var authenticationResponder: ADBAuthenticationResponder?
 
-    public init(connection: ADBConnectionState = ADBConnectionState()) {
+    public init(
+        connection: ADBConnectionState = ADBConnectionState(),
+        authenticationResponder: ADBAuthenticationResponder? = nil
+    ) {
         self.connection = connection
         self.shellSessionsByLocalID = [:]
+        self.authenticationResponder = authenticationResponder
     }
 
     public mutating func makeConnectPacket(systemIdentity: String = "host::") -> ADBPacket {
+        authenticationResponder?.reset()
         connection.makeConnectPacket(systemIdentity: systemIdentity)
     }
 
@@ -21,8 +27,20 @@ public struct ADBClient: Sendable {
     public mutating func receive(_ packet: ADBPacket) throws -> ADBClientAction {
         let result = try connection.receive(packet)
         var shellResults: [ADBShellCommandSessionResult] = []
+        var packetsToSend = result.packetsToSend
 
         for event in result.events {
+            if case .authenticationToken(let token) = event {
+                if var authenticationResponder = authenticationResponder {
+                    packetsToSend.append(try authenticationResponder.responsePacket(forToken: token))
+                    self.authenticationResponder = authenticationResponder
+                }
+            }
+
+            if case .connected = event {
+                authenticationResponder?.reset()
+            }
+
             if let localID = event.localStreamID, var session = shellSessionsByLocalID[localID] {
                 let shellResult = try session.receive(event)
                 shellResults.append(shellResult)
@@ -38,7 +56,7 @@ public struct ADBClient: Sendable {
         return ADBClientAction(
             events: result.events,
             shellResults: shellResults,
-            packetsToSend: result.packetsToSend
+            packetsToSend: packetsToSend
         )
     }
 

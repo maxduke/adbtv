@@ -41,7 +41,7 @@ public struct ADBShellOutputBuffer: Sendable {
             isClosed = true
             return ADBShellOutput(bytes: bytes)
 
-        case .connected, .streamReady, .streamWritable:
+        case .authenticationToken, .connected, .streamReady, .streamWritable:
             return nil
         }
     }

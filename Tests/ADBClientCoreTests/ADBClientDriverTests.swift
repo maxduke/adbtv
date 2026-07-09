@@ -26,6 +26,33 @@ final class ADBClientDriverTests: XCTestCase {
         XCTAssertEqual(driver.bufferedByteCount, 8)
     }
 
+    func testReceiveBytesReturnsEncodedAuthSignature() throws {
+        var driver = ADBClientDriver(client: ADBClient(authenticationResponder: ADBAuthenticationResponder(
+                identity: TestAuthenticationIdentity(
+                signature: [8, 8],
+                publicKey: try ADBAuthenticationPublicKey("AAAA adb@ios")
+            )
+        )))
+
+        let output = try driver.receiveBytes(
+            try ADBPacket(
+                command: .auth,
+                arg0: ADBAuthenticationType.token.rawValue,
+                arg1: 0,
+                payload: [1, 2, 3]
+            ).encoded()
+        )
+        let decoded = try ADBPacket.decodeFrame(from: output.bytesToSend)
+
+        XCTAssertEqual(output.actions.first?.events, [.authenticationToken([1, 2, 3])])
+        XCTAssertEqual(decoded.packet, ADBPacket(
+            command: .auth,
+            arg0: ADBAuthenticationType.signature.rawValue,
+            arg1: 0,
+            payload: [8, 8, 1, 2, 3]
+        ))
+    }
+
     func testStartShellCommandReturnsEncodedOpenPacket() throws {
         var driver = ADBClientDriver(client: ADBClient(connection: connectedState()))
 

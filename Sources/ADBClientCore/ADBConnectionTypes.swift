@@ -1,6 +1,7 @@
 public enum ADBConnectionPhase: Equatable, Sendable {
     case idle
     case connectSent
+    case authorizing
     case connected(protocolVersion: UInt32, maxData: UInt32, banner: String)
 
     public var isConnected: Bool {
@@ -23,6 +24,7 @@ public struct ADBConnectionReceiveResult: Equatable, Sendable {
 }
 
 public enum ADBConnectionEvent: Equatable, Sendable {
+    case authenticationToken([UInt8])
     case connected(protocolVersion: UInt32, maxData: UInt32, banner: String)
     case streamReady(localID: UInt32, remoteID: UInt32)
     case streamWritable(localID: UInt32, remoteID: UInt32)
@@ -31,7 +33,7 @@ public enum ADBConnectionEvent: Equatable, Sendable {
 
     public var localStreamID: UInt32? {
         switch self {
-        case .connected:
+        case .authenticationToken, .connected:
             return nil
         case .streamReady(let localID, _),
                 .streamWritable(let localID, _),

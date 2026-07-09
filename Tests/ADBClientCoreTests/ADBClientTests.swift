@@ -30,6 +30,51 @@ final class ADBClientTests: XCTestCase {
         XCTAssertEqual(client.shellSession(localID: 1)?.phase, .opening(localID: 1))
     }
 
+    func testReceiveAuthTokenWithoutResponderOnlyPublishesEvent() throws {
+        var client = ADBClient()
+
+        let action = try client.receive(
+            ADBPacket(command: .auth, arg0: ADBAuthenticationType.token.rawValue, arg1: 0, payload: [1, 2, 3])
+        )
+
+        XCTAssertEqual(action.events, [.authenticationToken([1, 2, 3])])
+        XCTAssertEqual(action.packetsToSend, [])
+        XCTAssertEqual(client.connection.phase, .authorizing)
+    }
+
+    func testReceiveAuthTokenWithResponderSendsSignatureThenPublicKey() throws {
+        var client = ADBClient(authenticationResponder: ADBAuthenticationResponder(
+            identity: TestAuthenticationIdentity(
+                signature: [7, 7],
+                publicKey: try ADBAuthenticationPublicKey("AAAA adb@ios")
+            )
+        ))
+
+        let signatureAction = try client.receive(
+            ADBPacket(command: .auth, arg0: ADBAuthenticationType.token.rawValue, arg1: 0, payload: [1, 2, 3])
+        )
+        let publicKeyAction = try client.receive(
+            ADBPacket(command: .auth, arg0: ADBAuthenticationType.token.rawValue, arg1: 0, payload: [4, 5, 6])
+        )
+
+        XCTAssertEqual(signatureAction.packetsToSend, [
+            ADBPacket(
+                command: .auth,
+                arg0: ADBAuthenticationType.signature.rawValue,
+                arg1: 0,
+                payload: [7, 7, 1, 2, 3]
+            )
+        ])
+        XCTAssertEqual(publicKeyAction.packetsToSend, [
+            ADBPacket(
+                command: .auth,
+                arg0: ADBAuthenticationType.rsaPublicKey.rawValue,
+                arg1: 0,
+                payload: Array("AAAA adb@ios".utf8) + [0]
+            )
+        ])
+    }
+
     func testReceiveOkayUpdatesShellSession() throws {
         var client = ADBClient(connection: connectedState())
         _ = try client.startShellCommand(try ADBShellCommand("getprop ro.product.model"))

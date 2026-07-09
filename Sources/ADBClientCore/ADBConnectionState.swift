@@ -83,6 +83,16 @@ public struct ADBConnectionState: Sendable {
                 ]
             )
 
+        case .auth:
+            guard packet.arg0 == ADBAuthenticationType.token.rawValue else {
+                throw ADBConnectionStateError.unexpectedAuthenticationType(packet.arg0)
+            }
+
+            phase = .authorizing
+            return ADBConnectionReceiveResult(
+                events: [.authenticationToken(packet.payload)]
+            )
+
         case .okay:
             let remoteID = packet.arg0
             let localID = packet.arg1
@@ -120,7 +130,7 @@ public struct ADBConnectionState: Sendable {
                 events: [.streamClosed(localID: localID, remoteID: remoteID)]
             )
 
-        case .auth, .open:
+        case .open:
             throw ADBConnectionStateError.unexpectedPacket(packet.command)
         }
     }
