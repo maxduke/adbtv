@@ -133,4 +133,33 @@ final class ADBTVAppModelTests: XCTestCase {
             )
         ))
     }
+
+    func testRemoteActionsUpdatePresentationStatus() {
+        var model = ADBTVAppModel()
+
+        model.recordRemoteActionStarted(.home)
+        XCTAssertEqual(model.remoteStatus, .sending(.home))
+        XCTAssertTrue(model.remoteStatus.isSending)
+
+        model.finishRemoteAction(.home)
+        XCTAssertEqual(model.remoteStatus, .sent(.home))
+        XCTAssertFalse(model.remoteStatus.isSending)
+
+        model.failRemoteAction(
+            .settings,
+            userMessage: "Could not send remote action.",
+            diagnosticDetail: DiagnosticDetail(
+                summary: "network unavailable",
+                context: ["operation": "sendRemoteAction"]
+            )
+        )
+        XCTAssertEqual(model.remoteStatus, .failed(
+            action: .settings,
+            userMessage: "Could not send remote action.",
+            diagnosticDetail: DiagnosticDetail(
+                summary: "network unavailable",
+                context: ["operation": "sendRemoteAction"]
+            )
+        ))
+    }
 }

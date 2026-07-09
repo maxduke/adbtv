@@ -10,6 +10,7 @@ public struct ADBTVRootView: View {
     @State private var isAddDevicePresented = false
     @State private var devicePersistenceError: DiagnosticDetail?
     @State private var installTask: Task<Void, Never>?
+    @State private var remoteTask: Task<Void, Never>?
 
     public init(deviceStore: ADBTVDeviceStore = ADBTVDeviceStore()) {
         self.init(
@@ -53,12 +54,16 @@ public struct ADBTVRootView: View {
                 DeviceDetailView(
                     device: device,
                     installDraft: model.installDraft,
+                    remoteStatus: model.remoteStatus,
                     canInstall: model.canInstallSelectedPackage,
                     chooseAPK: {
                         isFileImporterPresented = true
                     },
                     install: {
                         startInstall(for: device)
+                    },
+                    sendRemoteAction: { action in
+                        sendRemoteAction(action, to: device)
                     }
                 )
             } else {
@@ -109,6 +114,7 @@ public struct ADBTVRootView: View {
         }
         .onDisappear {
             installTask?.cancel()
+            remoteTask?.cancel()
         }
     }
 
@@ -204,11 +210,92 @@ public struct ADBTVRootView: View {
             ]
         )
     }
+
+    private func sendRemoteAction(_ action: ADBTVRemoteAction, to device: ADBTVDeviceSummary) {
+        let remoteModel = model
+        model.recordRemoteActionStarted(action)
+
+        remoteTask?.cancel()
+        remoteTask = Task {
+            let completion: RemoteCompletion
+            do {
+                _ = try await Self.sendRemoteAction(action, to: device, using: remoteModel)
+                completion = .success(action)
+            } catch is CancellationError {
+                return
+            } catch {
+                completion = .failure(
+                    action: action,
+                    userMessage: "Could not send remote action.",
+                    diagnosticDetail: Self.remoteDiagnosticDetail(error, action: action, device: device)
+                )
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+            await MainActor.run {
+                completeRemoteAction(completion)
+            }
+        }
+    }
+
+    private static func sendRemoteAction(
+        _ action: ADBTVRemoteAction,
+        to device: ADBTVDeviceSummary,
+        using remoteModel: ADBTVAppModel
+    ) async throws -> ADBShellOutput {
+#if canImport(Network)
+        guard let port = UInt16(exactly: device.port) else {
+            throw ADBTVRemoteOperationError.invalidDevicePort(device.port)
+        }
+
+        let endpoint = ADBNetworkEndpoint(host: device.host, port: port)
+#if canImport(Security)
+        var connection = try ADBDeviceConnection(authenticatedEndpoint: endpoint)
+#else
+        var connection = ADBDeviceConnection(endpoint: endpoint)
+#endif
+        return try await ADBTVRemoteOperation().sendAction(action, from: remoteModel, using: &connection)
+#else
+        throw ADBTVRemoteOperationError.unsupportedPlatform
+#endif
+    }
+
+    @MainActor
+    private func completeRemoteAction(_ completion: RemoteCompletion) {
+        switch completion {
+        case .success(let action):
+            model.finishRemoteAction(action)
+        case .failure(let action, let userMessage, let diagnosticDetail):
+            model.failRemoteAction(action, userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        }
+    }
+
+    private static func remoteDiagnosticDetail(
+        _ error: Error,
+        action: ADBTVRemoteAction,
+        device: ADBTVDeviceSummary
+    ) -> DiagnosticDetail {
+        DiagnosticDetail(
+            summary: String(describing: error),
+            context: [
+                "action": action.displayTitle,
+                "device": "\(device.host):\(device.port)",
+                "operation": "sendRemoteAction"
+            ]
+        )
+    }
 }
 
 private enum InstallCompletion: Sendable {
     case success(ADBAPKInstallReport)
     case failure(userMessage: String, diagnosticDetail: DiagnosticDetail)
+}
+
+private enum RemoteCompletion: Sendable {
+    case success(ADBTVRemoteAction)
+    case failure(action: ADBTVRemoteAction, userMessage: String, diagnosticDetail: DiagnosticDetail)
 }
 
 private struct AddDeviceView: View {
@@ -290,9 +377,11 @@ private struct DeviceRow: View {
 private struct DeviceDetailView: View {
     var device: ADBTVDeviceSummary
     var installDraft: ADBTVInstallDraft
+    var remoteStatus: ADBTVRemoteStatus
     var canInstall: Bool
     var chooseAPK: () -> Void
     var install: () -> Void
+    var sendRemoteAction: (ADBTVRemoteAction) -> Void
 
     var body: some View {
         ScrollView {
@@ -304,7 +393,10 @@ private struct DeviceDetailView: View {
                     chooseAPK: chooseAPK,
                     install: install
                 )
-                RemoteActionsPanel()
+                RemoteActionsPanel(
+                    status: remoteStatus,
+                    send: sendRemoteAction
+                )
             }
             .frame(maxWidth: 760, alignment: .leading)
             .padding()
@@ -421,6 +513,9 @@ private struct InstallStatusView: View {
 }
 
 private struct RemoteActionsPanel: View {
+    var status: ADBTVRemoteStatus
+    var send: (ADBTVRemoteAction) -> Void
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Remote")
@@ -430,6 +525,7 @@ private struct RemoteActionsPanel: View {
                 GridRow {
                     Spacer()
                     Button {
+                        send(.up)
                     } label: {
                         Label("Up", systemImage: "chevron.up")
                             .labelStyle(.iconOnly)
@@ -438,16 +534,19 @@ private struct RemoteActionsPanel: View {
                 }
                 GridRow {
                     Button {
+                        send(.left)
                     } label: {
                         Label("Left", systemImage: "chevron.left")
                             .labelStyle(.iconOnly)
                     }
                     Button {
+                        send(.select)
                     } label: {
                         Text("OK")
                             .frame(minWidth: 44)
                     }
                     Button {
+                        send(.right)
                     } label: {
                         Label("Right", systemImage: "chevron.right")
                             .labelStyle(.iconOnly)
@@ -456,6 +555,7 @@ private struct RemoteActionsPanel: View {
                 GridRow {
                     Spacer()
                     Button {
+                        send(.down)
                     } label: {
                         Label("Down", systemImage: "chevron.down")
                             .labelStyle(.iconOnly)
@@ -464,22 +564,85 @@ private struct RemoteActionsPanel: View {
                 }
             }
             .buttonStyle(.bordered)
+            .disabled(status.isSending)
 
             HStack(spacing: 8) {
                 Button {
+                    send(.back)
                 } label: {
                     Label("Back", systemImage: "arrow.uturn.backward")
                 }
                 Button {
+                    send(.home)
                 } label: {
                     Label("Home", systemImage: "house")
                 }
                 Button {
+                    send(.settings)
                 } label: {
                     Label("Settings", systemImage: "gearshape")
                 }
             }
             .buttonStyle(.bordered)
+            .disabled(status.isSending)
+
+            RemoteStatusView(status: status)
+        }
+    }
+}
+
+private struct RemoteStatusView: View {
+    var status: ADBTVRemoteStatus
+
+    var body: some View {
+        switch status {
+        case .idle:
+            EmptyView()
+        case .sending(let action):
+            Label("Sending \(action.displayTitle)", systemImage: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.secondary)
+        case .sent(let action):
+            Label("Sent \(action.displayTitle)", systemImage: "checkmark.circle")
+                .foregroundStyle(.secondary)
+        case .failed(_, let userMessage, let diagnosticDetail):
+            VStack(alignment: .leading, spacing: 8) {
+                Label(userMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                Text(diagnosticDetail.summary)
+                    .font(.footnote.monospaced())
+                    .textSelection(.enabled)
+            }
+        }
+    }
+}
+
+private extension ADBTVRemoteAction {
+    var displayTitle: String {
+        switch self {
+        case .home:
+            return "Home"
+        case .back:
+            return "Back"
+        case .up:
+            return "Up"
+        case .down:
+            return "Down"
+        case .left:
+            return "Left"
+        case .right:
+            return "Right"
+        case .select:
+            return "OK"
+        case .settings:
+            return "Settings"
+        case .menu:
+            return "Menu"
+        case .volumeUp:
+            return "Volume Up"
+        case .volumeDown:
+            return "Volume Down"
+        case .power:
+            return "Power"
         }
     }
 }

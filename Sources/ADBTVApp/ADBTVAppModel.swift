@@ -5,15 +5,18 @@ public struct ADBTVAppModel: Equatable, Sendable {
     public var devices: [ADBTVDeviceSummary]
     public var selectedDeviceID: ADBTVDeviceSummary.ID?
     public var installDraft: ADBTVInstallDraft
+    public var remoteStatus: ADBTVRemoteStatus
 
     public init(
         devices: [ADBTVDeviceSummary] = [],
         selectedDeviceID: ADBTVDeviceSummary.ID? = nil,
-        installDraft: ADBTVInstallDraft = ADBTVInstallDraft()
+        installDraft: ADBTVInstallDraft = ADBTVInstallDraft(),
+        remoteStatus: ADBTVRemoteStatus = .idle
     ) {
         self.devices = devices
         self.selectedDeviceID = selectedDeviceID ?? devices.first?.id
         self.installDraft = installDraft
+        self.remoteStatus = remoteStatus
     }
 
     public var selectedDevice: ADBTVDeviceSummary? {
@@ -80,6 +83,22 @@ public struct ADBTVAppModel: Equatable, Sendable {
 
     public mutating func failInstall(userMessage: String, diagnosticDetail: DiagnosticDetail) {
         installDraft.status = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+    }
+
+    public mutating func recordRemoteActionStarted(_ action: ADBTVRemoteAction) {
+        remoteStatus = .sending(action)
+    }
+
+    public mutating func finishRemoteAction(_ action: ADBTVRemoteAction) {
+        remoteStatus = .sent(action)
+    }
+
+    public mutating func failRemoteAction(
+        _ action: ADBTVRemoteAction,
+        userMessage: String,
+        diagnosticDetail: DiagnosticDetail
+    ) {
+        remoteStatus = .failed(action: action, userMessage: userMessage, diagnosticDetail: diagnosticDetail)
     }
 }
 
@@ -237,4 +256,19 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
 
 public enum ADBTVInstallDraftError: Error, Equatable, Sendable {
     case missingPackage
+}
+
+public enum ADBTVRemoteStatus: Equatable, Sendable {
+    case idle
+    case sending(ADBTVRemoteAction)
+    case sent(ADBTVRemoteAction)
+    case failed(action: ADBTVRemoteAction, userMessage: String, diagnosticDetail: DiagnosticDetail)
+
+    public var isSending: Bool {
+        if case .sending = self {
+            return true
+        }
+
+        return false
+    }
 }
