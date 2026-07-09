@@ -46,6 +46,51 @@ final class ADBTVRemoteControlTests: XCTestCase {
             "input keyevent 4"
         ])
     }
+
+    func testRemoteTextBuildsShellEscapedInputTextCommand() throws {
+        let text = try ADBTVRemoteText("hello tv")
+        let command = try text.shellCommand()
+
+        XCTAssertEqual(text.inputTextArgument, "hello%stv")
+        XCTAssertEqual(text.shellEscapedArgument, "'hello%stv'")
+        XCTAssertEqual(command.rawValue, "input text 'hello%stv'")
+        XCTAssertEqual(command.serviceName, "shell:input text 'hello%stv'")
+    }
+
+    func testRemoteTextEscapesSingleQuotesAndShellMetacharacters() throws {
+        let text = try ADBTVRemoteText("O'Reilly; $HOME")
+        let command = try text.shellCommand()
+
+        XCTAssertEqual(text.inputTextArgument, "O'Reilly;%s$HOME")
+        XCTAssertEqual(text.shellEscapedArgument, "'O'\\''Reilly;%s$HOME'")
+        XCTAssertEqual(command.rawValue, "input text 'O'\\''Reilly;%s$HOME'")
+    }
+
+    func testRemoteTextRejectsInvalidInputs() {
+        XCTAssertThrowsError(try ADBTVRemoteText("")) { error in
+            XCTAssertEqual(error as? ADBTVRemoteTextError, .emptyText)
+        }
+        XCTAssertThrowsError(try ADBTVRemoteText("line\nbreak")) { error in
+            XCTAssertEqual(error as? ADBTVRemoteTextError, .containsNewline)
+        }
+        XCTAssertThrowsError(try ADBTVRemoteText("already%sescaped")) { error in
+            XCTAssertEqual(error as? ADBTVRemoteTextError, .containsReservedSpaceEscape)
+        }
+        XCTAssertThrowsError(try ADBTVRemoteText("bad\u{0}text")) { error in
+            XCTAssertEqual(error as? ADBTVRemoteTextError, .containsNullByte)
+        }
+    }
+
+    func testSendTextRunsInputTextCommandAndReturnsOutput() async throws {
+        var remote = ADBTVRemoteControl(session: FakeShellCommandRunningSession(
+            outputs: ["input text 'hello%stv'": "ok\n"]
+        ))
+
+        let output = try await remote.sendText("hello tv")
+
+        XCTAssertEqual(output.utf8String, "ok\n")
+        XCTAssertEqual(remote.session.commands, ["input text 'hello%stv'"])
+    }
 }
 
 private struct FakeShellCommandRunningSession: ADBShellCommandRunningSession {

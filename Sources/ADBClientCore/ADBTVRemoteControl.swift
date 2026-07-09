@@ -15,6 +15,16 @@ public struct ADBTVRemoteControl<Session: ADBShellCommandRunningSession>: Sendab
             _ = try await send(action)
         }
     }
+
+    @discardableResult
+    public mutating func sendText(_ text: ADBTVRemoteText) async throws -> ADBShellOutput {
+        try await session.runShellCommand(text.shellCommand())
+    }
+
+    @discardableResult
+    public mutating func sendText(_ text: String) async throws -> ADBShellOutput {
+        try await sendText(try ADBTVRemoteText(text))
+    }
 }
 
 public enum ADBTVRemoteAction: CaseIterable, Equatable, Sendable {
@@ -82,4 +92,47 @@ public enum ADBTVRemoteKeyEvent: Int, Equatable, Sendable {
     public func shellCommand() throws -> ADBShellCommand {
         try ADBShellCommand("input keyevent \(rawValue)")
     }
+}
+
+public struct ADBTVRemoteText: Equatable, Sendable {
+    public var rawValue: String
+
+    public init(_ rawValue: String) throws {
+        guard !rawValue.isEmpty else {
+            throw ADBTVRemoteTextError.emptyText
+        }
+
+        guard !rawValue.utf8.contains(0) else {
+            throw ADBTVRemoteTextError.containsNullByte
+        }
+
+        guard !rawValue.contains(where: { $0 == "\n" || $0 == "\r" }) else {
+            throw ADBTVRemoteTextError.containsNewline
+        }
+
+        guard !rawValue.contains("%s") else {
+            throw ADBTVRemoteTextError.containsReservedSpaceEscape
+        }
+
+        self.rawValue = rawValue
+    }
+
+    public var inputTextArgument: String {
+        rawValue.replacingOccurrences(of: " ", with: "%s")
+    }
+
+    public var shellEscapedArgument: String {
+        "'\(inputTextArgument.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    public func shellCommand() throws -> ADBShellCommand {
+        try ADBShellCommand("input text \(shellEscapedArgument)")
+    }
+}
+
+public enum ADBTVRemoteTextError: Error, Equatable, Sendable {
+    case emptyText
+    case containsNullByte
+    case containsNewline
+    case containsReservedSpaceEscape
 }
