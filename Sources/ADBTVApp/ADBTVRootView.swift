@@ -225,7 +225,6 @@ private struct AddDeviceView: View {
             Form {
                 TextField("Name", text: $displayName)
                 TextField("Host", text: $host)
-                    .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                 TextField("Port", text: $port)
             }
