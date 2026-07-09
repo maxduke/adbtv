@@ -186,6 +186,10 @@ public struct ADBPairingPeerInfo: Equatable, Sendable {
     public var type: ADBPairingPeerInfoType
     public var data: [UInt8]
 
+    public init(authenticationPublicKey publicKey: ADBAuthenticationPublicKey) throws {
+        try self.init(type: .adbRSAPublicKey, data: Array(publicKey.rawValue.utf8))
+    }
+
     public init(type: ADBPairingPeerInfoType, data: [UInt8]) throws {
         guard data.count <= Self.maximumDataByteCount else {
             throw ADBPairingPeerInfoError.dataTooLarge(data.count)

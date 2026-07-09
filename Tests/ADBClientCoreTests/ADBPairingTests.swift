@@ -120,6 +120,14 @@ final class ADBPairingTests: XCTestCase {
         XCTAssertEqual(try ADBPairingPeerInfo(encodedBytes: encoded), peerInfo)
     }
 
+    func testPairingPeerInfoCanBeBuiltFromADBPublicKey() throws {
+        let publicKey = try ADBAuthenticationPublicKey("AAAA adb@ios")
+        let peerInfo = try ADBPairingPeerInfo(authenticationPublicKey: publicKey)
+
+        XCTAssertEqual(peerInfo.type, .adbRSAPublicKey)
+        XCTAssertEqual(peerInfo.data, Array("AAAA adb@ios".utf8))
+    }
+
     func testPairingPeerInfoRejectsInvalidValues() {
         XCTAssertThrowsError(try ADBPairingPeerInfo(encodedBytes: [0, 1, 2])) { error in
             XCTAssertEqual(error as? ADBPairingPeerInfoError, .invalidByteCount(3))
