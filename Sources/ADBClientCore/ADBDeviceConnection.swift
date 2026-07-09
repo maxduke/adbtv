@@ -47,7 +47,7 @@ public struct ADBDeviceConnection: Sendable {
 
     public mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput {
         start()
-        try await session.runShellCommand(command)
+        return try await session.runShellCommand(command)
     }
 }
 #endif
