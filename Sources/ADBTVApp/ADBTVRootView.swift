@@ -223,15 +223,11 @@ private struct AddDeviceView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    TextField("Name", text: $displayName)
-                    TextField("Host", text: $host)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                    TextField("Port", text: $port)
-                } header: {
-                    Text("Device")
-                }
+                TextField("Name", text: $displayName)
+                TextField("Host", text: $host)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                TextField("Port", text: $port)
             }
             .navigationTitle("Add Device")
             .toolbar {
