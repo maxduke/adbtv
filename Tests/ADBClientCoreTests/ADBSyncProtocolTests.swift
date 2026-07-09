@@ -7,12 +7,12 @@ final class ADBSyncProtocolTests: XCTestCase {
         let frame = try ADBSyncFrame.sendV1(path: path)
 
         XCTAssertEqual(frame.id, .sendV1)
-        XCTAssertEqual(frame.value, 40)
+        XCTAssertEqual(frame.value, 35)
         XCTAssertEqual(String(decoding: frame.payload, as: UTF8.self), "/data/local/tmp/adbtv/app.apk,33188")
 
         let encoded = try frame.encoded()
         XCTAssertEqual(Array(encoded[0..<4]), Array("SEND".utf8))
-        XCTAssertEqual(Array(encoded[4..<8]), [40, 0, 0, 0])
+        XCTAssertEqual(Array(encoded[4..<8]), [35, 0, 0, 0])
         XCTAssertEqual(Array(encoded[8...]), frame.payload)
     }
 
