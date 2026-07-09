@@ -11,6 +11,9 @@ public struct ADBTVRootView: View {
     @State private var devicePersistenceError: DiagnosticDetail?
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
+#if canImport(Network)
+    @State private var discoveryBrowser: ADBBonjourServiceBrowser?
+#endif
 
     public init(deviceStore: ADBTVDeviceStore = ADBTVDeviceStore()) {
         self.init(
@@ -37,6 +40,14 @@ public struct ADBTVRootView: View {
                         }
                         .onDelete(perform: deleteDevices)
                     }
+                }
+
+                Section("Discovery") {
+                    DiscoveryContent(
+                        status: model.discoveryStatus,
+                        services: model.discoveredServices,
+                        toggleDiscovery: toggleDiscovery
+                    )
                 }
             }
             .navigationTitle("ADB TV")
@@ -119,6 +130,7 @@ public struct ADBTVRootView: View {
         .onDisappear {
             installTask?.cancel()
             remoteTask?.cancel()
+            stopDiscovery()
         }
     }
 
@@ -142,6 +154,49 @@ public struct ADBTVRootView: View {
                 context: ["operation": "saveDevices"]
             )
         }
+    }
+
+    private func toggleDiscovery() {
+        if model.discoveryStatus.isBrowsing {
+            stopDiscovery()
+        } else {
+            startDiscovery()
+        }
+    }
+
+    private func startDiscovery() {
+        model.startDiscovery()
+#if canImport(Network)
+        let browser = ADBBonjourServiceBrowser()
+        discoveryBrowser = browser
+        browser.start(updateHandler: { services in
+            model.updateDiscoveredServices(services)
+        }, failureHandler: { message in
+            model.failDiscovery(
+                userMessage: "Could not discover Android TV devices.",
+                diagnosticDetail: DiagnosticDetail(
+                    summary: message,
+                    context: ["operation": "bonjourDiscovery"]
+                )
+            )
+        })
+#else
+        model.failDiscovery(
+            userMessage: "Device discovery is not available on this platform.",
+            diagnosticDetail: DiagnosticDetail(
+                summary: "Network.framework is unavailable.",
+                context: ["operation": "bonjourDiscovery"]
+            )
+        )
+#endif
+    }
+
+    private func stopDiscovery() {
+#if canImport(Network)
+        discoveryBrowser?.cancel()
+        discoveryBrowser = nil
+#endif
+        model.stopDiscovery()
     }
 
     private func startInstall(for device: ADBTVDeviceSummary) {
@@ -360,6 +415,86 @@ private struct AddDeviceView: View {
 
         addDevice(device)
         dismiss()
+    }
+}
+
+private struct DiscoveryContent: View {
+    var status: ADBTVDiscoveryStatus
+    var services: [ADBDiscoveredService]
+    var toggleDiscovery: () -> Void
+
+    var body: some View {
+        Group {
+            Button {
+                toggleDiscovery()
+            } label: {
+                Label(
+                    status.isBrowsing ? "Stop Discovery" : "Discover Devices",
+                    systemImage: status.isBrowsing ? "stop.circle" : "dot.radiowaves.left.and.right"
+                )
+            }
+
+            DiscoveryStatusView(status: status, serviceCount: services.count)
+
+            ForEach(services) { service in
+                DiscoveredServiceRow(service: service)
+            }
+        }
+    }
+}
+
+private struct DiscoveryStatusView: View {
+    var status: ADBTVDiscoveryStatus
+    var serviceCount: Int
+
+    var body: some View {
+        switch status {
+        case .idle:
+            if serviceCount == 0 {
+                EmptyView()
+            } else {
+                Label("\(serviceCount) service\(serviceCount == 1 ? "" : "s") found", systemImage: "checkmark.circle")
+                    .foregroundStyle(.secondary)
+            }
+        case .browsing:
+            HStack(spacing: 8) {
+                ProgressView()
+                Text(serviceCount == 0 ? "Searching local network" : "\(serviceCount) service\(serviceCount == 1 ? "" : "s") found")
+                    .foregroundStyle(.secondary)
+            }
+        case .failed(let userMessage, let diagnosticDetail):
+            VStack(alignment: .leading, spacing: 6) {
+                Label(userMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                Text(diagnosticDetail.summary)
+                    .font(.footnote.monospaced())
+                    .textSelection(.enabled)
+            }
+        }
+    }
+}
+
+private struct DiscoveredServiceRow: View {
+    var service: ADBDiscoveredService
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(service.displayName)
+                .font(.headline)
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var subtitle: String {
+        let kind = service.kind?.displayName ?? service.serviceType
+        if let interfaceName = service.interfaceName, !interfaceName.isEmpty {
+            return "\(kind) on \(interfaceName)"
+        }
+
+        return kind
     }
 }
 

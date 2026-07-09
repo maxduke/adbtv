@@ -6,17 +6,23 @@ public struct ADBTVAppModel: Equatable, Sendable {
     public var selectedDeviceID: ADBTVDeviceSummary.ID?
     public var installDraft: ADBTVInstallDraft
     public var remoteStatus: ADBTVRemoteStatus
+    public var discoveryStatus: ADBTVDiscoveryStatus
+    public var discoveredServices: [ADBDiscoveredService]
 
     public init(
         devices: [ADBTVDeviceSummary] = [],
         selectedDeviceID: ADBTVDeviceSummary.ID? = nil,
         installDraft: ADBTVInstallDraft = ADBTVInstallDraft(),
-        remoteStatus: ADBTVRemoteStatus = .idle
+        remoteStatus: ADBTVRemoteStatus = .idle,
+        discoveryStatus: ADBTVDiscoveryStatus = .idle,
+        discoveredServices: [ADBDiscoveredService] = []
     ) {
         self.devices = devices
         self.selectedDeviceID = selectedDeviceID ?? devices.first?.id
         self.installDraft = installDraft
         self.remoteStatus = remoteStatus
+        self.discoveryStatus = discoveryStatus
+        self.discoveredServices = discoveredServices.sortedForPresentation()
     }
 
     public var selectedDevice: ADBTVDeviceSummary? {
@@ -103,6 +109,26 @@ public struct ADBTVAppModel: Equatable, Sendable {
         diagnosticDetail: DiagnosticDetail
     ) {
         remoteStatus = .failed(action: action, userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+    }
+
+    public mutating func startDiscovery() {
+        discoveryStatus = .browsing
+        discoveredServices = []
+    }
+
+    public mutating func updateDiscoveredServices(_ services: [ADBDiscoveredService]) {
+        discoveredServices = services.sortedForPresentation()
+        if !discoveryStatus.isBrowsing {
+            discoveryStatus = .browsing
+        }
+    }
+
+    public mutating func stopDiscovery() {
+        discoveryStatus = .idle
+    }
+
+    public mutating func failDiscovery(userMessage: String, diagnosticDetail: DiagnosticDetail) {
+        discoveryStatus = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
     }
 }
 
@@ -283,6 +309,20 @@ public enum ADBTVRemoteStatus: Equatable, Sendable {
 
     public var isSending: Bool {
         if case .sending = self {
+            return true
+        }
+
+        return false
+    }
+}
+
+public enum ADBTVDiscoveryStatus: Equatable, Sendable {
+    case idle
+    case browsing
+    case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
+
+    public var isBrowsing: Bool {
+        if case .browsing = self {
             return true
         }
 

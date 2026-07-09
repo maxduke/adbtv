@@ -194,4 +194,52 @@ final class ADBTVAppModelTests: XCTestCase {
             )
         ))
     }
+
+    func testDiscoveryUpdatesPresentationStatusAndServices() {
+        var model = ADBTVAppModel()
+        let connectService = ADBDiscoveredService(
+            serviceName: "Living Room",
+            serviceType: ADBWirelessDebuggingServiceKind.connect.bonjourType,
+            domain: "local."
+        )
+        let pairingService = ADBDiscoveredService(
+            serviceName: "Living Room Pairing",
+            serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+            domain: "local."
+        )
+
+        model.startDiscovery()
+
+        XCTAssertEqual(model.discoveryStatus, .browsing)
+        XCTAssertTrue(model.discoveryStatus.isBrowsing)
+        XCTAssertEqual(model.discoveredServices, [])
+
+        model.updateDiscoveredServices([pairingService, connectService])
+
+        XCTAssertEqual(model.discoveryStatus, .browsing)
+        XCTAssertEqual(model.discoveredServices, [connectService, pairingService])
+
+        model.stopDiscovery()
+
+        XCTAssertEqual(model.discoveryStatus, .idle)
+        XCTAssertFalse(model.discoveryStatus.isBrowsing)
+    }
+
+    func testDiscoveryFailureStoresUserAndDiagnosticDetails() {
+        var model = ADBTVAppModel()
+        let diagnosticDetail = DiagnosticDetail(
+            summary: "local network permission denied",
+            context: ["operation": "bonjourDiscovery"]
+        )
+
+        model.failDiscovery(
+            userMessage: "Could not discover Android TV devices.",
+            diagnosticDetail: diagnosticDetail
+        )
+
+        XCTAssertEqual(model.discoveryStatus, .failed(
+            userMessage: "Could not discover Android TV devices.",
+            diagnosticDetail: diagnosticDetail
+        ))
+    }
 }
