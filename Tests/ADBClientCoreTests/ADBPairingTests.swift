@@ -53,10 +53,10 @@ final class ADBPairingTests: XCTestCase {
     }
 
     func testPairingPacketHeaderEncodesBigEndianPayloadSize() throws {
-        let header = try ADBPairingPacketHeader(type: .spake2Message, payloadSize: 0x0102_0304)
+        let header = try ADBPairingPacketHeader(type: .spake2Message, payloadSize: 0x0000_4000)
 
-        XCTAssertEqual(header.encoded(), [1, 0, 1, 2, 3, 4])
-        XCTAssertEqual(try ADBPairingPacketHeader(encodedBytes: [1, 0, 1, 2, 3, 4]), header)
+        XCTAssertEqual(header.encoded(), [1, 0, 0, 0, 64, 0])
+        XCTAssertEqual(try ADBPairingPacketHeader(encodedBytes: [1, 0, 0, 0, 64, 0]), header)
     }
 
     func testPairingPacketHeaderRejectsInvalidValues() {
