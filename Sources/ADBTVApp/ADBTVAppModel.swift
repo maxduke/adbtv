@@ -32,6 +32,19 @@ public struct ADBTVAppModel: Equatable, Sendable {
         selectedDeviceID = id
     }
 
+    public mutating func addDevice(_ device: ADBTVDeviceSummary) {
+        devices.append(device)
+        selectedDeviceID = device.id
+    }
+
+    public mutating func removeDevices(ids: Set<ADBTVDeviceSummary.ID>) {
+        devices.removeAll { ids.contains($0.id) }
+
+        if let selectedDeviceID, ids.contains(selectedDeviceID) {
+            self.selectedDeviceID = devices.first?.id
+        }
+    }
+
     public mutating func selectPackage(fileName: String, byteCount: Int64?) {
         installDraft.selectedPackage = ADBTVInstallPackageDraft(fileName: fileName, byteCount: byteCount)
         installDraft.status = .ready
@@ -91,7 +104,7 @@ public extension ADBTVAppModel {
     )
 }
 
-public struct ADBTVDeviceSummary: Identifiable, Equatable, Sendable {
+public struct ADBTVDeviceSummary: Codable, Identifiable, Equatable, Sendable {
     public typealias ID = UUID
 
     public var id: ID

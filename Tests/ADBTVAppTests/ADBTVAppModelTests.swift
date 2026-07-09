@@ -62,6 +62,39 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertTrue(model.canInstallSelectedPackage)
     }
 
+    func testModelAddsAndRemovesDevices() {
+        let first = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
+        let second = ADBTVDeviceSummary(displayName: "Bedroom", host: "192.168.1.51", port: 5555)
+        var model = ADBTVAppModel(devices: [first])
+
+        model.addDevice(second)
+
+        XCTAssertEqual(model.devices, [first, second])
+        XCTAssertEqual(model.selectedDevice, second)
+
+        model.removeDevices(ids: [second.id])
+
+        XCTAssertEqual(model.devices, [first])
+        XCTAssertEqual(model.selectedDevice, first)
+    }
+
+    func testDeviceStoreRoundTripsSavedDevices() throws {
+        let suiteName = "ADBTVDeviceStoreTests.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+
+        let store = ADBTVDeviceStore(userDefaults: userDefaults)
+        let devices = [
+            ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555, model: "Android TV")
+        ]
+
+        try store.saveDevices(devices)
+
+        XCTAssertEqual(store.loadDevices(), devices)
+    }
+
     func testModelSelectsPackageFromFileURL() {
         var model = ADBTVAppModel()
         let url = URL(fileURLWithPath: "/tmp/Example App.apk")

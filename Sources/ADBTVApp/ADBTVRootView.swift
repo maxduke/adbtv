@@ -3,11 +3,23 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 public struct ADBTVRootView: View {
+    private let deviceStore: ADBTVDeviceStore
+
     @State private var model: ADBTVAppModel
     @State private var isFileImporterPresented = false
+    @State private var isAddDevicePresented = false
+    @State private var devicePersistenceError: DiagnosticDetail?
     @State private var installTask: Task<Void, Never>?
 
-    public init(model: ADBTVAppModel = ADBTVAppModel()) {
+    public init(deviceStore: ADBTVDeviceStore = ADBTVDeviceStore()) {
+        self.init(
+            model: ADBTVAppModel(devices: deviceStore.loadDevices()),
+            deviceStore: deviceStore
+        )
+    }
+
+    public init(model: ADBTVAppModel, deviceStore: ADBTVDeviceStore = ADBTVDeviceStore()) {
+        self.deviceStore = deviceStore
         self._model = State(initialValue: model)
     }
 
@@ -22,6 +34,7 @@ public struct ADBTVRootView: View {
                             DeviceRow(device: device)
                                 .tag(device.id)
                         }
+                        .onDelete(perform: deleteDevices)
                     }
                 }
             }
@@ -29,6 +42,7 @@ public struct ADBTVRootView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
+                        isAddDevicePresented = true
                     } label: {
                         Label("Add Device", systemImage: "plus")
                     }
@@ -50,6 +64,27 @@ public struct ADBTVRootView: View {
             } else {
                 ContentUnavailableView("Select a Device", systemImage: "tv.and.hifispeaker.fill")
             }
+        }
+        .sheet(isPresented: $isAddDevicePresented) {
+            AddDeviceView { device in
+                addDevice(device)
+            }
+        }
+        .alert(
+            "Could not save devices",
+            isPresented: Binding(
+                get: { devicePersistenceError != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        devicePersistenceError = nil
+                    }
+                }
+            ),
+            presenting: devicePersistenceError
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { diagnosticDetail in
+            Text(diagnosticDetail.summary)
         }
         .fileImporter(
             isPresented: $isFileImporterPresented,
@@ -74,6 +109,28 @@ public struct ADBTVRootView: View {
         }
         .onDisappear {
             installTask?.cancel()
+        }
+    }
+
+    private func addDevice(_ device: ADBTVDeviceSummary) {
+        model.addDevice(device)
+        saveDevices()
+    }
+
+    private func deleteDevices(at offsets: IndexSet) {
+        let ids = Set(offsets.map { model.devices[$0].id })
+        model.removeDevices(ids: ids)
+        saveDevices()
+    }
+
+    private func saveDevices() {
+        do {
+            try deviceStore.saveDevices(model.devices)
+        } catch {
+            devicePersistenceError = DiagnosticDetail(
+                summary: String(describing: error),
+                context: ["operation": "saveDevices"]
+            )
         }
     }
 
@@ -150,6 +207,70 @@ public struct ADBTVRootView: View {
 private enum InstallCompletion: Sendable {
     case success(ADBAPKInstallReport)
     case failure(userMessage: String, diagnosticDetail: DiagnosticDetail)
+}
+
+private struct AddDeviceView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var displayName = ""
+    @State private var host = ""
+    @State private var port = "5555"
+
+    var addDevice: (ADBTVDeviceSummary) -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Device") {
+                    TextField("Name", text: $displayName)
+                    TextField("Host", text: $host)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField("Port", text: $port)
+                }
+            }
+            .navigationTitle("Add Device")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        submit()
+                    }
+                    .disabled(validatedDevice == nil)
+                }
+            }
+        }
+    }
+
+    private var validatedDevice: ADBTVDeviceSummary? {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedHost.isEmpty,
+              let portValue = Int(port.trimmingCharacters(in: .whitespacesAndNewlines)),
+              UInt16(exactly: portValue) != nil else {
+            return nil
+        }
+
+        let trimmedDisplayName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ADBTVDeviceSummary(
+            displayName: trimmedDisplayName.isEmpty ? trimmedHost : trimmedDisplayName,
+            host: trimmedHost,
+            port: portValue
+        )
+    }
+
+    private func submit() {
+        guard let device = validatedDevice else {
+            return
+        }
+
+        addDevice(device)
+        dismiss()
+    }
 }
 
 private struct DeviceRow: View {
