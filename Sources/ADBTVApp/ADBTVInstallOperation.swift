@@ -31,7 +31,9 @@ public struct ADBTVInstallOperation: Sendable {
     public var modificationTime: @Sendable () -> UInt32
 
     public init(
-        readFile: @escaping @Sendable (URL) throws -> [UInt8] = ADBTVInstallFileReader.readFileBytes,
+        readFile: @escaping @Sendable (URL) throws -> [UInt8] = {
+            try ADBTVInstallFileReader.readFileBytes(from: $0)
+        },
         modificationTime: @escaping @Sendable () -> UInt32 = {
             UInt32(Date().timeIntervalSince1970)
         }

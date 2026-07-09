@@ -155,7 +155,9 @@ public struct ADBTVRootView: View {
             guard !Task.isCancelled else {
                 return
             }
-            await completeInstall(completion)
+            await MainActor.run {
+                completeInstall(completion)
+            }
         }
     }
 
@@ -221,12 +223,14 @@ private struct AddDeviceView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Device") {
+                Section {
                     TextField("Name", text: $displayName)
                     TextField("Host", text: $host)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
                     TextField("Port", text: $port)
+                } header: {
+                    Text("Device")
                 }
             }
             .navigationTitle("Add Device")
