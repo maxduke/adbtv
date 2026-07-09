@@ -7,6 +7,16 @@ public struct ADBClientDriver: Sendable {
         self.decoder = decoder
     }
 
+    public init(
+        authenticationIdentity: any ADBAuthenticationIdentity,
+        decoder: ADBPacketStreamDecoder = ADBPacketStreamDecoder()
+    ) {
+        self.init(
+            client: ADBClient(authenticationResponder: ADBAuthenticationResponder(identity: authenticationIdentity)),
+            decoder: decoder
+        )
+    }
+
     public mutating func startConnection(systemIdentity: String = "host::") throws -> ADBClientDriverOutput {
         let packet = client.makeConnectPacket(systemIdentity: systemIdentity)
         return try ADBClientDriverOutput(packetsToSend: [packet])

@@ -1,6 +1,9 @@
 #if canImport(Network)
 import Dispatch
 @preconcurrency import Network
+#if canImport(Security)
+import Security
+#endif
 
 public struct ADBDeviceConnection: Sendable {
     private let transport: ADBNetworkTransport
@@ -12,13 +15,44 @@ public struct ADBDeviceConnection: Sendable {
         parameters: NWParameters = .tcp,
         queue: DispatchQueue = DispatchQueue(label: "ADBDeviceConnection")
     ) {
-        let transport = ADBNetworkTransport(endpoint: endpoint, parameters: parameters, queue: queue)
-        self.init(transport: transport)
+        self.init(endpoint: endpoint, authenticationIdentity: nil, parameters: parameters, queue: queue)
     }
 
-    init(transport: ADBNetworkTransport) {
+    public init(
+        endpoint: ADBNetworkEndpoint,
+        authenticationIdentity: (any ADBAuthenticationIdentity)?,
+        parameters: NWParameters = .tcp,
+        queue: DispatchQueue = DispatchQueue(label: "ADBDeviceConnection")
+    ) {
+        let transport = ADBNetworkTransport(endpoint: endpoint, parameters: parameters, queue: queue)
+        let driver: ADBClientDriver
+        if let authenticationIdentity {
+            driver = ADBClientDriver(authenticationIdentity: authenticationIdentity)
+        } else {
+            driver = ADBClientDriver()
+        }
+        self.init(transport: transport, driver: driver)
+    }
+
+#if canImport(Security)
+    public init(
+        authenticatedEndpoint endpoint: ADBNetworkEndpoint,
+        identityStore: ADBAppleAuthenticationIdentityStore = ADBAppleAuthenticationIdentityStore(),
+        parameters: NWParameters = .tcp,
+        queue: DispatchQueue = DispatchQueue(label: "ADBDeviceConnection")
+    ) throws {
+        try self.init(
+            endpoint: endpoint,
+            authenticationIdentity: identityStore.loadOrCreateIdentity(),
+            parameters: parameters,
+            queue: queue
+        )
+    }
+#endif
+
+    init(transport: ADBNetworkTransport, driver: ADBClientDriver = ADBClientDriver()) {
         self.transport = transport
-        self.session = ADBDeviceSession(transport: transport)
+        self.session = ADBDeviceSession(driver: driver, transport: transport)
         self.hasStarted = false
     }
 

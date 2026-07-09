@@ -26,6 +26,45 @@ final class ADBDeviceSessionTests: XCTestCase {
         ))
     }
 
+    func testConnectRespondsToAuthTokenBeforeDeviceConnects() async throws {
+        let transport = InMemoryADBByteTransport(inboundChunks: [
+            try ADBPacket(
+                command: .auth,
+                arg0: ADBAuthenticationType.token.rawValue,
+                arg1: 0,
+                payload: Array(repeating: 7, count: 20)
+            ).encoded(),
+            try deviceConnectPacket().encoded()
+        ])
+        var session = ADBDeviceSession(
+            authenticationIdentity: TestAuthenticationIdentity(
+                signature: [1, 2, 3],
+                publicKeyValue: try ADBAuthenticationPublicKey("AAAA adb@ios")
+            ),
+            transport: transport
+        )
+
+        let device = try await session.connect()
+        let sentChunks = await transport.sentChunks()
+        let sentPackets = try sentChunks.map { try $0.decodedPacket() }
+
+        XCTAssertEqual(device.banner, "device::ro.product.name=tv")
+        XCTAssertEqual(sentPackets, [
+            ADBPacket(
+                command: .connect,
+                arg0: ADBConnectionState.defaultProtocolVersion,
+                arg1: ADBConnectionState.defaultMaxData,
+                payload: Array("host::".utf8) + [0]
+            ),
+            ADBPacket(
+                command: .auth,
+                arg0: ADBAuthenticationType.signature.rawValue,
+                arg1: 0,
+                payload: [1, 2, 3] + Array(repeating: 7, count: 20)
+            )
+        ])
+    }
+
     func testConnectThrowsWhenTransportClosesBeforeDeviceConnects() async throws {
         let transport = InMemoryADBByteTransport()
         var session = ADBDeviceSession(transport: transport)

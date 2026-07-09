@@ -9,6 +9,13 @@ public struct ADBDeviceSession: Sendable {
         self.transportSession = ADBTransportSession(driver: driver, transport: transport)
     }
 
+    public init(authenticationIdentity: any ADBAuthenticationIdentity, transport: any ADBByteTransport) {
+        self.init(
+            driver: ADBClientDriver(authenticationIdentity: authenticationIdentity),
+            transport: transport
+        )
+    }
+
     public var connectionPhase: ADBConnectionPhase {
         transportSession.driver.client.connection.phase
     }
