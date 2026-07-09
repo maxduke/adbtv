@@ -46,7 +46,7 @@ final class ADBClientTests: XCTestCase {
         var client = ADBClient(authenticationResponder: ADBAuthenticationResponder(
             identity: TestAuthenticationIdentity(
                 signature: [7, 7],
-                publicKey: try ADBAuthenticationPublicKey("AAAA adb@ios")
+                publicKeyValue: try ADBAuthenticationPublicKey("AAAA adb@ios")
             )
         ))
 

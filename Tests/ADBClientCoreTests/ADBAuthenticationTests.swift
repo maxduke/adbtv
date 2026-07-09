@@ -23,7 +23,7 @@ final class ADBAuthenticationTests: XCTestCase {
     func testResponderSendsSignatureBeforePublicKeyFallback() throws {
         var responder = ADBAuthenticationResponder(identity: TestAuthenticationIdentity(
             signature: [1, 2, 3],
-            publicKey: try ADBAuthenticationPublicKey("AAAA adb@ios")
+            publicKeyValue: try ADBAuthenticationPublicKey("AAAA adb@ios")
         ))
 
         let signaturePacket = try responder.responsePacket(forToken: [9, 8, 7])
@@ -46,7 +46,7 @@ final class ADBAuthenticationTests: XCTestCase {
     func testResponderResetRetriesSignature() throws {
         var responder = ADBAuthenticationResponder(identity: TestAuthenticationIdentity(
             signature: [1, 2, 3],
-            publicKey: try ADBAuthenticationPublicKey("AAAA adb@ios")
+            publicKeyValue: try ADBAuthenticationPublicKey("AAAA adb@ios")
         ))
 
         _ = try responder.responsePacket(forToken: [9, 8, 7])

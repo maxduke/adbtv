@@ -2,13 +2,13 @@
 
 struct TestAuthenticationIdentity: ADBAuthenticationIdentity {
     var signature: [UInt8]
-    var publicKey: ADBAuthenticationPublicKey
+    var publicKeyValue: ADBAuthenticationPublicKey
 
     func signature(for token: [UInt8]) throws -> [UInt8] {
         signature + token
     }
 
     func publicKey() throws -> ADBAuthenticationPublicKey {
-        publicKey
+        publicKeyValue
     }
 }

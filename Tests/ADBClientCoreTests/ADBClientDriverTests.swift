@@ -28,9 +28,9 @@ final class ADBClientDriverTests: XCTestCase {
 
     func testReceiveBytesReturnsEncodedAuthSignature() throws {
         var driver = ADBClientDriver(client: ADBClient(authenticationResponder: ADBAuthenticationResponder(
-                identity: TestAuthenticationIdentity(
+            identity: TestAuthenticationIdentity(
                 signature: [8, 8],
-                publicKey: try ADBAuthenticationPublicKey("AAAA adb@ios")
+                publicKeyValue: try ADBAuthenticationPublicKey("AAAA adb@ios")
             )
         )))
 
