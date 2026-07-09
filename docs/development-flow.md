@@ -20,6 +20,8 @@ Keep the main checkout and feature worktrees as siblings:
 /home/maxduke/projects/adbtv-worktrees/ios-ci
 ```
 
+When using Codex, start the Codex session from the feature worktree or make that worktree an allowed writable root. A sibling worktree is the preferred Git layout, but Codex cannot safely edit it unless the session has write access to that path.
+
 ## Starting Work
 
 From the main checkout:
