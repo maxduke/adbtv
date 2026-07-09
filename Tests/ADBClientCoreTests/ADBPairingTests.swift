@@ -52,6 +52,32 @@ final class ADBPairingTests: XCTestCase {
         }
     }
 
+    func testPairingSecretBuildsFromManualCode() throws {
+        let secret = try ADBPairingSecret(code: ADBPairingCode("123 456"))
+
+        XCTAssertEqual(secret.source, .code)
+        XCTAssertEqual(secret.bytes, Array("123456".utf8))
+    }
+
+    func testPairingSecretBuildsFromQRCodePassword() throws {
+        let secret = try ADBPairingSecret(qrCode: ADBPairingQRCode(
+            serviceName: "Living Room TV",
+            password: "pair-secret"
+        ))
+
+        XCTAssertEqual(secret.source, .qrCode(serviceName: "Living Room TV"))
+        XCTAssertEqual(secret.bytes, Array("pair-secret".utf8))
+    }
+
+    func testPairingSecretRejectsInvalidRawBytes() {
+        XCTAssertThrowsError(try ADBPairingSecret(source: .code, bytes: [])) { error in
+            XCTAssertEqual(error as? ADBPairingSecretError, .emptySecret)
+        }
+        XCTAssertThrowsError(try ADBPairingSecret(source: .code, bytes: [1, 0, 2])) { error in
+            XCTAssertEqual(error as? ADBPairingSecretError, .containsNullByte)
+        }
+    }
+
     func testPairingPacketHeaderEncodesBigEndianPayloadSize() throws {
         let header = try ADBPairingPacketHeader(type: .spake2Message, payloadSize: 0x0000_4000)
 

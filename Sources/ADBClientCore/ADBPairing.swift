@@ -60,6 +60,41 @@ public enum ADBPairingQRCodeError: Error, Equatable, Sendable {
     case missingPassword
 }
 
+public enum ADBPairingSecretSource: Equatable, Sendable {
+    case code
+    case qrCode(serviceName: String)
+}
+
+public struct ADBPairingSecret: Equatable, Sendable {
+    public var source: ADBPairingSecretSource
+    public var bytes: [UInt8]
+
+    public init(code: ADBPairingCode) throws {
+        try self.init(source: .code, bytes: Array(code.rawValue.utf8))
+    }
+
+    public init(qrCode: ADBPairingQRCode) throws {
+        try self.init(source: .qrCode(serviceName: qrCode.serviceName), bytes: Array(qrCode.password.utf8))
+    }
+
+    public init(source: ADBPairingSecretSource, bytes: [UInt8]) throws {
+        guard !bytes.isEmpty else {
+            throw ADBPairingSecretError.emptySecret
+        }
+        guard !bytes.contains(0) else {
+            throw ADBPairingSecretError.containsNullByte
+        }
+
+        self.source = source
+        self.bytes = bytes
+    }
+}
+
+public enum ADBPairingSecretError: Error, Equatable, Sendable {
+    case emptySecret
+    case containsNullByte
+}
+
 public enum ADBPairingPacketType: UInt8, Equatable, Sendable {
     case spake2Message = 0
     case peerInfo = 1
