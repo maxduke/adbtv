@@ -84,9 +84,10 @@ public struct ADBAppleAuthenticationIdentityStore: Sendable {
 
         switch status {
         case errSecSuccess:
-            guard let privateKey = result as? SecKey else {
+            guard let result else {
                 throw ADBAppleAuthenticationIdentityError.invalidKeychainItem
             }
+            let privateKey = result as! SecKey
             return ADBAppleAuthenticationIdentity(privateKey: privateKey, publicKeyComment: publicKeyComment)
 
         case errSecItemNotFound:
