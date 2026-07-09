@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 public struct ADBTVRootView: View {
     @State private var model: ADBTVAppModel
     @State private var isFileImporterPresented = false
+    @State private var installTask: Task<Void, Never>?
 
     public init(model: ADBTVAppModel = ADBTVAppModel()) {
         self._model = State(initialValue: model)
@@ -43,7 +44,7 @@ public struct ADBTVRootView: View {
                         isFileImporterPresented = true
                     },
                     install: {
-                        model.recordInstallEvent(.phaseStarted(.validatePackage))
+                        startInstall(for: device)
                     }
                 )
             } else {
@@ -71,7 +72,84 @@ public struct ADBTVRootView: View {
                 )
             }
         }
+        .onDisappear {
+            installTask?.cancel()
+        }
     }
+
+    private func startInstall(for device: ADBTVDeviceSummary) {
+        let installModel = model
+        model.recordInstallEvent(.phaseStarted(.validatePackage))
+
+        installTask?.cancel()
+        installTask = Task {
+            let completion: InstallCompletion
+            do {
+                completion = .success(try await Self.installPackage(for: device, using: installModel))
+            } catch is CancellationError {
+                return
+            } catch {
+                completion = .failure(
+                    userMessage: "Could not install APK.",
+                    diagnosticDetail: Self.installDiagnosticDetail(error, device: device)
+                )
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+            await completeInstall(completion)
+        }
+    }
+
+    private static func installPackage(
+        for device: ADBTVDeviceSummary,
+        using installModel: ADBTVAppModel
+    ) async throws -> ADBAPKInstallReport {
+#if canImport(Network)
+        guard let port = UInt16(exactly: device.port) else {
+            throw ADBTVInstallOperationError.invalidDevicePort(device.port)
+        }
+
+        let endpoint = ADBNetworkEndpoint(host: device.host, port: port)
+#if canImport(Security)
+        var connection = try ADBDeviceConnection(authenticatedEndpoint: endpoint)
+#else
+        var connection = ADBDeviceConnection(endpoint: endpoint)
+#endif
+        return try await ADBTVInstallOperation().installSelectedPackage(from: installModel, using: &connection)
+#else
+        throw ADBTVInstallOperationError.unsupportedPlatform
+#endif
+    }
+
+    @MainActor
+    private func completeInstall(_ completion: InstallCompletion) {
+        switch completion {
+        case .success(let report):
+            for event in report.events {
+                model.recordInstallEvent(event)
+            }
+            model.finishInstall(result: report.result)
+        case .failure(let userMessage, let diagnosticDetail):
+            model.failInstall(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        }
+    }
+
+    private static func installDiagnosticDetail(_ error: Error, device: ADBTVDeviceSummary) -> DiagnosticDetail {
+        DiagnosticDetail(
+            summary: String(describing: error),
+            context: [
+                "device": "\(device.host):\(device.port)",
+                "operation": "installAPK"
+            ]
+        )
+    }
+}
+
+private enum InstallCompletion: Sendable {
+    case success(ADBAPKInstallReport)
+    case failure(userMessage: String, diagnosticDetail: DiagnosticDetail)
 }
 
 private struct DeviceRow: View {
