@@ -37,16 +37,17 @@ Implemented so far:
 - self-signed TLS identity generation from the synchronized ADB RSA key;
 - manual Pairing Code app flow with separate pairing and connection ports, cancellation, diagnostics, and saved-device handoff;
 - selectable Bonjour pairing services with device-GUID correlation and persisted connect-service handoff;
+- AVFoundation Pairing QR Code scanning with Bonjour service matching and the same saved-device handoff;
 - AOSP-compatible CNXN/STLS mutual-TLS reconnect for host/port and Bonjour targets;
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - end-to-end loopback coverage for secure reconnect and an encrypted ADB shell command;
+- remote text input, menu, volume, and power controls in addition to D-pad navigation;
 - unsigned IPA packaging in GitHub Actions.
 
 Still in progress:
 
 - real-device validation of pairing, reconnect, remote actions, and APK install;
-- QR camera scanning and app flow; QR payload parsing is implemented;
-- text input, volume, and power remote controls.
+- real-device validation of QR camera framing and permission behavior.
 
 ## Planning Docs
 
