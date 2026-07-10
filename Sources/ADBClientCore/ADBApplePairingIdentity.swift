@@ -24,7 +24,7 @@ public extension ADBAppleAuthenticationIdentity {
         let privateKeyDER = try privateKeyExternalRepresentation()
         let certificateDER = try Self.generateCertificate(privateKeyDER: privateKeyDER)
 
-        guard let certificate = SecCertificateCreateWithData(nil, Data(certificateDER) as CFData) else {
+        guard SecCertificateCreateWithData(nil, Data(certificateDER) as CFData) != nil else {
             throw ADBApplePairingIdentityError.invalidGeneratedCertificate
         }
         let identity = try Self.importIdentity(privateKeyDER: privateKeyDER)

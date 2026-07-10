@@ -312,10 +312,10 @@ bool adb_pairing_crypto_generate_pkcs12(
         key,
         certificate,
         nullptr,
-        NID_aes_256_cbc,
-        NID_aes_256_cbc,
-        PKCS12_DEFAULT_ITER,
-        PKCS12_DEFAULT_ITER,
+        0,
+        0,
+        0,
+        0,
         0
     );
     X509_free(certificate);
