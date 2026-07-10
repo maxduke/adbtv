@@ -16,11 +16,14 @@ final class ADBAppleAuthenticationIdentityTests: XCTestCase {
     }
 
     func testAuthenticationIdentityCreatesMatchingTLSIdentityAndPairingMaterial() throws {
-        let privateKey = try makePrivateKey()
-        let authenticationIdentity = ADBAppleAuthenticationIdentity(
-            privateKey: privateKey,
-            publicKeyComment: "tester@adbtv"
+        let applicationTag = "com.adbtv.tests.identity.\(UUID().uuidString)"
+        defer { deleteKey(applicationTag: applicationTag) }
+        let store = ADBAppleAuthenticationIdentityStore(
+            applicationTag: applicationTag,
+            publicKeyComment: "tester@adbtv",
+            synchronizable: false
         )
+        let authenticationIdentity = try store.createIdentity()
 
         let pairingIdentity = try authenticationIdentity.pairingIdentity()
         XCTAssertEqual(
@@ -47,16 +50,13 @@ final class ADBAppleAuthenticationIdentityTests: XCTestCase {
         XCTAssertNotNil(recoveredPrivateKey)
     }
 
-    private func makePrivateKey() throws -> SecKey {
-        let attributes: [String: Any] = [
+    private func deleteKey(applicationTag: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassKey,
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrKeySizeInBits as String: 2048
+            kSecAttrApplicationTag as String: Data(applicationTag.utf8)
         ]
-        var error: Unmanaged<CFError>?
-        guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
-            throw error!.takeRetainedValue()
-        }
-        return key
+        SecItemDelete(query as CFDictionary)
     }
 }
 #endif

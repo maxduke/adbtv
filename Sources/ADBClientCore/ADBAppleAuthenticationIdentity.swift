@@ -59,9 +59,6 @@ public struct ADBAppleAuthenticationIdentity: ADBAuthenticationIdentity, @unchec
         return Array(externalRepresentation as Data)
     }
 
-    var securityPrivateKey: SecKey {
-        privateKey
-    }
 }
 
 public struct ADBAppleAuthenticationIdentityStore: Sendable {

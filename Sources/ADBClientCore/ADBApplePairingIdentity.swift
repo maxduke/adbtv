@@ -21,8 +21,13 @@ public extension ADBAppleAuthenticationIdentity {
         guard let certificate = SecCertificateCreateWithData(nil, Data(certificateDER) as CFData) else {
             throw ADBApplePairingIdentityError.invalidGeneratedCertificate
         }
-        guard let identity = SecIdentityCreate(nil, certificate, securityPrivateKey) else {
-            throw ADBApplePairingIdentityError.identityCreationFailed
+        var identity: SecIdentity?
+        let identityStatus = SecIdentityCreateWithCertificate(nil, certificate, &identity)
+        guard identityStatus == errSecSuccess, let identity else {
+            throw ADBApplePairingIdentityError.identityCreationFailed(identityStatus)
+        }
+        guard let networkIdentity = sec_identity_create(identity) else {
+            throw ADBApplePairingIdentityError.networkIdentityCreationFailed
         }
 
         let material = try ADBPairingIdentityMaterial(
@@ -32,7 +37,7 @@ public extension ADBAppleAuthenticationIdentity {
         )
         return ADBApplePairingIdentity(
             material: material,
-            securityIdentity: sec_identity_create(identity)
+            securityIdentity: networkIdentity
         )
     }
 
@@ -81,6 +86,7 @@ public extension ADBAppleAuthenticationIdentity {
 public enum ADBApplePairingIdentityError: Error, Equatable, Sendable {
     case certificateGenerationFailed
     case invalidGeneratedCertificate
-    case identityCreationFailed
+    case identityCreationFailed(OSStatus)
+    case networkIdentityCreationFailed
 }
 #endif
