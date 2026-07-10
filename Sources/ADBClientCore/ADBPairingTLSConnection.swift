@@ -7,6 +7,9 @@ import Security
 public final class ADBPairingTLSConnection: @unchecked Sendable {
     public static let exporterByteCount = 64
     public static let exporterLabel = Array("adb-label".utf8) + [UInt8(0)]
+    private static let verificationQueue = DispatchQueue(
+        label: "ADBPairingTLSConnection.Verification"
+    )
 
     public let transport: ADBNetworkTransport
     public let tlsExporter: [UInt8]
@@ -23,7 +26,7 @@ public final class ADBPairingTLSConnection: @unchecked Sendable {
     ) async throws -> ADBPairingTLSConnection {
         let connection = NWConnection(
             to: endpoint.nwEndpoint,
-            using: parameters(identity: identity, verifyQueue: queue)
+            using: parameters(identity: identity, verifyQueue: verificationQueue)
         )
         let transport = ADBNetworkTransport(connection: connection, queue: queue)
 
