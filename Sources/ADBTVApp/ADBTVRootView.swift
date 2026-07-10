@@ -1,6 +1,9 @@
 import ADBClientCore
 import SwiftUI
 import UniformTypeIdentifiers
+#if os(iOS)
+import UIKit
+#endif
 
 public struct ADBTVRootView: View {
     private let deviceStore: ADBTVDeviceStore
@@ -120,9 +123,10 @@ public struct ADBTVRootView: View {
             }
         }
         .sheet(isPresented: $isAddDevicePresented) {
-            AddDeviceView { device in
-                addDevice(device)
-            }
+            AddDeviceView(
+                verifyDevice: Self.verifyManualDevice,
+                addDevice: addDevice
+            )
         }
         .sheet(isPresented: $isPairDevicePresented) {
             PairDeviceView(
@@ -257,12 +261,14 @@ public struct ADBTVRootView: View {
             if model.selectQRCodePairingServiceIfAvailable() {
                 startPairing()
             }
-        }, failureHandler: { message in
+        }, failureHandler: { failure in
+            browser.cancel()
+            discoveryBrowser = nil
             model.failDiscovery(
-                userMessage: "Could not discover Android TV devices.",
+                userMessage: Self.discoveryUserMessage(for: failure),
                 diagnosticDetail: DiagnosticDetail(
-                    summary: message,
-                    context: ["operation": "bonjourDiscovery"]
+                    summary: failure.diagnosticDescription,
+                    context: Self.discoveryDiagnosticContext(for: failure)
                 )
             )
         })
@@ -276,6 +282,32 @@ public struct ADBTVRootView: View {
         )
 #endif
     }
+
+#if canImport(Network)
+    private static func discoveryUserMessage(for failure: ADBBonjourDiscoveryFailure) -> String {
+        switch failure.reason {
+        case .noAuthorization:
+            return "Bonjour discovery is not authorized. Check Local Network access in Settings, then retry."
+        case .localNetworkDenied:
+            return "Local Network access is off. Enable it in Settings to discover Android TV devices."
+        case .other:
+            return "Could not discover Android TV devices."
+        }
+    }
+
+    private static func discoveryDiagnosticContext(
+        for failure: ADBBonjourDiscoveryFailure
+    ) -> [String: String] {
+        var context = [
+            "operation": "bonjourDiscovery",
+            "reason": failure.reason.rawValue
+        ]
+        if let dnsErrorCode = failure.dnsErrorCode {
+            context["dnsErrorCode"] = String(dnsErrorCode)
+        }
+        return context
+    }
+#endif
 
     private func prepareDiscoveredPairing(_ service: ADBDiscoveredService) {
         guard service.kind == .pairing else {
@@ -643,6 +675,28 @@ public struct ADBTVRootView: View {
             target: device.networkTarget()
         )
     }
+
+    private static func verifyManualDevice(
+        _ device: ADBTVDeviceSummary
+    ) async throws -> ADBTVDeviceSummary {
+        var connection = try await connectedDevice(for: device)
+        defer { connection.cancel() }
+
+        _ = try await connection.connect()
+        let output = try await connection.runShellCommand(
+            try ADBShellCommand("getprop ro.product.model")
+        )
+        let model = output.utf8String.trimmingCharacters(in: .whitespacesAndNewlines)
+        var verifiedDevice = device
+        verifiedDevice.model = model.isEmpty ? nil : model
+        return verifiedDevice
+    }
+#else
+    private static func verifyManualDevice(
+        _ device: ADBTVDeviceSummary
+    ) async throws -> ADBTVDeviceSummary {
+        throw ADBTVManualDeviceError.unsupportedPlatform
+    }
 #endif
 
     @MainActor
@@ -685,6 +739,10 @@ private enum PairingCompletion: Sendable {
 }
 
 private enum ADBTVPairingViewError: Error {
+    case unsupportedPlatform
+}
+
+private enum ADBTVManualDeviceError: Error {
     case unsupportedPlatform
 }
 
@@ -842,32 +900,47 @@ private struct AddDeviceView: View {
     @State private var displayName = ""
     @State private var host = ""
     @State private var port = "5555"
+    @State private var status: ManualDeviceConnectionStatus = .idle
+    @State private var connectionTask: Task<Void, Never>?
 
+    var verifyDevice: (ADBTVDeviceSummary) async throws -> ADBTVDeviceSummary
     var addDevice: (ADBTVDeviceSummary) -> Void
 
     var body: some View {
         NavigationStack {
             Form {
-                TextField("Name", text: $displayName)
-                TextField("Host", text: $host)
-                    .autocorrectionDisabled()
-                TextField("Port", text: $port)
+                Section("Device") {
+                    TextField("Name", text: $displayName)
+                    TextField("Host", text: $host)
+                        .autocorrectionDisabled()
+                    TextField("Port", text: $port)
+                }
+                .disabled(status.isConnecting || status.isConnected)
+
+                ManualDeviceConnectionStatusView(status: status)
             }
             .navigationTitle("Add Device")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(status.isConnected ? "Close" : "Cancel") {
+                        connectionTask?.cancel()
                         dismiss()
                     }
                 }
 
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Add") {
-                        submit()
+                    if !status.isConnected {
+                        Button("Connect & Save") {
+                            connectAndSave()
+                        }
+                        .disabled(validatedDevice == nil || status.isConnecting)
                     }
-                    .disabled(validatedDevice == nil)
                 }
             }
+        }
+        .interactiveDismissDisabled(status.isConnecting)
+        .onDisappear {
+            connectionTask?.cancel()
         }
     }
 
@@ -887,13 +960,102 @@ private struct AddDeviceView: View {
         )
     }
 
-    private func submit() {
+    private func connectAndSave() {
         guard let device = validatedDevice else {
             return
         }
 
-        addDevice(device)
-        dismiss()
+        connectionTask?.cancel()
+        status = .connecting
+        connectionTask = Task {
+            do {
+                let verifiedDevice = try await verifyDevice(device)
+                guard !Task.isCancelled else {
+                    return
+                }
+                addDevice(verifiedDevice)
+                status = .connected(verifiedDevice)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                status = .failed(
+                    userMessage: "Could not connect to this Android TV device.",
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: String(describing: error),
+                        context: [
+                            "device": device.connectionDescription,
+                            "operation": "verifyManualDevice"
+                        ]
+                    )
+                )
+            }
+        }
+    }
+}
+
+private enum ManualDeviceConnectionStatus: Equatable {
+    case idle
+    case connecting
+    case connected(ADBTVDeviceSummary)
+    case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
+
+    var isConnecting: Bool {
+        if case .connecting = self {
+            return true
+        }
+        return false
+    }
+
+    var isConnected: Bool {
+        if case .connected = self {
+            return true
+        }
+        return false
+    }
+}
+
+private struct ManualDeviceConnectionStatusView: View {
+    var status: ManualDeviceConnectionStatus
+
+    @ViewBuilder
+    var body: some View {
+        switch status {
+        case .idle:
+            EmptyView()
+        case .connecting:
+            Section {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Connecting")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .connected(let device):
+            Section {
+                Label("Connected and saved", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                LabeledContent("Device", value: device.model ?? device.displayName)
+            }
+        case .failed(let userMessage, let diagnosticDetail):
+            Section {
+                Label(userMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                DisclosureGroup("Technical Details") {
+                    Text(diagnosticDetail.summary)
+                        .font(.footnote.monospaced())
+                        .textSelection(.enabled)
+
+                    ForEach(diagnosticDetail.context.keys.sorted(), id: \.self) { key in
+                        Text("\(key): \(diagnosticDetail.context[key] ?? "")")
+                            .font(.footnote.monospaced())
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -926,6 +1088,10 @@ private struct DiscoveryContent: View {
 }
 
 private struct DiscoveryStatusView: View {
+#if os(iOS)
+    @Environment(\.openURL) private var openURL
+#endif
+
     var status: ADBTVDiscoveryStatus
     var serviceCount: Int
 
@@ -948,9 +1114,26 @@ private struct DiscoveryStatusView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-                Text(diagnosticDetail.summary)
-                    .font(.footnote.monospaced())
-                    .textSelection(.enabled)
+#if os(iOS)
+                if diagnosticDetail.context["reason"] == ADBBonjourDiscoveryFailure.Reason.noAuthorization.rawValue
+                    || diagnosticDetail.context["reason"] == ADBBonjourDiscoveryFailure.Reason.localNetworkDenied.rawValue {
+                    Button {
+                        openURL(URL(string: UIApplication.openSettingsURLString)!)
+                    } label: {
+                        Label("Open Settings", systemImage: "gear")
+                    }
+                }
+#endif
+                DisclosureGroup("Technical Details") {
+                    Text(diagnosticDetail.summary)
+                        .font(.footnote.monospaced())
+                        .textSelection(.enabled)
+                    ForEach(diagnosticDetail.context.keys.sorted(), id: \.self) { key in
+                        Text("\(key): \(diagnosticDetail.context[key] ?? "")")
+                            .font(.footnote.monospaced())
+                            .textSelection(.enabled)
+                    }
+                }
             }
         }
     }

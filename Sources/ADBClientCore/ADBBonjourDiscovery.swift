@@ -107,13 +107,52 @@ public extension Array where Element == ADBDiscoveredService {
     }
 }
 
+public struct ADBBonjourDiscoveryFailure: Error, Equatable, Sendable {
+    public enum Reason: String, Equatable, Sendable {
+        case noAuthorization
+        case localNetworkDenied
+        case other
+    }
+
+    public var reason: Reason
+    public var diagnosticDescription: String
+    public var dnsErrorCode: Int?
+
+    public init(
+        reason: Reason,
+        diagnosticDescription: String,
+        dnsErrorCode: Int? = nil
+    ) {
+        self.reason = reason
+        self.diagnosticDescription = diagnosticDescription
+        self.dnsErrorCode = dnsErrorCode
+    }
+
+    public init(dnsErrorCode: Int, diagnosticDescription: String) {
+        let reason: Reason
+        switch dnsErrorCode {
+        case -65_555:
+            reason = .noAuthorization
+        case -65_570:
+            reason = .localNetworkDenied
+        default:
+            reason = .other
+        }
+        self.init(
+            reason: reason,
+            diagnosticDescription: diagnosticDescription,
+            dnsErrorCode: dnsErrorCode
+        )
+    }
+}
+
 #if canImport(Network)
 import Dispatch
 @preconcurrency import Network
 
 public final class ADBBonjourServiceBrowser: @unchecked Sendable {
     public typealias UpdateHandler = @MainActor ([ADBDiscoveredService]) -> Void
-    public typealias FailureHandler = @MainActor (String) -> Void
+    public typealias FailureHandler = @MainActor (ADBBonjourDiscoveryFailure) -> Void
 
     private let queue: DispatchQueue
     private var browsers: [NWBrowser]
@@ -148,9 +187,19 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
                 )
             }
             browser.stateUpdateHandler = { state in
-                if case .failed(let error) = state {
+                let error: NWError?
+                switch state {
+                case .failed(let failure):
+                    error = failure
+                case .waiting(let waitingError):
+                    error = waitingError.isBonjourAuthorizationFailure ? waitingError : nil
+                default:
+                    error = nil
+                }
+
+                if let error {
                     Task { @MainActor in
-                        failureHandler(String(describing: error))
+                        failureHandler(ADBBonjourDiscoveryFailure(error))
                     }
                 }
             }
@@ -179,6 +228,38 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
         Task { @MainActor in
             updateHandler(servicesForUpdate)
         }
+    }
+}
+
+private extension ADBBonjourDiscoveryFailure {
+    init(_ error: NWError) {
+        if let dnsErrorCode = error.dnsErrorCode {
+            self.init(
+                dnsErrorCode: dnsErrorCode,
+                diagnosticDescription: String(describing: error)
+            )
+        } else {
+            self.init(
+                reason: .other,
+                diagnosticDescription: String(describing: error)
+            )
+        }
+    }
+}
+
+private extension NWError {
+    var dnsErrorCode: Int? {
+        guard case .dns(let code) = self else {
+            return nil
+        }
+        return Int(code)
+    }
+
+    var isBonjourAuthorizationFailure: Bool {
+        guard let dnsErrorCode else {
+            return false
+        }
+        return dnsErrorCode == -65_555 || dnsErrorCode == -65_570
     }
 }
 

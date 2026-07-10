@@ -2,6 +2,30 @@ import XCTest
 @testable import ADBClientCore
 
 final class ADBBonjourDiscoveryTests: XCTestCase {
+    func testDiscoveryFailureClassifiesBonjourAuthorizationErrors() {
+        XCTAssertEqual(
+            ADBBonjourDiscoveryFailure(
+                dnsErrorCode: -65_555,
+                diagnosticDescription: "NoAuth"
+            ).reason,
+            .noAuthorization
+        )
+        XCTAssertEqual(
+            ADBBonjourDiscoveryFailure(
+                dnsErrorCode: -65_570,
+                diagnosticDescription: "PolicyDenied"
+            ).reason,
+            .localNetworkDenied
+        )
+        XCTAssertEqual(
+            ADBBonjourDiscoveryFailure(
+                dnsErrorCode: -65_540,
+                diagnosticDescription: "BadParam"
+            ).reason,
+            .other
+        )
+    }
+
     func testWirelessDebuggingServiceKindsExposeBonjourTypes() {
         XCTAssertEqual(ADBWirelessDebuggingServiceKind.pairing.bonjourType, "_adb-tls-pairing._tcp")
         XCTAssertEqual(ADBWirelessDebuggingServiceKind.connect.bonjourType, "_adb-tls-connect._tcp")
