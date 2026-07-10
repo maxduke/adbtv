@@ -7,6 +7,8 @@ public final class ADBNetworkTransport: ADBByteTransport, @unchecked Sendable {
     private let connection: NWConnection
     private let queue: DispatchQueue
     private let maximumReceiveLength: Int
+    private let startLock = NSLock()
+    private var hasStarted = false
 
     public convenience init(
         endpoint: ADBNetworkEndpoint,
@@ -30,6 +32,14 @@ public final class ADBNetworkTransport: ADBByteTransport, @unchecked Sendable {
     }
 
     public func start() {
+        startLock.lock()
+        guard !hasStarted else {
+            startLock.unlock()
+            return
+        }
+        hasStarted = true
+        startLock.unlock()
+
         connection.start(queue: queue)
     }
 
