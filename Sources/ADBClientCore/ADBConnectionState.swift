@@ -1,6 +1,7 @@
 public struct ADBConnectionState: Sendable {
     public static let defaultProtocolVersion: UInt32 = 0x0100_0000
     public static let defaultMaxData: UInt32 = 4096
+    public static let secureTLSVersion: UInt32 = 1
 
     public private(set) var phase: ADBConnectionPhase
     private var nextLocalStreamID: UInt32
@@ -95,6 +96,28 @@ public struct ADBConnectionState: Sendable {
             phase = .authorizing
             return ADBConnectionReceiveResult(
                 events: [.authenticationToken(packet.payload)]
+            )
+
+        case .secureTLS:
+            guard phase == .connectSent else {
+                throw ADBConnectionStateError.unexpectedPacket(packet.command)
+            }
+            guard packet.arg0 == Self.secureTLSVersion else {
+                throw ADBConnectionStateError.unsupportedSecureTLSVersion(packet.arg0)
+            }
+            guard packet.arg1 == 0, packet.payload.isEmpty else {
+                throw ADBConnectionStateError.invalidSecureTLSRequest
+            }
+
+            return ADBConnectionReceiveResult(
+                events: [.secureTransportRequested(version: packet.arg0)],
+                packetsToSend: [
+                    ADBPacket(
+                        command: .secureTLS,
+                        arg0: Self.secureTLSVersion,
+                        arg1: 0
+                    )
+                ]
             )
 
         case .okay:

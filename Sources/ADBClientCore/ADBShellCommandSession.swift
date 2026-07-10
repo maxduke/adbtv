@@ -43,7 +43,7 @@ public struct ADBShellCommandSession: Sendable {
             case .streamClosed, .streamData:
                 throw ADBShellCommandSessionError.unexpectedEvent(event, expectedLocalID: localID)
 
-            case .authenticationToken, .connected, .streamWritable:
+            case .authenticationToken, .secureTransportRequested, .connected, .streamWritable:
                 return .ignored
             }
 

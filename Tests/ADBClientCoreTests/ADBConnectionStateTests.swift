@@ -51,6 +51,61 @@ final class ADBConnectionStateTests: XCTestCase {
         XCTAssertEqual(result.packetsToSend, [])
     }
 
+    func testReceiveSecureTLSRequestReturnsAcknowledgement() throws {
+        var state = ADBConnectionState()
+        _ = state.makeConnectPacket()
+
+        let result = try state.receive(ADBPacket(
+            command: .secureTLS,
+            arg0: ADBConnectionState.secureTLSVersion,
+            arg1: 0
+        ))
+
+        XCTAssertEqual(state.phase, .connectSent)
+        XCTAssertEqual(result.events, [
+            .secureTransportRequested(version: ADBConnectionState.secureTLSVersion)
+        ])
+        XCTAssertEqual(result.packetsToSend, [
+            ADBPacket(
+                command: .secureTLS,
+                arg0: ADBConnectionState.secureTLSVersion,
+                arg1: 0
+            )
+        ])
+    }
+
+    func testReceiveSecureTLSRequestRejectsUnsupportedMalformedAndOutOfOrderPackets() throws {
+        var state = ADBConnectionState()
+        _ = state.makeConnectPacket()
+
+        XCTAssertThrowsError(try state.receive(ADBPacket(
+            command: .secureTLS,
+            arg0: 2,
+            arg1: 0
+        ))) { error in
+            XCTAssertEqual(
+                error as? ADBConnectionStateError,
+                .unsupportedSecureTLSVersion(2)
+            )
+        }
+        XCTAssertThrowsError(try state.receive(ADBPacket(
+            command: .secureTLS,
+            arg0: ADBConnectionState.secureTLSVersion,
+            arg1: 1
+        ))) { error in
+            XCTAssertEqual(error as? ADBConnectionStateError, .invalidSecureTLSRequest)
+        }
+
+        var idleState = ADBConnectionState()
+        XCTAssertThrowsError(try idleState.receive(ADBPacket(
+            command: .secureTLS,
+            arg0: ADBConnectionState.secureTLSVersion,
+            arg1: 0
+        ))) { error in
+            XCTAssertEqual(error as? ADBConnectionStateError, .unexpectedPacket(.secureTLS))
+        }
+    }
+
     func testReceiveUnexpectedAuthTypeIsRejected() throws {
         var state = ADBConnectionState()
 
