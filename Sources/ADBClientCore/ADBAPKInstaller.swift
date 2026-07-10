@@ -30,6 +30,7 @@ public struct ADBAPKInstaller: Sendable {
                 actual: contents.count
             )
         }
+        try ADBAPKValidator().validate(contents: contents)
 
         var events: [ADBAPKInstallEvent] = []
 

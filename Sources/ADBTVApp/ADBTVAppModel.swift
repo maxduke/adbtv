@@ -525,6 +525,10 @@ public struct ADBTVInstallDraft: Equatable, Sendable {
         let fileName = validatedURL.lastPathComponent.removingPercentEncoding ?? validatedURL.lastPathComponent
         return fileName.isEmpty ? nil : fileName
     }
+
+    public var usesInsecureHTTP: Bool {
+        validatedURL?.scheme?.lowercased() == "http"
+    }
 }
 
 public struct ADBTVInstallPackageDraft: Equatable, Sendable {

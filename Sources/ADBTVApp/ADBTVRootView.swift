@@ -462,7 +462,7 @@ public struct ADBTVRootView: View {
                 return
             } catch {
                 completion = .failure(
-                    userMessage: "Could not install APK.",
+                    userMessage: Self.installUserMessage(for: error),
                     diagnosticDetail: Self.installDiagnosticDetail(error, device: device)
                 )
             }
@@ -505,13 +505,26 @@ public struct ADBTVRootView: View {
     }
 
     private static func installDiagnosticDetail(_ error: Error, device: ADBTVDeviceSummary) -> DiagnosticDetail {
-        DiagnosticDetail(
+        var context = [
+            "device": device.connectionDescription,
+            "operation": "installAPK"
+        ]
+        if error is ADBAPKValidationError {
+            context["phase"] = "validatePackage"
+        }
+
+        return DiagnosticDetail(
             summary: String(describing: error),
-            context: [
-                "device": device.connectionDescription,
-                "operation": "installAPK"
-            ]
+            context: context
         )
+    }
+
+    private static func installUserMessage(for error: Error) -> String {
+        if error is ADBAPKValidationError {
+            return "The selected file is not a valid APK."
+        }
+
+        return "Could not install APK."
     }
 
     private func sendRemoteAction(_ action: ADBTVRemoteAction, to device: ADBTVDeviceSummary) {
@@ -1113,6 +1126,14 @@ private struct APKInstallPanel: View {
                 }
             } else if let url = installDraft.validatedURL {
                 LabeledContent("Source", value: url.absoluteString)
+            }
+
+            if installDraft.usesInsecureHTTP {
+                Label(
+                    "HTTP downloads are not protected in transit.",
+                    systemImage: "exclamationmark.triangle.fill"
+                )
+                .foregroundStyle(.orange)
             }
 
             InstallStatusView(status: installDraft.status)

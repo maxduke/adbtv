@@ -3,11 +3,15 @@ import XCTest
 
 final class ADBAPKInstallerTests: XCTestCase {
     func testInstallRunsPreparePushInstallAndCleanupInOrder() async throws {
-        let plan = try ADBAPKInstallPlan.singleAPK(fileName: "Example App.apk", byteCount: 3)
+        let contents = makeTestAPK()
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "Example App.apk",
+            byteCount: Int64(contents.count)
+        )
         let transferEvents: [ADBSyncPushEvent] = [
-            .started(remotePath: plan.remoteAPKPath, totalByteCount: 3),
-            .progress(sentByteCount: 3, totalByteCount: 3),
-            .finishedSending(sentByteCount: 3, totalByteCount: 3),
+            .started(remotePath: plan.remoteAPKPath, totalByteCount: contents.count),
+            .progress(sentByteCount: contents.count, totalByteCount: contents.count),
+            .finishedSending(sentByteCount: contents.count, totalByteCount: contents.count),
             .completed
         ]
         var session = RecordingAPKInstallSession(
@@ -19,7 +23,7 @@ final class ADBAPKInstallerTests: XCTestCase {
 
         let eventRecorder = APKInstallEventRecorder()
         let report = try await ADBAPKInstaller().install(
-            contents: [1, 2, 3],
+            contents: contents,
             plan: plan,
             modificationTime: 123,
             using: &session,
@@ -35,12 +39,12 @@ final class ADBAPKInstallerTests: XCTestCase {
             try plan.installShellCommand().rawValue,
             try plan.cleanupShellCommand().rawValue
         ])
-        XCTAssertEqual(session.pushedContents, [[1, 2, 3]])
+        XCTAssertEqual(session.pushedContents, [contents])
         XCTAssertEqual(session.pushedPlans, [
             try ADBSyncPushPlan(
                 remotePath: plan.remoteAPKPath,
                 modificationTime: 123,
-                totalByteCount: 3
+                totalByteCount: contents.count
             )
         ])
         XCTAssertEqual(report.events, [
@@ -62,7 +66,11 @@ final class ADBAPKInstallerTests: XCTestCase {
     }
 
     func testInstallFailureOutputReturnsFailureReportAndStillCleansUp() async throws {
-        let plan = try ADBAPKInstallPlan.singleAPK(fileName: "app.apk", byteCount: 0)
+        let contents = makeTestAPK()
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "app.apk",
+            byteCount: Int64(contents.count)
+        )
         var session = RecordingAPKInstallSession(
             shellOutputs: [
                 try plan.installShellCommand().rawValue: ADBShellOutput(
@@ -70,13 +78,13 @@ final class ADBAPKInstallerTests: XCTestCase {
                 )
             ],
             pushedEvents: [
-                .started(remotePath: plan.remoteAPKPath, totalByteCount: 0),
-                .finishedSending(sentByteCount: 0, totalByteCount: 0),
+                .started(remotePath: plan.remoteAPKPath, totalByteCount: contents.count),
+                .finishedSending(sentByteCount: contents.count, totalByteCount: contents.count),
                 .completed
             ]
         )
 
-        let report = try await ADBAPKInstaller().install(contents: [], plan: plan, using: &session)
+        let report = try await ADBAPKInstaller().install(contents: contents, plan: plan, using: &session)
 
         XCTAssertEqual(report.result, .failure(message: "INSTALL_FAILED_ALREADY_EXISTS"))
         XCTAssertEqual(session.commands, [
@@ -93,15 +101,19 @@ final class ADBAPKInstallerTests: XCTestCase {
     }
 
     func testTransferFailureThrowsAndRunsCleanupWithoutInstall() async throws {
-        let plan = try ADBAPKInstallPlan.singleAPK(fileName: "app.apk", byteCount: 2)
+        let contents = makeTestAPK()
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "app.apk",
+            byteCount: Int64(contents.count)
+        )
         let transferEvents: [ADBSyncPushEvent] = [
-            .started(remotePath: plan.remoteAPKPath, totalByteCount: 2),
+            .started(remotePath: plan.remoteAPKPath, totalByteCount: contents.count),
             .failed(message: "permission denied")
         ]
         var session = RecordingAPKInstallSession(pushedEvents: transferEvents)
 
         do {
-            _ = try await ADBAPKInstaller().install(contents: [1, 2], plan: plan, using: &session)
+            _ = try await ADBAPKInstaller().install(contents: contents, plan: plan, using: &session)
             XCTFail("Expected transfer failure to throw.")
         } catch let error as ADBAPKInstallExecutionError {
             XCTAssertEqual(error, .transferFailed(message: "permission denied", events: [
@@ -130,6 +142,25 @@ final class ADBAPKInstallerTests: XCTestCase {
             XCTFail("Expected byte count mismatch to throw.")
         } catch let error as ADBAPKInstallExecutionError {
             XCTAssertEqual(error, .packageByteCountMismatch(expected: 4, actual: 3))
+        }
+
+        XCTAssertEqual(session.commands, [])
+        XCTAssertEqual(session.pushedContents, [])
+    }
+
+    func testInstallRejectsInvalidAPKBeforeCommands() async throws {
+        let contents = Array(repeating: UInt8(0), count: 22)
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "app.apk",
+            byteCount: Int64(contents.count)
+        )
+        var session = RecordingAPKInstallSession()
+
+        do {
+            _ = try await ADBAPKInstaller().install(contents: contents, plan: plan, using: &session)
+            XCTFail("Expected invalid APK to throw.")
+        } catch let error as ADBAPKValidationError {
+            XCTAssertEqual(error, .invalidZIPSignature)
         }
 
         XCTAssertEqual(session.commands, [])

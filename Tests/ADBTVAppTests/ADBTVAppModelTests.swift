@@ -49,6 +49,9 @@ final class ADBTVAppModelTests: XCTestCase {
         )
         XCTAssertNil(ADBTVInstallDraft(urlString: "ftp://example.com/app.apk").validatedURL)
         XCTAssertNil(ADBTVInstallDraft(urlString: "https:///app.apk").validatedURL)
+        XCTAssertTrue(ADBTVInstallDraft(urlString: "http://192.168.1.2/app.apk").usesInsecureHTTP)
+        XCTAssertFalse(ADBTVInstallDraft(urlString: "https://example.com/app.apk").usesInsecureHTTP)
+        XCTAssertFalse(ADBTVInstallDraft(urlString: "not a URL").usesInsecureHTTP)
     }
 
     func testPackageDraftBuildsInstallReadinessFromAPKURL() {

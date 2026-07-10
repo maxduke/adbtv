@@ -29,6 +29,8 @@ Implemented so far:
 - manual saved-device entry and persistence;
 - APK source selection from the iOS Files picker;
 - APK source entry from a direct HTTP or HTTPS URL;
+- an explicit insecure-transport warning for HTTP APK sources;
+- structural APK validation as a ZIP archive containing a root `AndroidManifest.xml` before transfer;
 - single-APK install orchestration through the native ADB client;
 - live, acknowledged APK transfer progress with byte counts in the install UI;
 - Android TV D-pad, select, back, home, and settings remote actions;
