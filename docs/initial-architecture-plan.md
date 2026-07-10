@@ -124,7 +124,7 @@ Start with Apple frameworks where practical:
 - Security and Keychain APIs for identities and credentials;
 - CryptoKit where it covers required primitives.
 
-Do not add production dependencies until the Protocol Spike proves which missing cryptographic or protocol pieces are actually needed. SPAKE2 support is the likely pressure point.
+The Protocol Spike confirmed that Apple frameworks do not expose the legacy Ed25519 SPAKE2 operation required by ADB. The project therefore pins Firebase's BoringSSL Swift package for that primitive only; see [ADR 0010](./adr/0010-use-boringssl-for-adb-spake2.md). Apple CryptoKit remains responsible for HKDF and AES-GCM.
 
 ## iOS Platform Constraints
 
