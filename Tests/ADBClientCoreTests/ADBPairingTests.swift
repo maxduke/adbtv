@@ -154,6 +154,17 @@ final class ADBPairingTests: XCTestCase {
         XCTAssertEqual(peerInfo.data, Array("AAAA adb@ios".utf8))
     }
 
+    func testPairingPeerInfoExposesADBDeviceGUID() throws {
+        let peerInfo = try ADBPairingPeerInfo(
+            type: .adbDeviceGUID,
+            data: Array("adb-serial-guid".utf8)
+        )
+
+        XCTAssertEqual(peerInfo.deviceGUID, "adb-serial-guid")
+        XCTAssertNil(try ADBPairingPeerInfo(type: .adbRSAPublicKey, data: [1]).deviceGUID)
+        XCTAssertNil(try ADBPairingPeerInfo(type: .adbDeviceGUID, data: [0xFF]).deviceGUID)
+    }
+
     func testPairingPeerInfoRejectsInvalidValues() {
         XCTAssertThrowsError(try ADBPairingPeerInfo(encodedBytes: [0, 1, 2])) { error in
             XCTAssertEqual(error as? ADBPairingPeerInfoError, .invalidByteCount(3))

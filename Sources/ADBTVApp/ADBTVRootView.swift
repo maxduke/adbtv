@@ -48,7 +48,8 @@ public struct ADBTVRootView: View {
                     DiscoveryContent(
                         status: model.discoveryStatus,
                         services: model.discoveredServices,
-                        toggleDiscovery: toggleDiscovery
+                        toggleDiscovery: toggleDiscovery,
+                        pairService: prepareDiscoveredPairing
                     )
                 }
             }
@@ -57,6 +58,7 @@ public struct ADBTVRootView: View {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
                         Button {
+                            model.prepareManualPairing()
                             isPairDevicePresented = true
                         } label: {
                             Label("Pair with Code", systemImage: "key")
@@ -106,7 +108,7 @@ public struct ADBTVRootView: View {
             PairDeviceView(
                 draft: $model.pairingDraft,
                 status: model.pairingStatus,
-                startPairing: startManualPairing,
+                startPairing: startPairing,
                 cancelPairing: cancelPairing
             )
         }
@@ -191,7 +193,9 @@ public struct ADBTVRootView: View {
         let browser = ADBBonjourServiceBrowser()
         discoveryBrowser = browser
         browser.start(updateHandler: { services in
-            model.updateDiscoveredServices(services)
+            if model.updateDiscoveredServices(services) {
+                saveDevices()
+            }
         }, failureHandler: { message in
             model.failDiscovery(
                 userMessage: "Could not discover Android TV devices.",
@@ -212,6 +216,15 @@ public struct ADBTVRootView: View {
 #endif
     }
 
+    private func prepareDiscoveredPairing(_ service: ADBDiscoveredService) {
+        guard service.kind == .pairing else {
+            return
+        }
+
+        model.prepareDiscoveredPairing(service: service)
+        isPairDevicePresented = true
+    }
+
     private func stopDiscovery() {
 #if canImport(Network)
         discoveryBrowser?.cancel()
@@ -220,20 +233,37 @@ public struct ADBTVRootView: View {
         model.stopDiscovery()
     }
 
-    private func startManualPairing() {
+    private func startPairing() {
         let draft = model.pairingDraft
-        guard draft.canStartManualPairing, let pairingPort = draft.pairingPort else {
+        guard draft.canStartPairing else {
             return
         }
 
-        let target = Self.endpointDescription(host: draft.normalizedHost, port: pairingPort)
-        model.startPairing(source: .manualCode, target: target)
+        let source: ADBTVPairingSource
+        let target: String
+        if let service = draft.discoveredService {
+            source = .discoveredService
+            target = service.displayName
+        } else if let pairingPort = draft.pairingPort {
+            source = .manualCode
+            target = Self.endpointDescription(host: draft.normalizedHost, port: pairingPort)
+        } else {
+            return
+        }
+        model.startPairing(source: source, target: target)
 
         pairingTask?.cancel()
         pairingTask = Task {
             let completion: PairingCompletion
             do {
-                completion = .success(try await Self.pairDevice(using: draft))
+                if draft.discoveredService != nil {
+                    completion = .discovered(
+                        deviceGUID: try await Self.pairDiscoveredDevice(using: draft),
+                        displayName: draft.normalizedDisplayName
+                    )
+                } else {
+                    completion = .success(try await Self.pairDevice(using: draft))
+                }
             } catch {
                 guard !Task.isCancelled else {
                     return
@@ -267,6 +297,14 @@ public struct ADBTVRootView: View {
 #endif
     }
 
+    private static func pairDiscoveredDevice(using draft: ADBTVPairingDraft) async throws -> String {
+#if canImport(Network)
+        try await ADBTVPairingOperation().pairDiscoveredService(from: draft)
+#else
+        throw ADBTVPairingViewError.unsupportedPlatform
+#endif
+    }
+
     @MainActor
     private func completePairing(_ completion: PairingCompletion) {
         pairingTask = nil
@@ -274,6 +312,13 @@ public struct ADBTVRootView: View {
         case .success(let device):
             model.finishPairing(device: device)
             saveDevices()
+        case let .discovered(deviceGUID, displayName):
+            if model.waitForDiscoveredConnection(
+                deviceGUID: deviceGUID,
+                displayName: displayName
+            ) {
+                saveDevices()
+            }
         case .failure(let userMessage, let diagnosticDetail):
             model.failPairing(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
         }
@@ -321,11 +366,14 @@ public struct ADBTVRootView: View {
         using installModel: ADBTVAppModel
     ) async throws -> ADBAPKInstallReport {
 #if canImport(Network)
-        guard let port = UInt16(exactly: device.port) else {
-            throw ADBTVInstallOperationError.invalidDevicePort(device.port)
+        guard case let .hostPort(host, portValue) = device.connection else {
+            throw ADBTVInstallOperationError.secureReconnectNotImplemented
+        }
+        guard let port = UInt16(exactly: portValue) else {
+            throw ADBTVInstallOperationError.invalidDevicePort(portValue)
         }
 
-        let endpoint = ADBNetworkEndpoint(host: device.host, port: port)
+        let endpoint = ADBNetworkEndpoint(host: host, port: port)
 #if canImport(Security)
         var connection = try ADBDeviceConnection(authenticatedEndpoint: endpoint)
 #else
@@ -354,7 +402,7 @@ public struct ADBTVRootView: View {
         DiagnosticDetail(
             summary: String(describing: error),
             context: [
-                "device": "\(device.host):\(device.port)",
+                "device": device.connectionDescription,
                 "operation": "installAPK"
             ]
         )
@@ -395,11 +443,14 @@ public struct ADBTVRootView: View {
         using remoteModel: ADBTVAppModel
     ) async throws -> ADBShellOutput {
 #if canImport(Network)
-        guard let port = UInt16(exactly: device.port) else {
-            throw ADBTVRemoteOperationError.invalidDevicePort(device.port)
+        guard case let .hostPort(host, portValue) = device.connection else {
+            throw ADBTVRemoteOperationError.secureReconnectNotImplemented
+        }
+        guard let port = UInt16(exactly: portValue) else {
+            throw ADBTVRemoteOperationError.invalidDevicePort(portValue)
         }
 
-        let endpoint = ADBNetworkEndpoint(host: device.host, port: port)
+        let endpoint = ADBNetworkEndpoint(host: host, port: port)
 #if canImport(Security)
         var connection = try ADBDeviceConnection(authenticatedEndpoint: endpoint)
 #else
@@ -430,7 +481,7 @@ public struct ADBTVRootView: View {
             summary: String(describing: error),
             context: [
                 "action": action.displayTitle,
-                "device": "\(device.host):\(device.port)",
+                "device": device.connectionDescription,
                 "operation": "sendRemoteAction"
             ]
         )
@@ -439,6 +490,7 @@ public struct ADBTVRootView: View {
 
 private enum PairingCompletion: Sendable {
     case success(ADBTVDeviceSummary)
+    case discovered(deviceGUID: String, displayName: String)
     case failure(userMessage: String, diagnosticDetail: DiagnosticDetail)
 }
 
@@ -469,13 +521,19 @@ private struct PairDeviceView: View {
             Form {
                 Section("Device") {
                     TextField("Name", text: $draft.displayName)
-                    TextField("Host or IP Address", text: $draft.host)
-                        .autocorrectionDisabled()
-                    TextField("Connection Port", text: $draft.connectionPortString)
+                    if let service = draft.discoveredService {
+                        LabeledContent("Service", value: service.displayName)
+                    } else {
+                        TextField("Host or IP Address", text: $draft.host)
+                            .autocorrectionDisabled()
+                        TextField("Connection Port", text: $draft.connectionPortString)
+                    }
                 }
 
                 Section("Pairing") {
-                    TextField("Pairing Port", text: $draft.pairingPortString)
+                    if draft.discoveredService == nil {
+                        TextField("Pairing Port", text: $draft.pairingPortString)
+                    }
                     TextField("6-Digit Code", text: $draft.codeString)
                 }
 
@@ -496,7 +554,7 @@ private struct PairDeviceView: View {
                         Button("Pair") {
                             startPairing()
                         }
-                        .disabled(!draft.canStartManualPairing || status.isPairing)
+                        .disabled(!draft.canStartPairing || status.isPairing)
                     }
                 }
             }
@@ -531,11 +589,23 @@ private struct PairingStatusView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        case .waitingForConnection(let deviceGUID, _):
+            Section {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Finding the connection service")
+                        .foregroundStyle(.secondary)
+                }
+                Text(deviceGUID)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
         case .paired(let device):
             Section {
                 Label("Paired with \(device.displayName)", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Text("Saved as \(device.host):\(device.port)")
+                Text("Saved as \(device.connectionDescription)")
                     .foregroundStyle(.secondary)
             }
         case .failed(let userMessage, let diagnosticDetail):
@@ -623,6 +693,7 @@ private struct DiscoveryContent: View {
     var status: ADBTVDiscoveryStatus
     var services: [ADBDiscoveredService]
     var toggleDiscovery: () -> Void
+    var pairService: (ADBDiscoveredService) -> Void
 
     var body: some View {
         Group {
@@ -638,7 +709,9 @@ private struct DiscoveryContent: View {
             DiscoveryStatusView(status: status, serviceCount: services.count)
 
             ForEach(services) { service in
-                DiscoveredServiceRow(service: service)
+                DiscoveredServiceRow(service: service) {
+                    pairService(service)
+                }
             }
         }
     }
@@ -677,15 +750,40 @@ private struct DiscoveryStatusView: View {
 
 private struct DiscoveredServiceRow: View {
     var service: ADBDiscoveredService
+    var pair: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(service.displayName)
-                .font(.headline)
-            Text(subtitle)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        if service.kind == .pairing {
+            Button {
+                pair()
+            } label: {
+                rowContent
+            }
+            .buttonStyle(.plain)
+        } else {
+            rowContent
         }
+    }
+
+    private var rowContent: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(service.displayName)
+                    .font(.headline)
+                Text(subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 8)
+
+            if service.kind == .pairing {
+                Image(systemName: "key")
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel("Pair")
+            }
+        }
+        .contentShape(Rectangle())
         .padding(.vertical, 4)
     }
 
@@ -706,7 +804,7 @@ private struct DeviceRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(device.displayName)
                 .font(.headline)
-            Text("\(device.host):\(device.port)")
+            Text(device.connectionDescription)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -758,7 +856,7 @@ private struct DeviceHeader: View {
                 Text(model)
                     .foregroundStyle(.secondary)
             }
-            Text("\(device.host):\(device.port)")
+            Text(device.connectionDescription)
                 .font(.callout.monospaced())
                 .foregroundStyle(.secondary)
         }

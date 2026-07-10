@@ -4,7 +4,7 @@ import Foundation
 #if canImport(Network)
 public struct ADBTVPairingOperation: Sendable {
     public typealias Pair = @Sendable (
-        ADBNetworkEndpoint,
+        ADBNetworkTarget,
         ADBPairingSecret
     ) async throws -> ADBPairingPeerInfo
 
@@ -34,7 +34,7 @@ public struct ADBTVPairingOperation: Sendable {
 
         let endpoint = ADBNetworkEndpoint(host: draft.normalizedHost, port: pairingPort)
         let secret = try ADBPairingSecret(code: pairingCode)
-        _ = try await pair(endpoint, secret)
+        _ = try await pair(.hostPort(endpoint), secret)
 
         return ADBTVDeviceSummary(
             displayName: draft.normalizedDisplayName,
@@ -44,12 +44,29 @@ public struct ADBTVPairingOperation: Sendable {
         )
     }
 
+    public func pairDiscoveredService(from draft: ADBTVPairingDraft) async throws -> String {
+        guard let service = draft.discoveredService, service.kind == .pairing else {
+            throw ADBTVPairingOperationError.invalidDiscoveredService
+        }
+        guard let pairingCode = draft.pairingCode else {
+            throw ADBTVPairingOperationError.invalidPairingCode
+        }
+
+        let secret = try ADBPairingSecret(code: pairingCode)
+        let peerInfo = try await pair(.bonjourService(service), secret)
+        guard let deviceGUID = peerInfo.deviceGUID else {
+            throw ADBTVPairingOperationError.missingDeviceGUID
+        }
+
+        return deviceGUID
+    }
+
     private static func pairUsingSystemClient(
-        endpoint: ADBNetworkEndpoint,
+        target: ADBNetworkTarget,
         secret: ADBPairingSecret
     ) async throws -> ADBPairingPeerInfo {
 #if canImport(CryptoKit) && canImport(Security)
-        try await ADBWirelessPairingClient().pair(endpoint: endpoint, secret: secret)
+        try await ADBWirelessPairingClient().pair(target: target, secret: secret)
 #else
         throw ADBTVPairingOperationError.unsupportedPlatform
 #endif
@@ -61,6 +78,8 @@ public enum ADBTVPairingOperationError: Error, Equatable, Sendable {
     case invalidPairingPort
     case invalidConnectionPort
     case invalidPairingCode
+    case invalidDiscoveredService
+    case missingDeviceGUID
     case unsupportedPlatform
 }
 #endif

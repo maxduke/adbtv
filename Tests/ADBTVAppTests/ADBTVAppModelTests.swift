@@ -126,12 +126,39 @@ final class ADBTVAppModelTests: XCTestCase {
 
         let store = ADBTVDeviceStore(userDefaults: userDefaults)
         let devices = [
-            ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555, model: "Android TV")
+            ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555, model: "Android TV"),
+            ADBTVDeviceSummary(
+                displayName: "Bedroom",
+                bonjourService: ADBDiscoveredService(
+                    serviceName: "adb-bedroom-guid",
+                    serviceType: ADBWirelessDebuggingServiceKind.connect.bonjourType,
+                    domain: "local."
+                ),
+                model: "Android TV"
+            )
         ]
 
         try store.saveDevices(devices)
 
         XCTAssertEqual(store.loadDevices(), devices)
+    }
+
+    func testDeviceStoreLoadsLegacyHostPortDeviceWithoutBonjourField() throws {
+        let suiteName = "ADBTVDeviceStoreLegacyTests.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+        let data = try XCTUnwrap("""
+        [{"id":"11111111-1111-1111-1111-111111111111","displayName":"Legacy TV","host":"192.168.1.50","port":5555}]
+        """.data(using: .utf8))
+        userDefaults.set(data, forKey: "ADBTV.savedDevices")
+
+        let devices = ADBTVDeviceStore(userDefaults: userDefaults).loadDevices()
+
+        XCTAssertEqual(devices.count, 1)
+        XCTAssertEqual(devices.first?.displayName, "Legacy TV")
+        XCTAssertNil(devices.first?.bonjourService)
     }
 
     func testModelSelectsPackageFromFileURL() {
@@ -309,6 +336,74 @@ final class ADBTVAppModelTests: XCTestCase {
 
         XCTAssertEqual(draft.normalizedDisplayName, "tv.local")
         XCTAssertTrue(draft.canStartManualPairing)
+    }
+
+    func testPairingDraftValidatesDiscoveredPairingService() {
+        let pairingService = ADBDiscoveredService(
+            serviceName: "adb-pairing-guid",
+            serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+            domain: "local."
+        )
+        var model = ADBTVAppModel()
+
+        model.prepareDiscoveredPairing(service: pairingService)
+        model.setPairingCodeString("123456")
+
+        XCTAssertEqual(model.pairingDraft.discoveredService, pairingService)
+        XCTAssertEqual(model.pairingDraft.normalizedDisplayName, "adb-pairing-guid")
+        XCTAssertTrue(model.pairingDraft.canStartDiscoveredPairing)
+        XCTAssertTrue(model.pairingDraft.canStartPairing)
+        XCTAssertFalse(model.pairingDraft.canStartManualPairing)
+
+        model.prepareManualPairing()
+
+        XCTAssertNil(model.pairingDraft.discoveredService)
+        XCTAssertEqual(model.pairingStatus, .idle)
+    }
+
+    func testDiscoveredPairingWaitsForMatchingConnectServiceThenSavesDevice() {
+        let pairingService = ADBDiscoveredService(
+            serviceName: "pairing-session",
+            serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+            domain: "local."
+        )
+        let unrelatedConnectService = ADBDiscoveredService(
+            serviceName: "adb-other-guid",
+            serviceType: ADBWirelessDebuggingServiceKind.connect.bonjourType,
+            domain: "local."
+        )
+        let matchingConnectService = ADBDiscoveredService(
+            serviceName: "adb-device-guid",
+            serviceType: ADBWirelessDebuggingServiceKind.connect.bonjourType,
+            domain: "local.",
+            interfaceName: "en0"
+        )
+        var model = ADBTVAppModel(discoveredServices: [pairingService, unrelatedConnectService])
+
+        XCTAssertFalse(model.waitForDiscoveredConnection(
+            deviceGUID: "adb-device-guid",
+            displayName: "Living Room TV"
+        ))
+        XCTAssertEqual(model.pairingStatus, .waitingForConnection(
+            deviceGUID: "adb-device-guid",
+            displayName: "Living Room TV"
+        ))
+        XCTAssertTrue(model.pairingStatus.isPairing)
+        XCTAssertTrue(model.devices.isEmpty)
+
+        XCTAssertTrue(model.updateDiscoveredServices([
+            pairingService,
+            unrelatedConnectService,
+            matchingConnectService
+        ]))
+
+        guard let device = model.selectedDevice else {
+            return XCTFail("Expected the discovered device to be saved.")
+        }
+        XCTAssertEqual(device.displayName, "Living Room TV")
+        XCTAssertEqual(device.bonjourService, matchingConnectService)
+        XCTAssertEqual(device.connectionDescription, "adb-device-guid via Bonjour")
+        XCTAssertEqual(model.pairingStatus, .paired(device))
     }
 
     func testPairingStatusTracksStartSuccessAndSelectedDevice() {

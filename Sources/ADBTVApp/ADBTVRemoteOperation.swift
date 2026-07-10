@@ -33,5 +33,6 @@ public struct ADBTVRemoteOperation: Sendable {
 public enum ADBTVRemoteOperationError: Error, Equatable, Sendable {
     case missingDevice
     case invalidDevicePort(Int)
+    case secureReconnectNotImplemented
     case unsupportedPlatform
 }

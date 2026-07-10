@@ -255,6 +255,17 @@ public struct ADBPairingPeerInfo: Equatable, Sendable {
         }
         return bytes
     }
+
+    public var deviceGUID: String? {
+        guard type == .adbDeviceGUID,
+              !data.isEmpty,
+              !data.contains(0),
+              let value = String(bytes: data, encoding: .utf8) else {
+            return nil
+        }
+
+        return value
+    }
 }
 
 public enum ADBPairingPeerInfoError: Error, Equatable, Sendable {

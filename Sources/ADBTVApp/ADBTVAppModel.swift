@@ -132,11 +132,14 @@ public struct ADBTVAppModel: Equatable, Sendable {
         discoveredServices = []
     }
 
-    public mutating func updateDiscoveredServices(_ services: [ADBDiscoveredService]) {
+    @discardableResult
+    public mutating func updateDiscoveredServices(_ services: [ADBDiscoveredService]) -> Bool {
         discoveredServices = services.sortedForPresentation()
         if !discoveryStatus.isBrowsing {
             discoveryStatus = .browsing
         }
+
+        return finishPendingDiscoveredPairingIfPossible()
     }
 
     public mutating func stopDiscovery() {
@@ -171,6 +174,16 @@ public struct ADBTVAppModel: Equatable, Sendable {
         pairingDraft.qrPayload = value
     }
 
+    public mutating func prepareManualPairing() {
+        pairingDraft = ADBTVPairingDraft()
+        pairingStatus = .idle
+    }
+
+    public mutating func prepareDiscoveredPairing(service: ADBDiscoveredService) {
+        pairingDraft = ADBTVPairingDraft(discoveredService: service)
+        pairingStatus = .idle
+    }
+
     public mutating func startPairing(source: ADBTVPairingSource, target: String) {
         pairingStatus = .pairing(source: source, target: target)
     }
@@ -185,9 +198,37 @@ public struct ADBTVAppModel: Equatable, Sendable {
         pairingStatus = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
     }
 
+    @discardableResult
+    public mutating func waitForDiscoveredConnection(
+        deviceGUID: String,
+        displayName: String
+    ) -> Bool {
+        pairingStatus = .waitingForConnection(
+            deviceGUID: deviceGUID,
+            displayName: displayName
+        )
+        return finishPendingDiscoveredPairingIfPossible()
+    }
+
     public mutating func cancelPairing() {
         pairingDraft.codeString = ""
         pairingStatus = .idle
+    }
+
+    private mutating func finishPendingDiscoveredPairingIfPossible() -> Bool {
+        guard case let .waitingForConnection(deviceGUID, displayName) = pairingStatus,
+              let service = discoveredServices.first(where: {
+                  $0.kind == .connect && $0.serviceName == deviceGUID
+              }) else {
+            return false
+        }
+
+        finishPairing(device: ADBTVDeviceSummary(
+            displayName: displayName,
+            bonjourService: service,
+            model: "Android TV"
+        ))
+        return true
     }
 }
 
@@ -217,21 +258,123 @@ public struct ADBTVDeviceSummary: Codable, Identifiable, Equatable, Sendable {
 
     public var id: ID
     public var displayName: String
-    public var host: String
-    public var port: Int
     public var model: String?
+    public var connection: ADBTVDeviceConnection
 
-    public init(id: ID = ID(), displayName: String, host: String, port: Int, model: String? = nil) {
+    public init(
+        id: ID = ID(),
+        displayName: String,
+        host: String,
+        port: Int,
+        model: String? = nil
+    ) {
         self.id = id
         self.displayName = displayName
-        self.host = host
-        self.port = port
         self.model = model
+        self.connection = .hostPort(host: host, port: port)
+    }
+
+    public init(
+        id: ID = ID(),
+        displayName: String,
+        bonjourService: ADBDiscoveredService,
+        model: String? = nil
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.model = model
+        self.connection = .bonjour(bonjourService)
+    }
+
+    public var host: String {
+        switch connection {
+        case .hostPort(let host, _):
+            return host
+        case .bonjour(let service):
+            return service.serviceName
+        }
+    }
+
+    public var port: Int {
+        switch connection {
+        case .hostPort(_, let port):
+            return port
+        case .bonjour:
+            return 0
+        }
+    }
+
+    public var bonjourService: ADBDiscoveredService? {
+        guard case .bonjour(let service) = connection else {
+            return nil
+        }
+
+        return service
+    }
+
+    public var connectionDescription: String {
+        switch connection {
+        case let .hostPort(host, port):
+            return host.contains(":") ? "[\(host)]:\(port)" : "\(host):\(port)"
+        case .bonjour(let service):
+            return "\(service.serviceName) via Bonjour"
+        }
     }
 
     fileprivate func matchesEndpoint(of other: ADBTVDeviceSummary) -> Bool {
-        host.caseInsensitiveCompare(other.host) == .orderedSame && port == other.port
+        switch (connection, other.connection) {
+        case let (.bonjour(lhs), .bonjour(rhs)):
+            return lhs.serviceName == rhs.serviceName
+                && lhs.serviceType == rhs.serviceType
+                && lhs.domain == rhs.domain
+        case let (.hostPort(lhsHost, lhsPort), .hostPort(rhsHost, rhsPort)):
+            return lhsHost.caseInsensitiveCompare(rhsHost) == .orderedSame
+                && lhsPort == rhsPort
+        case (.bonjour, .hostPort), (.hostPort, .bonjour):
+            return false
+        }
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case displayName
+        case model
+        case connection
+        case host
+        case port
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(ID.self, forKey: .id)
+        displayName = try container.decode(String.self, forKey: .displayName)
+        model = try container.decodeIfPresent(String.self, forKey: .model)
+
+        if let connection = try container.decodeIfPresent(
+            ADBTVDeviceConnection.self,
+            forKey: .connection
+        ) {
+            self.connection = connection
+        } else {
+            self.connection = .hostPort(
+                host: try container.decode(String.self, forKey: .host),
+                port: try container.decode(Int.self, forKey: .port)
+            )
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(displayName, forKey: .displayName)
+        try container.encodeIfPresent(model, forKey: .model)
+        try container.encode(connection, forKey: .connection)
+    }
+}
+
+public enum ADBTVDeviceConnection: Codable, Equatable, Sendable {
+    case hostPort(host: String, port: Int)
+    case bonjour(ADBDiscoveredService)
 }
 
 public struct ADBTVInstallDraft: Equatable, Sendable {
@@ -395,21 +538,24 @@ public enum ADBTVDiscoveryStatus: Equatable, Sendable {
 
 public enum ADBTVPairingSource: Equatable, Sendable {
     case manualCode
+    case discoveredService
     case qrCode
 }
 
 public enum ADBTVPairingStatus: Equatable, Sendable {
     case idle
     case pairing(source: ADBTVPairingSource, target: String)
+    case waitingForConnection(deviceGUID: String, displayName: String)
     case paired(ADBTVDeviceSummary)
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 
     public var isPairing: Bool {
-        if case .pairing = self {
+        switch self {
+        case .pairing, .waitingForConnection:
             return true
+        default:
+            return false
         }
-
-        return false
     }
 }
 
@@ -420,6 +566,7 @@ public struct ADBTVPairingDraft: Equatable, Sendable {
     public var connectionPortString: String
     public var codeString: String
     public var qrPayload: String
+    public var discoveredService: ADBDiscoveredService?
 
     public init(
         displayName: String = "",
@@ -427,7 +574,8 @@ public struct ADBTVPairingDraft: Equatable, Sendable {
         pairingPortString: String = "",
         connectionPortString: String = "",
         codeString: String = "",
-        qrPayload: String = ""
+        qrPayload: String = "",
+        discoveredService: ADBDiscoveredService? = nil
     ) {
         self.displayName = displayName
         self.host = host
@@ -435,6 +583,7 @@ public struct ADBTVPairingDraft: Equatable, Sendable {
         self.connectionPortString = connectionPortString
         self.codeString = codeString
         self.qrPayload = qrPayload
+        self.discoveredService = discoveredService
     }
 
     public var normalizedHost: String {
@@ -443,7 +592,14 @@ public struct ADBTVPairingDraft: Equatable, Sendable {
 
     public var normalizedDisplayName: String {
         let value = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return value.isEmpty ? normalizedHost : value
+        if !value.isEmpty {
+            return value
+        }
+        if !normalizedHost.isEmpty {
+            return normalizedHost
+        }
+
+        return discoveredService?.displayName ?? "Android TV"
     }
 
     public var pairingPort: UInt16? {
@@ -467,6 +623,14 @@ public struct ADBTVPairingDraft: Equatable, Sendable {
             && pairingPort != nil
             && connectionPort != nil
             && pairingCode != nil
+    }
+
+    public var canStartDiscoveredPairing: Bool {
+        discoveredService?.kind == .pairing && pairingCode != nil
+    }
+
+    public var canStartPairing: Bool {
+        canStartManualPairing || canStartDiscoveredPairing
     }
 
     public var canStartQRPairing: Bool {

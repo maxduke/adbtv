@@ -147,5 +147,6 @@ public enum ADBTVInstallOperationError: Error, Equatable, Sendable {
     case missingPackage
     case missingPackageFile
     case invalidDevicePort(Int)
+    case secureReconnectNotImplemented
     case unsupportedPlatform
 }
