@@ -1,0 +1,66 @@
+import ADBClientCore
+import Foundation
+
+#if canImport(Network)
+public struct ADBTVPairingOperation: Sendable {
+    public typealias Pair = @Sendable (
+        ADBNetworkEndpoint,
+        ADBPairingSecret
+    ) async throws -> ADBPairingPeerInfo
+
+    private let pair: Pair
+
+    public init() {
+        self.pair = Self.pairUsingSystemClient
+    }
+
+    public init(pair: @escaping Pair) {
+        self.pair = pair
+    }
+
+    public func pairManualCode(from draft: ADBTVPairingDraft) async throws -> ADBTVDeviceSummary {
+        guard !draft.normalizedHost.isEmpty else {
+            throw ADBTVPairingOperationError.missingHost
+        }
+        guard let pairingPort = draft.pairingPort else {
+            throw ADBTVPairingOperationError.invalidPairingPort
+        }
+        guard let connectionPort = draft.connectionPort else {
+            throw ADBTVPairingOperationError.invalidConnectionPort
+        }
+        guard let pairingCode = draft.pairingCode else {
+            throw ADBTVPairingOperationError.invalidPairingCode
+        }
+
+        let endpoint = ADBNetworkEndpoint(host: draft.normalizedHost, port: pairingPort)
+        let secret = try ADBPairingSecret(code: pairingCode)
+        _ = try await pair(endpoint, secret)
+
+        return ADBTVDeviceSummary(
+            displayName: draft.normalizedDisplayName,
+            host: draft.normalizedHost,
+            port: Int(connectionPort),
+            model: "Android TV"
+        )
+    }
+
+    private static func pairUsingSystemClient(
+        endpoint: ADBNetworkEndpoint,
+        secret: ADBPairingSecret
+    ) async throws -> ADBPairingPeerInfo {
+#if canImport(CryptoKit) && canImport(Security)
+        try await ADBWirelessPairingClient().pair(endpoint: endpoint, secret: secret)
+#else
+        throw ADBTVPairingOperationError.unsupportedPlatform
+#endif
+    }
+}
+
+public enum ADBTVPairingOperationError: Error, Equatable, Sendable {
+    case missingHost
+    case invalidPairingPort
+    case invalidConnectionPort
+    case invalidPairingCode
+    case unsupportedPlatform
+}
+#endif

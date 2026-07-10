@@ -96,6 +96,27 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedDevice, first)
     }
 
+    func testModelUpdatesDeviceAtSameEndpointWithoutCreatingDuplicate() {
+        let original = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "tv.local",
+            port: 5555
+        )
+        var model = ADBTVAppModel(devices: [original])
+
+        let savedDevice = model.addDevice(ADBTVDeviceSummary(
+            displayName: "Living Room TV",
+            host: "TV.LOCAL",
+            port: 5555,
+            model: "Android TV"
+        ))
+
+        XCTAssertEqual(model.devices.count, 1)
+        XCTAssertEqual(savedDevice.id, original.id)
+        XCTAssertEqual(savedDevice.displayName, "Living Room TV")
+        XCTAssertEqual(model.selectedDevice, savedDevice)
+    }
+
     func testDeviceStoreRoundTripsSavedDevices() throws {
         let suiteName = "ADBTVDeviceStoreTests.\(UUID().uuidString)"
         let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -249,9 +270,17 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertFalse(model.pairingDraft.canStartManualPairing)
         XCTAssertFalse(model.pairingDraft.canStartQRPairing)
 
+        model.setPairingDisplayName(" Living Room TV ")
+        model.setPairingHost(" 192.168.1.50 ")
+        model.setPairingPortString(" 37123 ")
+        model.setConnectionPortString("39555")
         model.setPairingCodeString("123 456")
 
         XCTAssertEqual(model.pairingDraft.pairingCode?.rawValue, "123456")
+        XCTAssertEqual(model.pairingDraft.normalizedDisplayName, "Living Room TV")
+        XCTAssertEqual(model.pairingDraft.normalizedHost, "192.168.1.50")
+        XCTAssertEqual(model.pairingDraft.pairingPort, 37123)
+        XCTAssertEqual(model.pairingDraft.connectionPort, 39555)
         XCTAssertTrue(model.pairingDraft.canStartManualPairing)
 
         model.setPairingQRCodePayload("WIFI:T:ADB;S:Living Room TV;P:pair-secret;;")
@@ -263,10 +292,23 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertTrue(model.pairingDraft.canStartQRPairing)
 
         model.setPairingCodeString("12345")
+        model.setPairingPortString("0")
         model.setPairingQRCodePayload("WIFI:T:WPA;S:Network;P:secret;;")
 
         XCTAssertFalse(model.pairingDraft.canStartManualPairing)
         XCTAssertFalse(model.pairingDraft.canStartQRPairing)
+    }
+
+    func testPairingDraftUsesHostAsDefaultDisplayName() {
+        let draft = ADBTVPairingDraft(
+            host: " tv.local ",
+            pairingPortString: "37123",
+            connectionPortString: "39555",
+            codeString: "123456"
+        )
+
+        XCTAssertEqual(draft.normalizedDisplayName, "tv.local")
+        XCTAssertTrue(draft.canStartManualPairing)
     }
 
     func testPairingStatusTracksStartSuccessAndSelectedDevice() {
@@ -283,6 +325,7 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.pairingStatus, .paired(device))
         XCTAssertEqual(model.devices, [device])
         XCTAssertEqual(model.selectedDevice, device)
+        XCTAssertEqual(model.pairingDraft.codeString, "")
     }
 
     func testPairingFailureStoresUserAndDiagnosticDetails() {

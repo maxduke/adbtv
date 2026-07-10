@@ -8,9 +8,11 @@ public struct ADBTVRootView: View {
     @State private var model: ADBTVAppModel
     @State private var isFileImporterPresented = false
     @State private var isAddDevicePresented = false
+    @State private var isPairDevicePresented = false
     @State private var devicePersistenceError: DiagnosticDetail?
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
+    @State private var pairingTask: Task<Void, Never>?
 #if canImport(Network)
     @State private var discoveryBrowser: ADBBonjourServiceBrowser?
 #endif
@@ -53,8 +55,18 @@ public struct ADBTVRootView: View {
             .navigationTitle("ADB TV")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        isAddDevicePresented = true
+                    Menu {
+                        Button {
+                            isPairDevicePresented = true
+                        } label: {
+                            Label("Pair with Code", systemImage: "key")
+                        }
+
+                        Button {
+                            isAddDevicePresented = true
+                        } label: {
+                            Label("Add Manually", systemImage: "square.and.pencil")
+                        }
                     } label: {
                         Label("Add Device", systemImage: "plus")
                     }
@@ -89,6 +101,14 @@ public struct ADBTVRootView: View {
             AddDeviceView { device in
                 addDevice(device)
             }
+        }
+        .sheet(isPresented: $isPairDevicePresented) {
+            PairDeviceView(
+                draft: $model.pairingDraft,
+                status: model.pairingStatus,
+                startPairing: startManualPairing,
+                cancelPairing: cancelPairing
+            )
         }
         .alert(
             "Could not save devices",
@@ -130,6 +150,7 @@ public struct ADBTVRootView: View {
         .onDisappear {
             installTask?.cancel()
             remoteTask?.cancel()
+            cancelPairing()
             stopDiscovery()
         }
     }
@@ -197,6 +218,75 @@ public struct ADBTVRootView: View {
         discoveryBrowser = nil
 #endif
         model.stopDiscovery()
+    }
+
+    private func startManualPairing() {
+        let draft = model.pairingDraft
+        guard draft.canStartManualPairing, let pairingPort = draft.pairingPort else {
+            return
+        }
+
+        let target = Self.endpointDescription(host: draft.normalizedHost, port: pairingPort)
+        model.startPairing(source: .manualCode, target: target)
+
+        pairingTask?.cancel()
+        pairingTask = Task {
+            let completion: PairingCompletion
+            do {
+                completion = .success(try await Self.pairDevice(using: draft))
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                completion = .failure(
+                    userMessage: "Could not pair with this Android TV.",
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: String(describing: error),
+                        context: [
+                            "operation": "pairDevice",
+                            "target": target
+                        ]
+                    )
+                )
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+            await MainActor.run {
+                completePairing(completion)
+            }
+        }
+    }
+
+    private static func pairDevice(using draft: ADBTVPairingDraft) async throws -> ADBTVDeviceSummary {
+#if canImport(Network)
+        try await ADBTVPairingOperation().pairManualCode(from: draft)
+#else
+        throw ADBTVPairingViewError.unsupportedPlatform
+#endif
+    }
+
+    @MainActor
+    private func completePairing(_ completion: PairingCompletion) {
+        pairingTask = nil
+        switch completion {
+        case .success(let device):
+            model.finishPairing(device: device)
+            saveDevices()
+        case .failure(let userMessage, let diagnosticDetail):
+            model.failPairing(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        }
+    }
+
+    private func cancelPairing() {
+        pairingTask?.cancel()
+        pairingTask = nil
+        model.cancelPairing()
+    }
+
+    private static func endpointDescription(host: String, port: UInt16) -> String {
+        host.contains(":") ? "[\(host)]:\(port)" : "\(host):\(port)"
     }
 
     private func startInstall(for device: ADBTVDeviceSummary) {
@@ -347,6 +437,15 @@ public struct ADBTVRootView: View {
     }
 }
 
+private enum PairingCompletion: Sendable {
+    case success(ADBTVDeviceSummary)
+    case failure(userMessage: String, diagnosticDetail: DiagnosticDetail)
+}
+
+private enum ADBTVPairingViewError: Error {
+    case unsupportedPlatform
+}
+
 private enum InstallCompletion: Sendable {
     case success(ADBAPKInstallReport)
     case failure(userMessage: String, diagnosticDetail: DiagnosticDetail)
@@ -355,6 +454,108 @@ private enum InstallCompletion: Sendable {
 private enum RemoteCompletion: Sendable {
     case success(ADBTVRemoteAction)
     case failure(action: ADBTVRemoteAction, userMessage: String, diagnosticDetail: DiagnosticDetail)
+}
+
+private struct PairDeviceView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    @Binding var draft: ADBTVPairingDraft
+    var status: ADBTVPairingStatus
+    var startPairing: () -> Void
+    var cancelPairing: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Device") {
+                    TextField("Name", text: $draft.displayName)
+                    TextField("Host or IP Address", text: $draft.host)
+                        .autocorrectionDisabled()
+                    TextField("Connection Port", text: $draft.connectionPortString)
+                }
+
+                Section("Pairing") {
+                    TextField("Pairing Port", text: $draft.pairingPortString)
+                    TextField("6-Digit Code", text: $draft.codeString)
+                }
+
+                PairingStatusView(status: status)
+            }
+            .disabled(status.isPairing)
+            .navigationTitle("Pair Device")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(hasPaired ? "Done" : "Cancel") {
+                        cancelPairing()
+                        dismiss()
+                    }
+                }
+
+                if !hasPaired {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Pair") {
+                            startPairing()
+                        }
+                        .disabled(!draft.canStartManualPairing || status.isPairing)
+                    }
+                }
+            }
+        }
+        .interactiveDismissDisabled(status.isPairing)
+        .onDisappear {
+            cancelPairing()
+        }
+    }
+
+    private var hasPaired: Bool {
+        if case .paired = status {
+            return true
+        }
+
+        return false
+    }
+}
+
+private struct PairingStatusView: View {
+    var status: ADBTVPairingStatus
+
+    var body: some View {
+        switch status {
+        case .idle:
+            EmptyView()
+        case .pairing(_, let target):
+            Section {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Pairing with \(target)")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .paired(let device):
+            Section {
+                Label("Paired with \(device.displayName)", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("Saved as \(device.host):\(device.port)")
+                    .foregroundStyle(.secondary)
+            }
+        case .failed(let userMessage, let diagnosticDetail):
+            Section {
+                Label(userMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                DisclosureGroup("Technical Details") {
+                    Text(diagnosticDetail.summary)
+                        .font(.footnote.monospaced())
+                        .textSelection(.enabled)
+
+                    ForEach(diagnosticDetail.context.keys.sorted(), id: \.self) { key in
+                        Text("\(key): \(diagnosticDetail.context[key] ?? "")")
+                            .font(.footnote.monospaced())
+                            .textSelection(.enabled)
+                    }
+                }
+            }
+        }
+    }
 }
 
 private struct AddDeviceView: View {

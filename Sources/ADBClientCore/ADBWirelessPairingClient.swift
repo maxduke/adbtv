@@ -24,18 +24,23 @@ public struct ADBWirelessPairingClient: Sendable {
         )
         defer { tlsConnection.cancel() }
 
-        let keyExchange = try ADBBoringSSLPairingKeyExchange(
-            secret: secret,
-            tlsExporter: tlsConnection.tlsExporter
-        )
-        var pairingClient = ADBPairingClient(
-            session: ADBPairingProtocolSession(
-                identityMaterial: pairingIdentity.material,
-                keyExchange: keyExchange
-            ),
-            transport: tlsConnection.transport
-        )
-        return try await pairingClient.pair()
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            let keyExchange = try ADBBoringSSLPairingKeyExchange(
+                secret: secret,
+                tlsExporter: tlsConnection.tlsExporter
+            )
+            var pairingClient = ADBPairingClient(
+                session: ADBPairingProtocolSession(
+                    identityMaterial: pairingIdentity.material,
+                    keyExchange: keyExchange
+                ),
+                transport: tlsConnection.transport
+            )
+            return try await pairingClient.pair()
+        } onCancel: {
+            tlsConnection.cancel()
+        }
     }
 }
 #endif

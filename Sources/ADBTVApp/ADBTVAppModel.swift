@@ -47,9 +47,19 @@ public struct ADBTVAppModel: Equatable, Sendable {
         selectedDeviceID = id
     }
 
-    public mutating func addDevice(_ device: ADBTVDeviceSummary) {
+    @discardableResult
+    public mutating func addDevice(_ device: ADBTVDeviceSummary) -> ADBTVDeviceSummary {
+        if let index = devices.firstIndex(where: { $0.matchesEndpoint(of: device) }) {
+            var updatedDevice = device
+            updatedDevice.id = devices[index].id
+            devices[index] = updatedDevice
+            selectedDeviceID = updatedDevice.id
+            return updatedDevice
+        }
+
         devices.append(device)
         selectedDeviceID = device.id
+        return device
     }
 
     public mutating func removeDevices(ids: Set<ADBTVDeviceSummary.ID>) {
@@ -141,6 +151,22 @@ public struct ADBTVAppModel: Equatable, Sendable {
         pairingDraft.codeString = value
     }
 
+    public mutating func setPairingDisplayName(_ value: String) {
+        pairingDraft.displayName = value
+    }
+
+    public mutating func setPairingHost(_ value: String) {
+        pairingDraft.host = value
+    }
+
+    public mutating func setPairingPortString(_ value: String) {
+        pairingDraft.pairingPortString = value
+    }
+
+    public mutating func setConnectionPortString(_ value: String) {
+        pairingDraft.connectionPortString = value
+    }
+
     public mutating func setPairingQRCodePayload(_ value: String) {
         pairingDraft.qrPayload = value
     }
@@ -150,12 +176,18 @@ public struct ADBTVAppModel: Equatable, Sendable {
     }
 
     public mutating func finishPairing(device: ADBTVDeviceSummary) {
-        pairingStatus = .paired(device)
-        addDevice(device)
+        let savedDevice = addDevice(device)
+        pairingDraft.codeString = ""
+        pairingStatus = .paired(savedDevice)
     }
 
     public mutating func failPairing(userMessage: String, diagnosticDetail: DiagnosticDetail) {
         pairingStatus = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+    }
+
+    public mutating func cancelPairing() {
+        pairingDraft.codeString = ""
+        pairingStatus = .idle
     }
 }
 
@@ -195,6 +227,10 @@ public struct ADBTVDeviceSummary: Codable, Identifiable, Equatable, Sendable {
         self.host = host
         self.port = port
         self.model = model
+    }
+
+    fileprivate func matchesEndpoint(of other: ADBTVDeviceSummary) -> Bool {
+        host.caseInsensitiveCompare(other.host) == .orderedSame && port == other.port
     }
 }
 
@@ -378,12 +414,44 @@ public enum ADBTVPairingStatus: Equatable, Sendable {
 }
 
 public struct ADBTVPairingDraft: Equatable, Sendable {
+    public var displayName: String
+    public var host: String
+    public var pairingPortString: String
+    public var connectionPortString: String
     public var codeString: String
     public var qrPayload: String
 
-    public init(codeString: String = "", qrPayload: String = "") {
+    public init(
+        displayName: String = "",
+        host: String = "",
+        pairingPortString: String = "",
+        connectionPortString: String = "",
+        codeString: String = "",
+        qrPayload: String = ""
+    ) {
+        self.displayName = displayName
+        self.host = host
+        self.pairingPortString = pairingPortString
+        self.connectionPortString = connectionPortString
         self.codeString = codeString
         self.qrPayload = qrPayload
+    }
+
+    public var normalizedHost: String {
+        host.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    public var normalizedDisplayName: String {
+        let value = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? normalizedHost : value
+    }
+
+    public var pairingPort: UInt16? {
+        validatedPort(pairingPortString)
+    }
+
+    public var connectionPort: UInt16? {
+        validatedPort(connectionPortString)
     }
 
     public var pairingCode: ADBPairingCode? {
@@ -395,10 +463,22 @@ public struct ADBTVPairingDraft: Equatable, Sendable {
     }
 
     public var canStartManualPairing: Bool {
-        pairingCode != nil
+        !normalizedHost.isEmpty
+            && pairingPort != nil
+            && connectionPort != nil
+            && pairingCode != nil
     }
 
     public var canStartQRPairing: Bool {
         pairingQRCode != nil
+    }
+
+    private func validatedPort(_ value: String) -> UInt16? {
+        let value = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let port = UInt16(value), port > 0 else {
+            return nil
+        }
+
+        return port
     }
 }
