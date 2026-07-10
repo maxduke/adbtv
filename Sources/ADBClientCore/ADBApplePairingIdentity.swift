@@ -57,11 +57,11 @@ public extension ADBAppleAuthenticationIdentity {
         )
         guard status == errSecSuccess,
               let items = importedItems as? [[String: Any]],
-              let identity = items.first?[kSecImportItemIdentity as String] as? SecIdentity else {
+              let identityValue = items.first?[kSecImportItemIdentity as String] else {
             throw ADBApplePairingIdentityError.identityImportFailed(status)
         }
 
-        return identity
+        return identityValue as! SecIdentity
     }
 
     private static func generatePKCS12(privateKeyDER: [UInt8]) throws -> [UInt8] {
