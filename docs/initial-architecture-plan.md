@@ -124,7 +124,7 @@ Start with Apple frameworks where practical:
 - Security and Keychain APIs for identities and credentials;
 - CryptoKit where it covers required primitives.
 
-The Protocol Spike confirmed that Apple frameworks do not expose the legacy Ed25519 SPAKE2 operation required by ADB. The project therefore pins Firebase's BoringSSL Swift package for that primitive only; see [ADR 0010](./adr/0010-use-boringssl-for-adb-spake2.md). Apple CryptoKit remains responsible for HKDF and AES-GCM.
+The Protocol Spike confirmed that Apple frameworks do not expose the legacy Ed25519 SPAKE2 operation required by ADB, and Network.framework cannot upgrade an established plaintext connection to ADB's in-place TLS transport. The project therefore pins Firebase's BoringSSL Swift package for SPAKE2 and the in-memory TLS engine; see [ADR 0010](./adr/0010-use-boringssl-for-adb-spake2.md) and [ADR 0011](./adr/0011-use-boringssl-for-adb-starttls.md). Apple CryptoKit remains responsible for pairing HKDF and AES-GCM.
 
 ## iOS Platform Constraints
 

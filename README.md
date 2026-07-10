@@ -1,10 +1,10 @@
 # ADB TV
 
-ADB TV is a native SwiftUI iOS app in progress for managing Android TV devices over Wireless Debugging using a native ADB client.
+ADB TV is a native SwiftUI iOS app for managing Android TV devices over Wireless Debugging using a native ADB client.
 
 ## Status
 
-The project is in an early protocol and app-shell phase. It currently includes a Swift package plus a native SwiftUI iOS app project:
+The initial feature set is implemented and awaiting physical-device release validation. The repository includes a Swift package plus a native SwiftUI iOS app project:
 
 - `ADBClientCore`: native ADB packet, stream, shell, sync, remote-control, and APK install foundations.
 - `ADBTVApp`: SwiftUI app shell for saved devices, APK install sources, install state, and Android TV remote actions.
@@ -84,5 +84,16 @@ scripts/package-unsigned-ipa.sh
 ```
 
 The unsigned IPA is not installable on a stock iOS device until it is signed with a valid Apple certificate and provisioning profile. GitHub Actions exposes the same packaging path through the manual **iOS Unsigned IPA** workflow.
+
+## Physical Device Signing
+
+To run from Xcode on an iPhone or iPad:
+
+1. Open `ADBTV.xcodeproj` and select the `ADBTV` target.
+2. Under **Signing & Capabilities**, select your Apple development team.
+3. Change `com.maxduke.adbtv` to a bundle identifier available to that team if necessary.
+4. Build and run on the connected device.
+
+The ADB identity is a synchronizable Keychain item. To reuse it across iOS devices, sign each build with the same team and bundle identifier, enable iCloud Keychain for the same Apple Account, and allow time for Keychain synchronization. Changing the team or bundle identifier creates a different Keychain access namespace and therefore a different ADB identity. Pairing still works without Keychain sync, but each isolated identity must be authorized separately by the Android TV.
 
 The package currently contains `ADBClientCore` and `ADBTVApp`. GitHub Actions runs package tests, an unsigned iOS simulator build, and the manual unsigned IPA package workflow on macOS.

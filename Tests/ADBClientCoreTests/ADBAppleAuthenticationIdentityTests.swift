@@ -3,6 +3,10 @@ import XCTest
 @testable import ADBClientCore
 
 final class ADBAppleAuthenticationIdentityTests: XCTestCase {
+    func testStoreUsesSynchronizableKeychainIdentityByDefault() {
+        XCTAssertTrue(ADBAppleAuthenticationIdentityStore().synchronizable)
+    }
+
     func testStoreKeepsConfiguration() {
         let store = ADBAppleAuthenticationIdentityStore(
             applicationTag: "com.adbtv.tests.identity",

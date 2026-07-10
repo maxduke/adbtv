@@ -21,4 +21,6 @@ The public Swift initializer requires a 64-byte TLS exporter value and appends i
 - Pairing uses the same SPAKE2 implementation family as AOSP instead of app-owned elliptic-curve arithmetic.
 - The dependency adds source-build time and binary size; CI must continue to cover package and iOS builds.
 - BoringSSL is isolated behind `CADBPairingCrypto`, allowing replacement without changing the pairing protocol state machine.
-- TLS setup, extraction of the `adb-label` exporter, certificate identity generation, and real-device validation remain separate required work.
+- TLS exporter extraction and certificate identity generation are covered by the pairing stack and loopback tests; physical-device validation remains required.
+
+ADR 0011 separately records the later decision to use the same pinned BoringSSL package for ADB's in-place TLS upgrade.

@@ -44,6 +44,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Reconnect And Device Library
 
 - [ ] Force-quit and relaunch the app, then reconnect without pairing again.
+- [ ] Install a build signed by the same team and bundle identifier on a second iOS device using the same Apple Account and confirm the synchronized identity reconnects without pairing again.
+- [ ] If cross-device reconnect does not work, record iCloud Keychain state, signing team, bundle identifier, elapsed sync time, and Diagnostic Detail.
 - [ ] Restart Wireless Debugging so its port changes, then reconnect through the saved Bonjour service.
 - [ ] Restart the Android TV and reconnect after discovery returns.
 - [ ] Add at least two Managed Devices and switch between them without mixing endpoints.
