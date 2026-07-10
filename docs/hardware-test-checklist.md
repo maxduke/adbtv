@@ -49,6 +49,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Restart Wireless Debugging so its port changes, then reconnect through the saved Bonjour service.
 - [ ] Restart the Android TV and reconnect after discovery returns.
 - [ ] Add at least two Managed Devices and switch between them without mixing endpoints.
+- [ ] Add a port 5555 endpoint manually, approve its RSA prompt on the TV, and confirm **Connected and saved** appears.
+- [ ] Reject a manual endpoint's RSA prompt and confirm the add sheet remains open with technical detail.
 - [ ] Remove one device and confirm other saved devices remain.
 - [ ] Confirm no pairing secret or install history appears in app storage or UI.
 
@@ -77,6 +79,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Permission And Network Failures
 
 - [ ] Deny local-network permission and confirm discovery failure is actionable.
+- [ ] Confirm the discovery error opens iOS Settings and distinguishes `PolicyDenied` from `NoAuth` in Technical Details.
 - [ ] Add a valid endpoint manually while discovery is unavailable.
 - [ ] Test devices on an isolated guest network or VLAN and confirm timeout detail identifies the endpoint.
 - [ ] Restore network access and retry without relaunching the app.

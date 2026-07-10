@@ -38,6 +38,17 @@ if [[ -z "$APP_PATH" ]]; then
   exit 1
 fi
 
+INFO_PLIST_PATH="$APP_PATH/Info.plist"
+PAIRING_SERVICE="$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' "$INFO_PLIST_PATH")"
+CONNECT_SERVICE="$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:1' "$INFO_PLIST_PATH")"
+LOCAL_NETWORK_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$INFO_PLIST_PATH")"
+if [[ "$PAIRING_SERVICE" != '_adb-tls-pairing._tcp' \
+    || "$CONNECT_SERVICE" != '_adb-tls-connect._tcp' \
+    || -z "$LOCAL_NETWORK_DESCRIPTION" ]]; then
+  echo "Built app is missing required Bonjour or local-network metadata" >&2
+  exit 1
+fi
+
 PAYLOAD_DIR="$OUTPUT_DIR/Payload"
 rm -rf "$PAYLOAD_DIR"
 mkdir -p "$PAYLOAD_DIR"

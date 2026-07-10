@@ -26,7 +26,7 @@ Current direction:
 
 Implemented so far:
 
-- manual saved-device entry and persistence;
+- manual device connection verification and persistence with clear success or failure details;
 - APK source selection from the iOS Files picker;
 - APK source entry from a direct HTTP or HTTPS URL;
 - an explicit insecure-transport warning for HTTP APK sources;
@@ -42,6 +42,7 @@ Implemented so far:
 - selectable Bonjour pairing services with device-GUID correlation and persisted connect-service handoff;
 - AVFoundation Pairing QR Code scanning with Bonjour service matching and the same saved-device handoff;
 - AOSP-compatible CNXN/STLS mutual-TLS reconnect for host/port and Bonjour targets;
+- legacy authenticated ADB-over-TCP reconnect for manually entered endpoints such as port 5555;
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - end-to-end loopback coverage for secure reconnect, an encrypted ADB shell command, and encrypted APK installation;
 - remote text input, menu, volume, and power controls in addition to D-pad navigation;
@@ -95,5 +96,11 @@ To run from Xcode on an iPhone or iPad:
 4. Build and run on the connected device.
 
 The ADB identity is a synchronizable Keychain item. To reuse it across iOS devices, sign each build with the same team and bundle identifier, enable iCloud Keychain for the same Apple Account, and allow time for Keychain synchronization. Changing the team or bundle identifier creates a different Keychain access namespace and therefore a different ADB identity. Pairing still works without Keychain sync, but each isolated identity must be authorized separately by the Android TV.
+
+## Troubleshooting
+
+If discovery reports `NoAuth` or `PolicyDenied`, open the app's iOS Settings page and enable Local Network access, then retry discovery. The packaged app declares both Android Wireless Debugging Bonjour service types; the IPA build now fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
+
+For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
 
 The package currently contains `ADBClientCore` and `ADBTVApp`. GitHub Actions runs package tests, an unsigned iOS simulator build, and the manual unsigned IPA package workflow on macOS.
