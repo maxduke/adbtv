@@ -6,12 +6,14 @@ public actor ADBTLSByteTransport: ADBByteTransport {
     static func upgrade(
         underlying: ADBNetworkTransport,
         identity: ADBPairingIdentityMaterial,
-        role: ADBBoringSSLTLSContext.Role = .client
+        role: ADBBoringSSLTLSContext.Role = .client,
+        initialEncryptedInput: [UInt8] = []
     ) async throws -> ADBTLSByteTransport {
         let transport = try ADBTLSByteTransport(
             underlying: underlying,
             tls: ADBBoringSSLTLSContext(role: role, identity: identity)
         )
+        try await transport.provideInitialEncryptedInput(initialEncryptedInput)
         try await transport.completeHandshake()
         return transport
     }
@@ -19,6 +21,10 @@ public actor ADBTLSByteTransport: ADBByteTransport {
     init(underlying: ADBNetworkTransport, tls: ADBBoringSSLTLSContext) {
         self.underlying = underlying
         self.tls = tls
+    }
+
+    private func provideInitialEncryptedInput(_ bytes: [UInt8]) throws {
+        try tls.provideEncryptedInput(bytes)
     }
 
     public func send(_ bytes: [UInt8]) async throws {
