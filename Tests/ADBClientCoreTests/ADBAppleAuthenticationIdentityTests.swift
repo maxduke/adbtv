@@ -14,5 +14,49 @@ final class ADBAppleAuthenticationIdentityTests: XCTestCase {
         XCTAssertEqual(store.publicKeyComment, "tester@adbtv")
         XCTAssertFalse(store.synchronizable)
     }
+
+    func testAuthenticationIdentityCreatesMatchingTLSIdentityAndPairingMaterial() throws {
+        let privateKey = try makePrivateKey()
+        let authenticationIdentity = ADBAppleAuthenticationIdentity(
+            privateKey: privateKey,
+            publicKeyComment: "tester@adbtv"
+        )
+
+        let pairingIdentity = try authenticationIdentity.pairingIdentity()
+        XCTAssertEqual(
+            pairingIdentity.material.peerInfo,
+            try ADBPairingPeerInfo(authenticationPublicKey: authenticationIdentity.publicKey())
+        )
+        XCTAssertTrue(
+            String(decoding: pairingIdentity.material.certificatePEM, as: UTF8.self)
+                .hasPrefix("-----BEGIN CERTIFICATE-----\n")
+        )
+        XCTAssertTrue(
+            String(decoding: pairingIdentity.material.privateKeyPEM, as: UTF8.self)
+                .hasPrefix("-----BEGIN RSA PRIVATE KEY-----\n")
+        )
+
+        var recoveredPrivateKey: SecKey?
+        XCTAssertEqual(
+            SecIdentityCopyPrivateKey(
+                sec_identity_copy_ref(pairingIdentity.securityIdentity),
+                &recoveredPrivateKey
+            ),
+            errSecSuccess
+        )
+        XCTAssertNotNil(recoveredPrivateKey)
+    }
+
+    private func makePrivateKey() throws -> SecKey {
+        let attributes: [String: Any] = [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeySizeInBits as String: 2048
+        ]
+        var error: Unmanaged<CFError>?
+        guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
+            throw error!.takeRetainedValue()
+        }
+        return key
+    }
 }
 #endif

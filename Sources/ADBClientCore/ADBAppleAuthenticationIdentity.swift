@@ -49,6 +49,19 @@ public struct ADBAppleAuthenticationIdentity: ADBAuthenticationIdentity, @unchec
             comment: publicKeyComment
         )
     }
+
+    func privateKeyExternalRepresentation() throws -> [UInt8] {
+        var error: Unmanaged<CFError>?
+        guard let externalRepresentation = SecKeyCopyExternalRepresentation(privateKey, &error) else {
+            throw ADBAppleAuthenticationIdentityError.privateKeyExportFailed(describe(error))
+        }
+
+        return Array(externalRepresentation as Data)
+    }
+
+    var securityPrivateKey: SecKey {
+        privateKey
+    }
 }
 
 public struct ADBAppleAuthenticationIdentityStore: Sendable {
@@ -147,6 +160,7 @@ public enum ADBAppleAuthenticationIdentityError: Error, Equatable, Sendable {
     case signingFailed(String)
     case missingPublicKey
     case publicKeyExportFailed(String)
+    case privateKeyExportFailed(String)
     case keyLookupFailed(OSStatus)
     case invalidKeychainItem
     case keyGenerationFailed(String)

@@ -1,9 +1,16 @@
 #include "CADBPairingCrypto.h"
 
 #include <openssl/curve25519.h>
+#include <openssl/evp.h>
+#include <openssl/obj.h>
+#include <openssl/rsa.h>
+#include <openssl/x509.h>
+#include <openssl/x509v3.h>
 
 #include <stdlib.h>
 #include <string.h>
+
+#include <vector>
 
 struct ADBPairingCryptoContext {
     SPAKE2_CTX *spake2;
@@ -19,6 +26,31 @@ typedef enum {
 
 static const uint8_t client_name[] = "adb pair client";
 static const uint8_t server_name[] = "adb pair server";
+static const char basic_constraints[] = "critical,CA:TRUE";
+static const char key_usage[] = "critical,keyCertSign,cRLSign,digitalSignature";
+static const char subject_key_identifier[] = "hash";
+static const long certificate_lifetime_seconds = 10L * 365L * 24L * 60L * 60L;
+
+static bool add_certificate_extension(X509 *certificate, int identifier, const char *value) {
+    std::vector<char> mutable_value(value, value + strlen(value) + 1);
+    X509V3_CTX context;
+    X509V3_set_ctx_nodb(&context);
+    X509V3_set_ctx(&context, certificate, certificate, nullptr, nullptr, 0);
+
+    X509_EXTENSION *extension = X509V3_EXT_nconf_nid(
+        nullptr,
+        &context,
+        identifier,
+        mutable_value.data()
+    );
+    if (extension == nullptr) {
+        return false;
+    }
+
+    int result = X509_add_ext(certificate, extension, -1);
+    X509_EXTENSION_free(extension);
+    return result == 1;
+}
 
 static ADBPairingCryptoContext *create_context(
     ADBPairingCryptoRole role,
@@ -137,6 +169,98 @@ bool adb_pairing_crypto_process_message(
         peer_message_length
     );
     return result == 1 && key_material_length == ADB_PAIRING_CRYPTO_KEY_MATERIAL_BYTE_COUNT;
+}
+
+bool adb_pairing_crypto_generate_certificate(
+    const uint8_t *rsa_private_key_der,
+    size_t rsa_private_key_der_length,
+    uint8_t *output_certificate_der,
+    size_t output_capacity,
+    size_t *output_certificate_der_length
+) {
+    if (rsa_private_key_der == nullptr || rsa_private_key_der_length == 0 ||
+        output_certificate_der == nullptr || output_certificate_der_length == nullptr) {
+        return false;
+    }
+    *output_certificate_der_length = 0;
+
+    RSA *rsa = RSA_private_key_from_bytes(rsa_private_key_der, rsa_private_key_der_length);
+    if (rsa == nullptr) {
+        return false;
+    }
+
+    EVP_PKEY *key = EVP_PKEY_new();
+    if (key == nullptr || EVP_PKEY_set1_RSA(key, rsa) != 1) {
+        RSA_free(rsa);
+        EVP_PKEY_free(key);
+        return false;
+    }
+    RSA_free(rsa);
+
+    X509 *certificate = X509_new();
+    if (certificate == nullptr) {
+        EVP_PKEY_free(key);
+        return false;
+    }
+
+    bool configured = X509_set_version(certificate, 2) == 1
+        && ASN1_INTEGER_set(X509_get_serialNumber(certificate), 1) == 1
+        && X509_gmtime_adj(X509_get_notBefore(certificate), 0) != nullptr
+        && X509_gmtime_adj(X509_get_notAfter(certificate), certificate_lifetime_seconds) != nullptr
+        && X509_set_pubkey(certificate, key) == 1;
+
+    X509_NAME *name = configured ? X509_get_subject_name(certificate) : nullptr;
+    configured = configured && name != nullptr
+        && X509_NAME_add_entry_by_txt(
+            name,
+            "C",
+            MBSTRING_ASC,
+            reinterpret_cast<const uint8_t *>("US"),
+            -1,
+            -1,
+            0
+        ) == 1
+        && X509_NAME_add_entry_by_txt(
+            name,
+            "O",
+            MBSTRING_ASC,
+            reinterpret_cast<const uint8_t *>("Android"),
+            -1,
+            -1,
+            0
+        ) == 1
+        && X509_NAME_add_entry_by_txt(
+            name,
+            "CN",
+            MBSTRING_ASC,
+            reinterpret_cast<const uint8_t *>("Adb"),
+            -1,
+            -1,
+            0
+        ) == 1
+        && X509_set_issuer_name(certificate, name) == 1
+        && add_certificate_extension(certificate, NID_basic_constraints, basic_constraints)
+        && add_certificate_extension(certificate, NID_key_usage, key_usage)
+        && add_certificate_extension(certificate, NID_subject_key_identifier, subject_key_identifier)
+        && X509_sign(certificate, key, EVP_sha256()) > 0;
+
+    int encoded_length = configured ? i2d_X509(certificate, nullptr) : -1;
+    bool can_encode = encoded_length > 0
+        && static_cast<size_t>(encoded_length) <= output_capacity;
+    if (can_encode) {
+        uint8_t *cursor = output_certificate_der;
+        can_encode = i2d_X509(certificate, &cursor) == encoded_length;
+    }
+
+    X509_free(certificate);
+    EVP_PKEY_free(key);
+
+    if (!can_encode) {
+        return false;
+    }
+
+    *output_certificate_der_length = static_cast<size_t>(encoded_length);
+    return true;
 }
 
 void adb_pairing_crypto_destroy(ADBPairingCryptoContext *context) {
