@@ -3,12 +3,17 @@ import Foundation
 
 public protocol ADBTVRemoteConnection: Sendable {
     mutating func sendRemoteAction(_ action: ADBTVRemoteAction) async throws -> ADBShellOutput
+    mutating func sendRemoteText(_ text: ADBTVRemoteText) async throws -> ADBShellOutput
 }
 
 #if canImport(Network)
 extension ADBDeviceConnection: ADBTVRemoteConnection {
     public mutating func sendRemoteAction(_ action: ADBTVRemoteAction) async throws -> ADBShellOutput {
         try await runShellCommand(action.shellCommand())
+    }
+
+    public mutating func sendRemoteText(_ text: ADBTVRemoteText) async throws -> ADBShellOutput {
+        try await runShellCommand(text.shellCommand())
     }
 }
 #endif
@@ -27,6 +32,19 @@ public struct ADBTVRemoteOperation: Sendable {
         }
 
         return try await connection.sendRemoteAction(action)
+    }
+
+    @discardableResult
+    public func sendText<Connection: ADBTVRemoteConnection>(
+        _ text: ADBTVRemoteText,
+        from model: ADBTVAppModel,
+        using connection: inout Connection
+    ) async throws -> ADBShellOutput {
+        guard model.selectedDevice != nil else {
+            throw ADBTVRemoteOperationError.missingDevice
+        }
+
+        return try await connection.sendRemoteText(text)
     }
 }
 

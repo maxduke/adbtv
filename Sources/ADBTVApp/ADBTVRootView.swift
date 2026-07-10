@@ -84,7 +84,12 @@ public struct ADBTVRootView: View {
                         set: { model.setInstallURLString($0) }
                     ),
                     remoteStatus: model.remoteStatus,
+                    remoteTextString: Binding(
+                        get: { model.remoteTextString },
+                        set: { model.setRemoteTextString($0) }
+                    ),
                     canInstall: model.canInstallSelectedPackage,
+                    canSendRemoteText: model.canSendRemoteText,
                     chooseAPK: {
                         isFileImporterPresented = true
                     },
@@ -93,6 +98,9 @@ public struct ADBTVRootView: View {
                     },
                     sendRemoteAction: { action in
                         sendRemoteAction(action, to: device)
+                    },
+                    sendRemoteText: {
+                        sendRemoteText(to: device)
                     }
                 )
             } else {
@@ -365,20 +373,13 @@ public struct ADBTVRootView: View {
         for device: ADBTVDeviceSummary,
         using installModel: ADBTVAppModel
     ) async throws -> ADBAPKInstallReport {
-#if canImport(Network)
-        let target = try device.networkTarget()
-#if canImport(Security)
-        var connection = try await ADBDeviceConnection.connectedToWirelessDebugging(
-            target: target
-        )
+#if canImport(Network) && canImport(Security)
+        var connection = try await connectedDevice(for: device)
         defer { connection.cancel() }
         return try await ADBTVInstallOperation().installSelectedPackage(
             from: installModel,
             using: &connection
         )
-#else
-        throw ADBTVInstallOperationError.unsupportedPlatform
-#endif
 #else
         throw ADBTVInstallOperationError.unsupportedPlatform
 #endif
@@ -436,17 +437,56 @@ public struct ADBTVRootView: View {
         }
     }
 
+    private func sendRemoteText(to device: ADBTVDeviceSummary) {
+        guard let text = model.remoteText else {
+            return
+        }
+
+        let remoteModel = model
+        model.recordRemoteTextStarted()
+
+        remoteTask?.cancel()
+        remoteTask = Task {
+            let completion: RemoteCompletion
+            do {
+                _ = try await Self.sendRemoteText(
+                    text,
+                    to: device,
+                    using: remoteModel
+                )
+                completion = .textSuccess
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                completion = .textFailure(
+                    userMessage: "Could not send text.",
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: String(describing: error),
+                        context: [
+                            "device": device.connectionDescription,
+                            "operation": "sendRemoteText"
+                        ]
+                    )
+                )
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+            await MainActor.run {
+                completeRemoteAction(completion)
+            }
+        }
+    }
+
     private static func sendRemoteAction(
         _ action: ADBTVRemoteAction,
         to device: ADBTVDeviceSummary,
         using remoteModel: ADBTVAppModel
     ) async throws -> ADBShellOutput {
-#if canImport(Network)
-        let target = try device.networkTarget()
-#if canImport(Security)
-        var connection = try await ADBDeviceConnection.connectedToWirelessDebugging(
-            target: target
-        )
+#if canImport(Network) && canImport(Security)
+        var connection = try await connectedDevice(for: device)
         defer { connection.cancel() }
         return try await ADBTVRemoteOperation().sendAction(
             action,
@@ -456,18 +496,50 @@ public struct ADBTVRootView: View {
 #else
         throw ADBTVRemoteOperationError.unsupportedPlatform
 #endif
+    }
+
+    private static func sendRemoteText(
+        _ text: ADBTVRemoteText,
+        to device: ADBTVDeviceSummary,
+        using remoteModel: ADBTVAppModel
+    ) async throws -> ADBShellOutput {
+#if canImport(Network) && canImport(Security)
+        var connection = try await connectedDevice(for: device)
+        defer { connection.cancel() }
+        return try await ADBTVRemoteOperation().sendText(
+            text,
+            from: remoteModel,
+            using: &connection
+        )
 #else
         throw ADBTVRemoteOperationError.unsupportedPlatform
 #endif
     }
+
+#if canImport(Network) && canImport(Security)
+    private static func connectedDevice(
+        for device: ADBTVDeviceSummary
+    ) async throws -> ADBDeviceConnection {
+        try await ADBDeviceConnection.connectedToWirelessDebugging(
+            target: device.networkTarget()
+        )
+    }
+#endif
 
     @MainActor
     private func completeRemoteAction(_ completion: RemoteCompletion) {
         switch completion {
         case .success(let action):
             model.finishRemoteAction(action)
+        case .textSuccess:
+            model.finishRemoteText()
         case .failure(let action, let userMessage, let diagnosticDetail):
             model.failRemoteAction(action, userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        case .textFailure(let userMessage, let diagnosticDetail):
+            model.failRemoteText(
+                userMessage: userMessage,
+                diagnosticDetail: diagnosticDetail
+            )
         }
     }
 
@@ -504,7 +576,9 @@ private enum InstallCompletion: Sendable {
 
 private enum RemoteCompletion: Sendable {
     case success(ADBTVRemoteAction)
+    case textSuccess
     case failure(action: ADBTVRemoteAction, userMessage: String, diagnosticDetail: DiagnosticDetail)
+    case textFailure(userMessage: String, diagnosticDetail: DiagnosticDetail)
 }
 
 private struct PairDeviceView: View {
@@ -816,10 +890,13 @@ private struct DeviceDetailView: View {
     var installDraft: ADBTVInstallDraft
     var installURLString: Binding<String>
     var remoteStatus: ADBTVRemoteStatus
+    var remoteTextString: Binding<String>
     var canInstall: Bool
+    var canSendRemoteText: Bool
     var chooseAPK: () -> Void
     var install: () -> Void
     var sendRemoteAction: (ADBTVRemoteAction) -> Void
+    var sendRemoteText: () -> Void
 
     var body: some View {
         ScrollView {
@@ -834,7 +911,10 @@ private struct DeviceDetailView: View {
                 )
                 RemoteActionsPanel(
                     status: remoteStatus,
-                    send: sendRemoteAction
+                    text: remoteTextString,
+                    canSendText: canSendRemoteText,
+                    send: sendRemoteAction,
+                    sendText: sendRemoteText
                 )
             }
             .frame(maxWidth: 760, alignment: .leading)
@@ -966,7 +1046,10 @@ private struct InstallStatusView: View {
 
 private struct RemoteActionsPanel: View {
     var status: ADBTVRemoteStatus
+    var text: Binding<String>
+    var canSendText: Bool
     var send: (ADBTVRemoteAction) -> Void
+    var sendText: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1034,9 +1117,51 @@ private struct RemoteActionsPanel: View {
                 } label: {
                     Label("Settings", systemImage: "gearshape")
                 }
+                Button {
+                    send(.menu)
+                } label: {
+                    Label("Menu", systemImage: "line.3.horizontal")
+                }
             }
             .buttonStyle(.bordered)
             .disabled(status.isSending)
+
+            HStack(spacing: 8) {
+                Button {
+                    send(.volumeDown)
+                } label: {
+                    Label("Volume Down", systemImage: "speaker.minus")
+                        .labelStyle(.iconOnly)
+                }
+                Button {
+                    send(.volumeUp)
+                } label: {
+                    Label("Volume Up", systemImage: "speaker.plus")
+                        .labelStyle(.iconOnly)
+                }
+                Button {
+                    send(.power)
+                } label: {
+                    Label("Power", systemImage: "power")
+                        .labelStyle(.iconOnly)
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(status.isSending)
+
+            HStack(spacing: 8) {
+                TextField("Text", text: text)
+                    .autocorrectionDisabled()
+                    .textFieldStyle(.roundedBorder)
+                Button {
+                    sendText()
+                } label: {
+                    Label("Send Text", systemImage: "paperplane")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!canSendText)
+            }
 
             RemoteStatusView(status: status)
         }
@@ -1053,13 +1178,38 @@ private struct RemoteStatusView: View {
         case .sending(let action):
             Label("Sending \(action.displayTitle)", systemImage: "arrow.triangle.2.circlepath")
                 .foregroundStyle(.secondary)
+        case .sendingText:
+            Label("Sending text", systemImage: "arrow.triangle.2.circlepath")
+                .foregroundStyle(.secondary)
         case .sent(let action):
             Label("Sent \(action.displayTitle)", systemImage: "checkmark.circle")
                 .foregroundStyle(.secondary)
+        case .sentText:
+            Label("Text sent", systemImage: "checkmark.circle")
+                .foregroundStyle(.secondary)
         case .failed(_, let userMessage, let diagnosticDetail):
-            VStack(alignment: .leading, spacing: 8) {
-                Label(userMessage, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+            RemoteFailureView(
+                userMessage: userMessage,
+                diagnosticDetail: diagnosticDetail
+            )
+        case .failedText(let userMessage, let diagnosticDetail):
+            RemoteFailureView(
+                userMessage: userMessage,
+                diagnosticDetail: diagnosticDetail
+            )
+        }
+    }
+}
+
+private struct RemoteFailureView: View {
+    var userMessage: String
+    var diagnosticDetail: DiagnosticDetail
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label(userMessage, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+            DisclosureGroup("Technical Details") {
                 Text(diagnosticDetail.summary)
                     .font(.footnote.monospaced())
                     .textSelection(.enabled)

@@ -295,6 +295,38 @@ final class ADBTVAppModelTests: XCTestCase {
         ))
     }
 
+    func testRemoteTextValidationAndPresentationStatus() throws {
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        var model = ADBTVAppModel(devices: [device])
+
+        XCTAssertFalse(model.canSendRemoteText)
+        model.setRemoteTextString("hello tv")
+        XCTAssertEqual(model.remoteText, try ADBTVRemoteText("hello tv"))
+        XCTAssertTrue(model.canSendRemoteText)
+
+        model.recordRemoteTextStarted()
+        XCTAssertEqual(model.remoteStatus, .sendingText)
+        XCTAssertTrue(model.remoteStatus.isSending)
+        XCTAssertFalse(model.canSendRemoteText)
+
+        model.finishRemoteText()
+        XCTAssertEqual(model.remoteStatus, .sentText)
+        XCTAssertEqual(model.remoteTextString, "")
+
+        let diagnostic = DiagnosticDetail(
+            summary: "device rejected input",
+            context: ["operation": "sendRemoteText"]
+        )
+        model.failRemoteText(
+            userMessage: "Could not send text.",
+            diagnosticDetail: diagnostic
+        )
+        XCTAssertEqual(model.remoteStatus, .failedText(
+            userMessage: "Could not send text.",
+            diagnosticDetail: diagnostic
+        ))
+    }
+
     func testDiscoveryUpdatesPresentationStatusAndServices() {
         var model = ADBTVAppModel()
         let connectService = ADBDiscoveredService(

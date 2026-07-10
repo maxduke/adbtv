@@ -6,6 +6,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
     public var selectedDeviceID: ADBTVDeviceSummary.ID?
     public var installDraft: ADBTVInstallDraft
     public var remoteStatus: ADBTVRemoteStatus
+    public var remoteTextString: String
     public var discoveryStatus: ADBTVDiscoveryStatus
     public var discoveredServices: [ADBDiscoveredService]
     public var pairingDraft: ADBTVPairingDraft
@@ -16,6 +17,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
         selectedDeviceID: ADBTVDeviceSummary.ID? = nil,
         installDraft: ADBTVInstallDraft = ADBTVInstallDraft(),
         remoteStatus: ADBTVRemoteStatus = .idle,
+        remoteTextString: String = "",
         discoveryStatus: ADBTVDiscoveryStatus = .idle,
         discoveredServices: [ADBDiscoveredService] = [],
         pairingDraft: ADBTVPairingDraft = ADBTVPairingDraft(),
@@ -25,6 +27,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
         self.selectedDeviceID = selectedDeviceID ?? devices.first?.id
         self.installDraft = installDraft
         self.remoteStatus = remoteStatus
+        self.remoteTextString = remoteTextString
         self.discoveryStatus = discoveryStatus
         self.discoveredServices = discoveredServices.sortedForPresentation()
         self.pairingDraft = pairingDraft
@@ -41,6 +44,14 @@ public struct ADBTVAppModel: Equatable, Sendable {
 
     public var canInstallSelectedPackage: Bool {
         selectedDevice != nil && installDraft.canBuildInstallPlan
+    }
+
+    public var remoteText: ADBTVRemoteText? {
+        try? ADBTVRemoteText(remoteTextString)
+    }
+
+    public var canSendRemoteText: Bool {
+        selectedDevice != nil && remoteText != nil && !remoteStatus.isSending
     }
 
     public mutating func selectDevice(id: ADBTVDeviceSummary.ID?) {
@@ -125,6 +136,29 @@ public struct ADBTVAppModel: Equatable, Sendable {
         diagnosticDetail: DiagnosticDetail
     ) {
         remoteStatus = .failed(action: action, userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+    }
+
+    public mutating func setRemoteTextString(_ value: String) {
+        remoteTextString = value
+    }
+
+    public mutating func recordRemoteTextStarted() {
+        remoteStatus = .sendingText
+    }
+
+    public mutating func finishRemoteText() {
+        remoteStatus = .sentText
+        remoteTextString = ""
+    }
+
+    public mutating func failRemoteText(
+        userMessage: String,
+        diagnosticDetail: DiagnosticDetail
+    ) {
+        remoteStatus = .failedText(
+            userMessage: userMessage,
+            diagnosticDetail: diagnosticDetail
+        )
     }
 
     public mutating func startDiscovery() {
@@ -536,15 +570,19 @@ public enum ADBTVInstallDraftError: Error, Equatable, Sendable {
 public enum ADBTVRemoteStatus: Equatable, Sendable {
     case idle
     case sending(ADBTVRemoteAction)
+    case sendingText
     case sent(ADBTVRemoteAction)
+    case sentText
     case failed(action: ADBTVRemoteAction, userMessage: String, diagnosticDetail: DiagnosticDetail)
+    case failedText(userMessage: String, diagnosticDetail: DiagnosticDetail)
 
     public var isSending: Bool {
-        if case .sending = self {
+        switch self {
+        case .sending, .sendingText:
             return true
+        default:
+            return false
         }
-
-        return false
     }
 }
 

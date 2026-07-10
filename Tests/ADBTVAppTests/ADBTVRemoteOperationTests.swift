@@ -30,19 +30,41 @@ final class ADBTVRemoteOperationTests: XCTestCase {
         XCTAssertEqual(output.utf8String, "ok\n")
         XCTAssertEqual(connection.actions, [.settings])
     }
+
+    func testSendTextCallsConnectionWithValidatedText() async throws {
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        var connection = RecordingRemoteConnection(output: ADBShellOutput(bytes: Array("ok\n".utf8)))
+        let text = try ADBTVRemoteText("hello tv")
+
+        let output = try await ADBTVRemoteOperation().sendText(
+            text,
+            from: ADBTVAppModel(devices: [device]),
+            using: &connection
+        )
+
+        XCTAssertEqual(output.utf8String, "ok\n")
+        XCTAssertEqual(connection.texts, [text])
+    }
 }
 
 private struct RecordingRemoteConnection: ADBTVRemoteConnection {
     var output: ADBShellOutput
     private(set) var actions: [ADBTVRemoteAction]
+    private(set) var texts: [ADBTVRemoteText]
 
     init(output: ADBShellOutput = ADBShellOutput(bytes: [])) {
         self.output = output
         self.actions = []
+        self.texts = []
     }
 
     mutating func sendRemoteAction(_ action: ADBTVRemoteAction) async throws -> ADBShellOutput {
         actions.append(action)
+        return output
+    }
+
+    mutating func sendRemoteText(_ text: ADBTVRemoteText) async throws -> ADBShellOutput {
+        texts.append(text)
         return output
     }
 }
