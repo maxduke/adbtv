@@ -117,6 +117,58 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedDevice, savedDevice)
     }
 
+#if canImport(Network)
+    func testDeviceConnectionBuildsHostPortAndBonjourNetworkTargets() throws {
+        let hostDevice = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "192.168.1.50",
+            port: 39555
+        )
+        let connectService = ADBDiscoveredService(
+            serviceName: "adb-device-guid",
+            serviceType: ADBWirelessDebuggingServiceKind.connect.bonjourType,
+            domain: "local."
+        )
+        let bonjourDevice = ADBTVDeviceSummary(
+            displayName: "Bedroom",
+            bonjourService: connectService
+        )
+
+        XCTAssertEqual(
+            try hostDevice.networkTarget(),
+            .hostPort(ADBNetworkEndpoint(host: "192.168.1.50", port: 39555))
+        )
+        XCTAssertEqual(try bonjourDevice.networkTarget(), .bonjourService(connectService))
+    }
+
+    func testDeviceConnectionRejectsInvalidPortAndPairingService() throws {
+        let invalidPortDevice = ADBTVDeviceSummary(
+            displayName: "TV",
+            host: "192.168.1.50",
+            port: 70_000
+        )
+        let pairingService = ADBDiscoveredService(
+            serviceName: "pairing-session",
+            serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+            domain: "local."
+        )
+        let invalidServiceDevice = ADBTVDeviceSummary(
+            displayName: "TV",
+            bonjourService: pairingService
+        )
+
+        XCTAssertThrowsError(try invalidPortDevice.networkTarget()) { error in
+            XCTAssertEqual(error as? ADBTVDeviceConnectionError, .invalidPort(70_000))
+        }
+        XCTAssertThrowsError(try invalidServiceDevice.networkTarget()) { error in
+            XCTAssertEqual(
+                error as? ADBTVDeviceConnectionError,
+                .invalidBonjourServiceType(pairingService.serviceType)
+            )
+        }
+    }
+#endif
+
     func testDeviceStoreRoundTripsSavedDevices() throws {
         let suiteName = "ADBTVDeviceStoreTests.\(UUID().uuidString)"
         let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

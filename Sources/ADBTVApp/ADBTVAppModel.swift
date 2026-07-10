@@ -377,6 +377,32 @@ public enum ADBTVDeviceConnection: Codable, Equatable, Sendable {
     case bonjour(ADBDiscoveredService)
 }
 
+#if canImport(Network)
+public extension ADBTVDeviceSummary {
+    func networkTarget() throws -> ADBNetworkTarget {
+        switch connection {
+        case let .hostPort(host, portValue):
+            guard let port = UInt16(exactly: portValue) else {
+                throw ADBTVDeviceConnectionError.invalidPort(portValue)
+            }
+            return .hostPort(ADBNetworkEndpoint(host: host, port: port))
+        case .bonjour(let service):
+            guard service.kind == .connect else {
+                throw ADBTVDeviceConnectionError.invalidBonjourServiceType(
+                    service.serviceType
+                )
+            }
+            return .bonjourService(service)
+        }
+    }
+}
+
+public enum ADBTVDeviceConnectionError: Error, Equatable, Sendable {
+    case invalidPort(Int)
+    case invalidBonjourServiceType(String)
+}
+#endif
+
 public struct ADBTVInstallDraft: Equatable, Sendable {
     public var selectedPackage: ADBTVInstallPackageDraft?
     public var urlString: String

@@ -366,20 +366,19 @@ public struct ADBTVRootView: View {
         using installModel: ADBTVAppModel
     ) async throws -> ADBAPKInstallReport {
 #if canImport(Network)
-        guard case let .hostPort(host, portValue) = device.connection else {
-            throw ADBTVInstallOperationError.secureReconnectNotImplemented
-        }
-        guard let port = UInt16(exactly: portValue) else {
-            throw ADBTVInstallOperationError.invalidDevicePort(portValue)
-        }
-
-        let endpoint = ADBNetworkEndpoint(host: host, port: port)
+        let target = try device.networkTarget()
 #if canImport(Security)
-        var connection = try ADBDeviceConnection(authenticatedEndpoint: endpoint)
+        var connection = try await ADBDeviceConnection.connectedToWirelessDebugging(
+            target: target
+        )
+        defer { connection.cancel() }
+        return try await ADBTVInstallOperation().installSelectedPackage(
+            from: installModel,
+            using: &connection
+        )
 #else
-        var connection = ADBDeviceConnection(endpoint: endpoint)
+        throw ADBTVInstallOperationError.unsupportedPlatform
 #endif
-        return try await ADBTVInstallOperation().installSelectedPackage(from: installModel, using: &connection)
 #else
         throw ADBTVInstallOperationError.unsupportedPlatform
 #endif
@@ -443,20 +442,20 @@ public struct ADBTVRootView: View {
         using remoteModel: ADBTVAppModel
     ) async throws -> ADBShellOutput {
 #if canImport(Network)
-        guard case let .hostPort(host, portValue) = device.connection else {
-            throw ADBTVRemoteOperationError.secureReconnectNotImplemented
-        }
-        guard let port = UInt16(exactly: portValue) else {
-            throw ADBTVRemoteOperationError.invalidDevicePort(portValue)
-        }
-
-        let endpoint = ADBNetworkEndpoint(host: host, port: port)
+        let target = try device.networkTarget()
 #if canImport(Security)
-        var connection = try ADBDeviceConnection(authenticatedEndpoint: endpoint)
+        var connection = try await ADBDeviceConnection.connectedToWirelessDebugging(
+            target: target
+        )
+        defer { connection.cancel() }
+        return try await ADBTVRemoteOperation().sendAction(
+            action,
+            from: remoteModel,
+            using: &connection
+        )
 #else
-        var connection = ADBDeviceConnection(endpoint: endpoint)
+        throw ADBTVRemoteOperationError.unsupportedPlatform
 #endif
-        return try await ADBTVRemoteOperation().sendAction(action, from: remoteModel, using: &connection)
 #else
         throw ADBTVRemoteOperationError.unsupportedPlatform
 #endif

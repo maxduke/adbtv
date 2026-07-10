@@ -56,40 +56,48 @@ public final class ADBNetworkTransport: ADBByteTransport, @unchecked Sendable {
     }
 
     public func send(_ bytes: [UInt8]) async throws {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            connection.send(content: Data(bytes), completion: .contentProcessed { error in
-                if let error {
-                    continuation.resume(throwing: error)
-                } else {
-                    continuation.resume()
-                }
-            })
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                connection.send(content: Data(bytes), completion: .contentProcessed { error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                    } else {
+                        continuation.resume()
+                    }
+                })
+            }
+        } onCancel: {
+            connection.cancel()
         }
     }
 
     public func receive() async throws -> [UInt8]? {
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[UInt8]?, Error>) in
-            connection.receive(
-                minimumIncompleteLength: 1,
-                maximumLength: maximumReceiveLength
-            ) { data, _, isComplete, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
-                }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[UInt8]?, Error>) in
+                connection.receive(
+                    minimumIncompleteLength: 1,
+                    maximumLength: maximumReceiveLength
+                ) { data, _, isComplete, error in
+                    if let error {
+                        continuation.resume(throwing: error)
+                        return
+                    }
 
-                if let data, !data.isEmpty {
-                    continuation.resume(returning: Array(data))
-                    return
-                }
+                    if let data, !data.isEmpty {
+                        continuation.resume(returning: Array(data))
+                        return
+                    }
 
-                if isComplete {
-                    continuation.resume(returning: nil)
-                    return
-                }
+                    if isComplete {
+                        continuation.resume(returning: nil)
+                        return
+                    }
 
-                continuation.resume(returning: [])
+                    continuation.resume(returning: [])
+                }
             }
+        } onCancel: {
+            connection.cancel()
         }
     }
 }
