@@ -62,6 +62,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Send power and verify the device-specific behavior is understandable.
 - [ ] Send text containing spaces, punctuation, and non-ASCII characters to a focused text field.
 - [ ] Disconnect the TV and confirm every failed action provides a User Error and technical detail.
+- [ ] Send an action to an unreachable TV and confirm it times out instead of remaining in progress.
 
 ## APK Installation
 
@@ -81,6 +82,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Deny local-network permission and confirm discovery failure is actionable.
 - [ ] Confirm the discovery error opens iOS Settings and distinguishes `PolicyDenied` from `NoAuth` in Technical Details.
 - [ ] Add a valid endpoint manually while discovery is unavailable.
+- [ ] Add an unreachable endpoint manually and confirm **Connect & Save** returns a timeout with `timedOperation` and `timeoutSeconds` details.
 - [ ] Test devices on an isolated guest network or VLAN and confirm timeout detail identifies the endpoint.
 - [ ] Restore network access and retry without relaunching the app.
 

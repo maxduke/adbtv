@@ -44,6 +44,7 @@ mDNS discovery may vary across Android TV versions, routers, VLANs, guest networ
 - Implement Manual Connection in the same milestone as discovery.
 - Declare required Bonjour service types in the app metadata.
 - Show permission-specific User Errors when local-network access is denied.
+- Bound connection attempts so unreachable manual endpoints always produce a User Error and Diagnostic Detail.
 - Test discovery against at least two Android TV devices or Android TV versions before calling it stable.
 
 **Fallback**:
@@ -99,6 +100,7 @@ GitHub Actions can build and run unit tests, but it cannot prove real Android TV
 
 **Mitigation**:
 - Keep protocol framing, parsing, URL validation, and operation state machines unit-testable.
+- Apply cancellable operation deadlines so stalled hardware and network calls cannot leave the UI running forever.
 - Use simulator CI for build and non-device tests.
 - Maintain the [manual hardware release checklist](./hardware-test-checklist.md) for pairing, reconnect, remote actions, and APK installation.
 - Add sample Diagnostic Detail from failed hardware tests to improve error handling.

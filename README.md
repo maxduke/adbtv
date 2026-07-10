@@ -35,6 +35,7 @@ Implemented so far:
 - live, acknowledged APK transfer progress with byte counts in the install UI;
 - Android TV D-pad, select, back, home, and settings remote actions;
 - user-facing operation status plus technical diagnostic details;
+- bounded connection, pairing, remote-action, and APK-install operations with timeout diagnostics;
 - Bonjour discovery of ADB pairing and connect services;
 - AOSP-compatible TLS 1.3, TLS exporter, SPAKE2, and encrypted peer-info pairing stack;
 - self-signed TLS identity generation from the synchronized ADB RSA key;
