@@ -32,14 +32,17 @@ Implemented so far:
 - single-APK install orchestration through the native ADB client;
 - Android TV D-pad, select, back, home, and settings remote actions;
 - user-facing operation status plus technical diagnostic details;
+- Bonjour discovery of ADB pairing and connect services;
+- AOSP-compatible TLS 1.3, TLS exporter, SPAKE2, and encrypted peer-info pairing stack;
+- self-signed TLS identity generation from the synchronized ADB RSA key;
+- loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - unsigned IPA packaging in GitHub Actions.
 
 Still in progress:
 
-- automatic device discovery;
-- Wireless Debugging pairing flow;
+- app-facing discovery selection, Pairing Code entry, and saved-device handoff;
 - real-device validation of pairing, reconnect, remote actions, and APK install;
-- QR pairing;
+- QR camera scanning and app flow; QR payload parsing is implemented;
 - text input, volume, and power remote controls.
 
 ## Planning Docs
