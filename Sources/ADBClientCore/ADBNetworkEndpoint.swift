@@ -14,4 +14,27 @@ public struct ADBNetworkEndpoint: Equatable, Sendable {
         .hostPort(host: NWEndpoint.Host(host), port: NWEndpoint.Port(rawValue: port)!)
     }
 }
+
+public enum ADBNetworkTarget: Equatable, Sendable {
+    case hostPort(ADBNetworkEndpoint)
+    case bonjourService(ADBDiscoveredService)
+
+    public init(endpoint: ADBNetworkEndpoint) {
+        self = .hostPort(endpoint)
+    }
+
+    var nwEndpoint: NWEndpoint {
+        switch self {
+        case .hostPort(let endpoint):
+            return endpoint.nwEndpoint
+        case .bonjourService(let service):
+            return .service(
+                name: service.serviceName,
+                type: service.serviceType,
+                domain: service.domain,
+                interface: nil
+            )
+        }
+    }
+}
 #endif

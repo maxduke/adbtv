@@ -76,6 +76,16 @@ public struct ADBBonjourDiscoverySnapshot: Equatable, Sendable {
     public init(services: [ADBDiscoveredService]) {
         self.services = services.sortedForPresentation()
     }
+
+    mutating func replaceServices(
+        of kind: ADBWirelessDebuggingServiceKind,
+        with replacements: [ADBDiscoveredService]
+    ) {
+        services = (
+            services.filter { $0.kind != kind }
+                + replacements.filter { $0.kind == kind }
+        ).sortedForPresentation()
+    }
 }
 
 public extension Array where Element == ADBDiscoveredService {
@@ -107,12 +117,12 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
 
     private let queue: DispatchQueue
     private var browsers: [NWBrowser]
-    private var servicesByID: [ADBDiscoveredService.ID: ADBDiscoveredService]
+    private var snapshot: ADBBonjourDiscoverySnapshot
 
     public init(queue: DispatchQueue = DispatchQueue(label: "ADBBonjourServiceBrowser")) {
         self.queue = queue
         self.browsers = []
-        self.servicesByID = [:]
+        self.snapshot = ADBBonjourDiscoverySnapshot(services: [])
     }
 
     deinit {
@@ -131,7 +141,11 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
             let descriptor = NWBrowser.Descriptor.bonjour(type: serviceKind.bonjourType, domain: nil)
             let browser = NWBrowser(for: descriptor, using: parameters)
             browser.browseResultsChangedHandler = { [weak self] results, _ in
-                self?.record(results: results, updateHandler: updateHandler)
+                self?.record(
+                    results: results,
+                    serviceKind: serviceKind,
+                    updateHandler: updateHandler
+                )
             }
             browser.stateUpdateHandler = { state in
                 if case .failed(let error) = state {
@@ -150,23 +164,20 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
             browser.cancel()
         }
         browsers = []
-        servicesByID = [:]
+        snapshot = ADBBonjourDiscoverySnapshot(services: [])
     }
 
     private func record(
         results: Set<NWBrowser.Result>,
+        serviceKind: ADBWirelessDebuggingServiceKind,
         updateHandler: @escaping UpdateHandler
     ) {
-        for result in results {
-            guard let service = ADBDiscoveredService(result: result) else {
-                continue
-            }
-            servicesByID[service.id] = service
-        }
+        let services = results.compactMap(ADBDiscoveredService.init(result:))
+        snapshot.replaceServices(of: serviceKind, with: services)
 
-        let snapshot = ADBBonjourDiscoverySnapshot(services: Array(servicesByID.values))
+        let servicesForUpdate = snapshot.services
         Task { @MainActor in
-            updateHandler(snapshot.services)
+            updateHandler(servicesForUpdate)
         }
     }
 }

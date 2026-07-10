@@ -44,4 +44,34 @@ final class ADBBonjourDiscoveryTests: XCTestCase {
             "Living Room"
         ])
     }
+
+    func testDiscoverySnapshotReplacesOneServiceKindAndRemovesStaleResults() {
+        let connectService = ADBDiscoveredService(
+            serviceName: "adb-connect-guid",
+            serviceType: ADBWirelessDebuggingServiceKind.connect.bonjourType,
+            domain: "local."
+        )
+        let stalePairingService = ADBDiscoveredService(
+            serviceName: "adb-old-guid",
+            serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+            domain: "local."
+        )
+        let currentPairingService = ADBDiscoveredService(
+            serviceName: "adb-current-guid",
+            serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+            domain: "local."
+        )
+        var snapshot = ADBBonjourDiscoverySnapshot(services: [
+            connectService,
+            stalePairingService
+        ])
+
+        snapshot.replaceServices(of: .pairing, with: [currentPairingService])
+
+        XCTAssertEqual(snapshot.services, [connectService, currentPairingService])
+
+        snapshot.replaceServices(of: .pairing, with: [])
+
+        XCTAssertEqual(snapshot.services, [connectService])
+    }
 }

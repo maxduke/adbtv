@@ -24,8 +24,16 @@ public final class ADBPairingTLSConnection: @unchecked Sendable {
         identity: ADBApplePairingIdentity,
         queue: DispatchQueue = DispatchQueue(label: "ADBPairingTLSConnection")
     ) async throws -> ADBPairingTLSConnection {
+        try await connect(target: .hostPort(endpoint), identity: identity, queue: queue)
+    }
+
+    public static func connect(
+        target: ADBNetworkTarget,
+        identity: ADBApplePairingIdentity,
+        queue: DispatchQueue = DispatchQueue(label: "ADBPairingTLSConnection")
+    ) async throws -> ADBPairingTLSConnection {
         let connection = NWConnection(
-            to: endpoint.nwEndpoint,
+            to: target.nwEndpoint,
             using: parameters(identity: identity, verifyQueue: verificationQueue)
         )
         let transport = ADBNetworkTransport(connection: connection, queue: queue)

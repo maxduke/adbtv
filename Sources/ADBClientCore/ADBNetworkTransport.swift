@@ -15,8 +15,16 @@ public final class ADBNetworkTransport: ADBByteTransport, @unchecked Sendable {
         parameters: NWParameters = .tcp,
         queue: DispatchQueue = DispatchQueue(label: "ADBNetworkTransport")
     ) {
+        self.init(target: .hostPort(endpoint), parameters: parameters, queue: queue)
+    }
+
+    public convenience init(
+        target: ADBNetworkTarget,
+        parameters: NWParameters = .tcp,
+        queue: DispatchQueue = DispatchQueue(label: "ADBNetworkTransport")
+    ) {
         self.init(
-            connection: NWConnection(to: endpoint.nwEndpoint, using: parameters),
+            connection: NWConnection(to: target.nwEndpoint, using: parameters),
             queue: queue
         )
     }

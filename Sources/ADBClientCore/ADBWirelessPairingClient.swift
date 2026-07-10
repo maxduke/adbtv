@@ -15,10 +15,18 @@ public struct ADBWirelessPairingClient: Sendable {
         secret: ADBPairingSecret,
         queue: DispatchQueue = DispatchQueue(label: "ADBWirelessPairingClient")
     ) async throws -> ADBPairingPeerInfo {
+        try await pair(target: .hostPort(endpoint), secret: secret, queue: queue)
+    }
+
+    public func pair(
+        target: ADBNetworkTarget,
+        secret: ADBPairingSecret,
+        queue: DispatchQueue = DispatchQueue(label: "ADBWirelessPairingClient")
+    ) async throws -> ADBPairingPeerInfo {
         let authenticationIdentity = try identityStore.loadOrCreateIdentity()
         let pairingIdentity = try authenticationIdentity.pairingIdentity()
         let tlsConnection = try await ADBPairingTLSConnection.connect(
-            endpoint: endpoint,
+            target: target,
             identity: pairingIdentity,
             queue: queue
         )
