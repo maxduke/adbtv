@@ -446,7 +446,18 @@ public struct ADBTVRootView: View {
         installTask = Task {
             let completion: InstallCompletion
             do {
-                completion = .success(try await Self.installPackage(for: device, using: installModel))
+                completion = .success(try await Self.installPackage(
+                    for: device,
+                    using: installModel,
+                    eventHandler: { event in
+                        guard !Task.isCancelled else {
+                            return
+                        }
+                        await MainActor.run {
+                            model.recordInstallEvent(event)
+                        }
+                    }
+                ))
             } catch is CancellationError {
                 return
             } catch {
@@ -467,14 +478,16 @@ public struct ADBTVRootView: View {
 
     private static func installPackage(
         for device: ADBTVDeviceSummary,
-        using installModel: ADBTVAppModel
+        using installModel: ADBTVAppModel,
+        eventHandler: @escaping ADBAPKInstallEventHandler
     ) async throws -> ADBAPKInstallReport {
 #if canImport(Network) && canImport(Security)
         var connection = try await connectedDevice(for: device)
         defer { connection.cancel() }
         return try await ADBTVInstallOperation().installSelectedPackage(
             from: installModel,
-            using: &connection
+            using: &connection,
+            eventHandler: eventHandler
         )
 #else
         throw ADBTVInstallOperationError.unsupportedPlatform
@@ -485,9 +498,6 @@ public struct ADBTVRootView: View {
     private func completeInstall(_ completion: InstallCompletion) {
         switch completion {
         case .success(let report):
-            for event in report.events {
-                model.recordInstallEvent(event)
-            }
             model.finishInstall(result: report.result)
         case .failure(let userMessage, let diagnosticDetail):
             model.failInstall(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
@@ -1126,6 +1136,15 @@ private struct InstallStatusView: View {
                 Label(statusTitle(for: phase), systemImage: "arrow.triangle.2.circlepath")
                     .foregroundStyle(.secondary)
             }
+        case .transferring(let sentByteCount, let totalByteCount):
+            VStack(alignment: .leading, spacing: 8) {
+                ProgressView(value: transferFraction(sentByteCount, totalByteCount))
+                Label("Transferring APK", systemImage: "arrow.up.doc")
+                    .foregroundStyle(.secondary)
+                Text("\(sentByteCount) of \(totalByteCount) bytes")
+                    .font(.footnote.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         case .succeeded:
             Label("Installed", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
@@ -1153,6 +1172,14 @@ private struct InstallStatusView: View {
         case .cleanup:
             return "Cleaning up"
         }
+    }
+
+    private func transferFraction(_ sentByteCount: Int, _ totalByteCount: Int) -> Double {
+        guard totalByteCount > 0 else {
+            return 1
+        }
+
+        return min(max(Double(sentByteCount) / Double(totalByteCount), 0), 1)
     }
 }
 

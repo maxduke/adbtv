@@ -187,14 +187,16 @@ public struct ADBDeviceConnection: Sendable {
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32 = 0,
-        installer: ADBAPKInstaller = ADBAPKInstaller()
+        installer: ADBAPKInstaller = ADBAPKInstaller(),
+        eventHandler: @escaping ADBAPKInstallEventHandler = { _ in }
     ) async throws -> ADBAPKInstallReport {
         start()
         return try await session.installAPK(
             contents: contents,
             plan: plan,
             modificationTime: modificationTime,
-            installer: installer
+            installer: installer,
+            eventHandler: eventHandler
         )
     }
 

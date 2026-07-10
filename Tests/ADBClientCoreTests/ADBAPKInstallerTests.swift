@@ -17,12 +17,17 @@ final class ADBAPKInstallerTests: XCTestCase {
             pushedEvents: transferEvents
         )
 
+        let eventRecorder = APKInstallEventRecorder()
         let report = try await ADBAPKInstaller().install(
             contents: [1, 2, 3],
             plan: plan,
             modificationTime: 123,
-            using: &session
+            using: &session,
+            eventHandler: { event in
+                await eventRecorder.record(event)
+            }
         )
+        let streamedEvents = await eventRecorder.recordedEvents()
 
         XCTAssertEqual(report.result, .success)
         XCTAssertEqual(session.commands, [
@@ -53,6 +58,7 @@ final class ADBAPKInstallerTests: XCTestCase {
             .phaseStarted(.cleanup),
             .phaseFinished(.cleanup)
         ])
+        XCTAssertEqual(streamedEvents, report.events)
     }
 
     func testInstallFailureOutputReturnsFailureReportAndStillCleansUp() async throws {
@@ -154,9 +160,28 @@ private struct RecordingAPKInstallSession: ADBAPKInstallRunningSession {
         return shellOutputs[command.rawValue] ?? ADBShellOutput(bytes: [])
     }
 
-    mutating func pushFile(contents: [UInt8], plan: ADBSyncPushPlan) async throws -> [ADBSyncPushEvent] {
+    mutating func pushFile(
+        contents: [UInt8],
+        plan: ADBSyncPushPlan,
+        eventHandler: @escaping ADBSyncPushEventHandler
+    ) async throws -> [ADBSyncPushEvent] {
         pushedContents.append(contents)
         pushedPlans.append(plan)
+        for event in pushedEvents {
+            await eventHandler(event)
+        }
         return pushedEvents
+    }
+}
+
+private actor APKInstallEventRecorder {
+    private var events: [ADBAPKInstallEvent] = []
+
+    func record(_ event: ADBAPKInstallEvent) {
+        events.append(event)
+    }
+
+    func recordedEvents() -> [ADBAPKInstallEvent] {
+        events
     }
 }

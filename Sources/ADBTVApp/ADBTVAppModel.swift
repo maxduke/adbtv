@@ -547,6 +547,7 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
     case idle
     case ready
     case running(ADBAPKInstallPhase)
+    case transferring(sentByteCount: Int, totalByteCount: Int)
     case succeeded
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 
@@ -557,8 +558,18 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
         case .phaseFinished(let phase):
             self = .running(phase)
         case .transfer(let transferEvent):
-            self = .running(.transferPackage)
-            if case .failed(let message) = transferEvent {
+            switch transferEvent {
+            case .started(_, let totalByteCount):
+                self = .transferring(sentByteCount: 0, totalByteCount: totalByteCount)
+            case .progress(let sentByteCount, let totalByteCount),
+                 .finishedSending(let sentByteCount, let totalByteCount):
+                self = .transferring(
+                    sentByteCount: sentByteCount,
+                    totalByteCount: totalByteCount
+                )
+            case .completed:
+                self = .running(.transferPackage)
+            case .failed(let message):
                 self = .failed(
                     userMessage: "APK transfer failed.",
                     diagnosticDetail: DiagnosticDetail(
@@ -584,11 +595,12 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
     }
 
     public var isRunning: Bool {
-        if case .running = self {
+        switch self {
+        case .running, .transferring:
             return true
+        case .idle, .ready, .succeeded, .failed:
+            return false
         }
-
-        return false
     }
 }
 

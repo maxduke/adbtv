@@ -229,6 +229,8 @@ public enum ADBSyncPushEvent: Equatable, Sendable {
     }
 }
 
+public typealias ADBSyncPushEventHandler = @Sendable (ADBSyncPushEvent) async -> Void
+
 public enum ADBSyncFramingError: Error, Equatable, Sendable {
     case pathPayloadTooLarge(Int)
     case dataPayloadTooLarge(Int)

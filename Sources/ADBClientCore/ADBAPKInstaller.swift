@@ -1,5 +1,15 @@
 public protocol ADBAPKInstallRunningSession: ADBShellCommandRunningSession {
-    mutating func pushFile(contents: [UInt8], plan: ADBSyncPushPlan) async throws -> [ADBSyncPushEvent]
+    mutating func pushFile(
+        contents: [UInt8],
+        plan: ADBSyncPushPlan,
+        eventHandler: @escaping ADBSyncPushEventHandler
+    ) async throws -> [ADBSyncPushEvent]
+}
+
+public extension ADBAPKInstallRunningSession {
+    mutating func pushFile(contents: [UInt8], plan: ADBSyncPushPlan) async throws -> [ADBSyncPushEvent] {
+        try await pushFile(contents: contents, plan: plan, eventHandler: { _ in })
+    }
 }
 
 extension ADBDeviceSession: ADBAPKInstallRunningSession {}
@@ -11,7 +21,8 @@ public struct ADBAPKInstaller: Sendable {
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32 = 0,
-        using session: inout Session
+        using session: inout Session,
+        eventHandler: @escaping ADBAPKInstallEventHandler = { _ in }
     ) async throws -> ADBAPKInstallReport {
         if let expectedByteCount = plan.package.byteCount, expectedByteCount != Int64(contents.count) {
             throw ADBAPKInstallExecutionError.packageByteCountMismatch(
@@ -22,11 +33,17 @@ public struct ADBAPKInstaller: Sendable {
 
         var events: [ADBAPKInstallEvent] = []
 
-        events.append(.phaseStarted(.prepareRemoteDirectory))
+        let prepareStarted = ADBAPKInstallEvent.phaseStarted(.prepareRemoteDirectory)
+        events.append(prepareStarted)
+        await eventHandler(prepareStarted)
         _ = try await session.runShellCommand(plan.prepareRemoteDirectoryShellCommand())
-        events.append(.phaseFinished(.prepareRemoteDirectory))
+        let prepareFinished = ADBAPKInstallEvent.phaseFinished(.prepareRemoteDirectory)
+        events.append(prepareFinished)
+        await eventHandler(prepareFinished)
 
-        events.append(.phaseStarted(.transferPackage))
+        let transferStarted = ADBAPKInstallEvent.phaseStarted(.transferPackage)
+        events.append(transferStarted)
+        await eventHandler(transferStarted)
         let syncPlan = try ADBSyncPushPlan(
             remotePath: plan.remoteAPKPath,
             modificationTime: modificationTime,
@@ -35,9 +52,20 @@ public struct ADBAPKInstaller: Sendable {
 
         let syncEvents: [ADBSyncPushEvent]
         do {
-            syncEvents = try await session.pushFile(contents: contents, plan: syncPlan)
+            syncEvents = try await session.pushFile(
+                contents: contents,
+                plan: syncPlan,
+                eventHandler: { event in
+                    await eventHandler(.transfer(event))
+                }
+            )
         } catch {
-            await runCleanupBestEffort(plan: plan, using: &session, events: &events)
+            await runCleanupBestEffort(
+                plan: plan,
+                using: &session,
+                events: &events,
+                eventHandler: eventHandler
+            )
             throw ADBAPKInstallExecutionError.transferCommandFailed(
                 events: events,
                 underlyingError: String(describing: error)
@@ -46,17 +74,31 @@ public struct ADBAPKInstaller: Sendable {
 
         events.append(contentsOf: syncEvents.map(ADBAPKInstallEvent.transfer))
         if let transferFailure = syncEvents.compactMap({ $0.failureMessage }).first {
-            await runCleanupBestEffort(plan: plan, using: &session, events: &events)
+            await runCleanupBestEffort(
+                plan: plan,
+                using: &session,
+                events: &events,
+                eventHandler: eventHandler
+            )
             throw ADBAPKInstallExecutionError.transferFailed(message: transferFailure, events: events)
         }
-        events.append(.phaseFinished(.transferPackage))
+        let transferFinished = ADBAPKInstallEvent.phaseFinished(.transferPackage)
+        events.append(transferFinished)
+        await eventHandler(transferFinished)
 
-        events.append(.phaseStarted(.installPackage))
+        let installStarted = ADBAPKInstallEvent.phaseStarted(.installPackage)
+        events.append(installStarted)
+        await eventHandler(installStarted)
         let installOutput: ADBShellOutput
         do {
             installOutput = try await session.runShellCommand(plan.installShellCommand())
         } catch {
-            await runCleanupBestEffort(plan: plan, using: &session, events: &events)
+            await runCleanupBestEffort(
+                plan: plan,
+                using: &session,
+                events: &events,
+                eventHandler: eventHandler
+            )
             throw ADBAPKInstallExecutionError.installCommandFailed(
                 events: events,
                 underlyingError: String(describing: error)
@@ -64,11 +106,20 @@ public struct ADBAPKInstaller: Sendable {
         }
 
         let installResult = ADBAPKInstallResult.parse(shellOutput: installOutput)
-        events.append(.installResult(installResult))
-        events.append(.phaseFinished(.installPackage))
+        let resultEvent = ADBAPKInstallEvent.installResult(installResult)
+        events.append(resultEvent)
+        await eventHandler(resultEvent)
+        let installFinished = ADBAPKInstallEvent.phaseFinished(.installPackage)
+        events.append(installFinished)
+        await eventHandler(installFinished)
 
         do {
-            try await runCleanup(plan: plan, using: &session, events: &events)
+            try await runCleanup(
+                plan: plan,
+                using: &session,
+                events: &events,
+                eventHandler: eventHandler
+            )
         } catch {
             throw ADBAPKInstallExecutionError.cleanupFailed(
                 result: installResult,
@@ -83,20 +134,31 @@ public struct ADBAPKInstaller: Sendable {
     private func runCleanup<Session: ADBAPKInstallRunningSession>(
         plan: ADBAPKInstallPlan,
         using session: inout Session,
-        events: inout [ADBAPKInstallEvent]
+        events: inout [ADBAPKInstallEvent],
+        eventHandler: @escaping ADBAPKInstallEventHandler
     ) async throws {
-        events.append(.phaseStarted(.cleanup))
+        let cleanupStarted = ADBAPKInstallEvent.phaseStarted(.cleanup)
+        events.append(cleanupStarted)
+        await eventHandler(cleanupStarted)
         _ = try await session.runShellCommand(plan.cleanupShellCommand())
-        events.append(.phaseFinished(.cleanup))
+        let cleanupFinished = ADBAPKInstallEvent.phaseFinished(.cleanup)
+        events.append(cleanupFinished)
+        await eventHandler(cleanupFinished)
     }
 
     private func runCleanupBestEffort<Session: ADBAPKInstallRunningSession>(
         plan: ADBAPKInstallPlan,
         using session: inout Session,
-        events: inout [ADBAPKInstallEvent]
+        events: inout [ADBAPKInstallEvent],
+        eventHandler: @escaping ADBAPKInstallEventHandler
     ) async {
         do {
-            try await runCleanup(plan: plan, using: &session, events: &events)
+            try await runCleanup(
+                plan: plan,
+                using: &session,
+                events: &events,
+                eventHandler: eventHandler
+            )
         } catch {}
     }
 }
@@ -106,13 +168,15 @@ public extension ADBDeviceSession {
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32 = 0,
-        installer: ADBAPKInstaller = ADBAPKInstaller()
+        installer: ADBAPKInstaller = ADBAPKInstaller(),
+        eventHandler: @escaping ADBAPKInstallEventHandler = { _ in }
     ) async throws -> ADBAPKInstallReport {
         try await installer.install(
             contents: contents,
             plan: plan,
             modificationTime: modificationTime,
-            using: &self
+            using: &self,
+            eventHandler: eventHandler
         )
     }
 }
@@ -135,6 +199,8 @@ public enum ADBAPKInstallEvent: Equatable, Sendable {
     case transfer(ADBSyncPushEvent)
     case installResult(ADBAPKInstallResult)
 }
+
+public typealias ADBAPKInstallEventHandler = @Sendable (ADBAPKInstallEvent) async -> Void
 
 public enum ADBAPKInstallExecutionError: Error, Equatable, Sendable {
     case packageByteCountMismatch(expected: Int64, actual: Int)

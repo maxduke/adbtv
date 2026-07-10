@@ -49,23 +49,33 @@ public struct ADBDeviceSession: Sendable {
         }
     }
 
-    public mutating func pushFile(contents: [UInt8], plan: ADBSyncPushPlan) async throws -> [ADBSyncPushEvent] {
+    public mutating func pushFile(
+        contents: [UInt8],
+        plan: ADBSyncPushPlan,
+        eventHandler: @escaping ADBSyncPushEventHandler = { _ in }
+    ) async throws -> [ADBSyncPushEvent] {
         let startOutput = try await transportSession.startService("sync:")
         let localID = try startOutput.startedStreamLocalID(service: "sync:")
         try await waitForStreamReady(localID: localID, service: "sync:")
 
         let encoding = try plan.encode(contents: contents)
-        var events = encoding.events
+        var events: [ADBSyncPushEvent] = []
         let maxPayloadByteCount = try streamWritePayloadByteCount()
 
-        for chunk in try encoding.encodedBytes().chunks(maxByteCount: maxPayloadByteCount) {
-            _ = try await transportSession.writeStream(localID: localID, payload: chunk)
-            try await waitForStreamWritable(localID: localID)
+        for (frame, event) in zip(encoding.frames, encoding.events) {
+            for chunk in try frame.encoded().chunks(maxByteCount: maxPayloadByteCount) {
+                _ = try await transportSession.writeStream(localID: localID, payload: chunk)
+                try await waitForStreamWritable(localID: localID)
+            }
+            events.append(event)
+            await eventHandler(event)
         }
 
         var responseDecoder = ADBSyncResponseDecoder()
         let response = try await waitForSyncResponse(localID: localID, decoder: &responseDecoder)
-        events.append(.responseEvent(response))
+        let responseEvent = ADBSyncPushEvent.responseEvent(response)
+        events.append(responseEvent)
+        await eventHandler(responseEvent)
 
         try await finishSyncStream(localID: localID)
         return events

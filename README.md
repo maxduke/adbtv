@@ -30,6 +30,7 @@ Implemented so far:
 - APK source selection from the iOS Files picker;
 - APK source entry from a direct HTTP or HTTPS URL;
 - single-APK install orchestration through the native ADB client;
+- live, acknowledged APK transfer progress with byte counts in the install UI;
 - Android TV D-pad, select, back, home, and settings remote actions;
 - user-facing operation status plus technical diagnostic details;
 - Bonjour discovery of ADB pairing and connect services;

@@ -5,13 +5,13 @@ public protocol ADBTVAPKInstallConnection: Sendable {
     mutating func installAPK(
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
-        modificationTime: UInt32
+        modificationTime: UInt32,
+        eventHandler: @escaping ADBAPKInstallEventHandler
     ) async throws -> ADBAPKInstallReport
 }
 
-#if canImport(Network)
-extension ADBDeviceConnection: ADBTVAPKInstallConnection {
-    public mutating func installAPK(
+public extension ADBTVAPKInstallConnection {
+    mutating func installAPK(
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32
@@ -20,7 +20,25 @@ extension ADBDeviceConnection: ADBTVAPKInstallConnection {
             contents: contents,
             plan: plan,
             modificationTime: modificationTime,
-            installer: ADBAPKInstaller()
+            eventHandler: { _ in }
+        )
+    }
+}
+
+#if canImport(Network)
+extension ADBDeviceConnection: ADBTVAPKInstallConnection {
+    public mutating func installAPK(
+        contents: [UInt8],
+        plan: ADBAPKInstallPlan,
+        modificationTime: UInt32,
+        eventHandler: @escaping ADBAPKInstallEventHandler
+    ) async throws -> ADBAPKInstallReport {
+        try await installAPK(
+            contents: contents,
+            plan: plan,
+            modificationTime: modificationTime,
+            installer: ADBAPKInstaller(),
+            eventHandler: eventHandler
         )
     }
 }
@@ -49,7 +67,8 @@ public struct ADBTVInstallOperation: Sendable {
 
     public func installSelectedPackage<Connection: ADBTVAPKInstallConnection>(
         from model: ADBTVAppModel,
-        using connection: inout Connection
+        using connection: inout Connection,
+        eventHandler: @escaping ADBAPKInstallEventHandler = { _ in }
     ) async throws -> ADBAPKInstallReport {
         guard model.selectedDevice != nil else {
             throw ADBTVInstallOperationError.missingDevice
@@ -59,7 +78,8 @@ public struct ADBTVInstallOperation: Sendable {
         return try await connection.installAPK(
             contents: payload.contents,
             plan: payload.plan,
-            modificationTime: modificationTime()
+            modificationTime: modificationTime(),
+            eventHandler: eventHandler
         )
     }
 

@@ -21,8 +21,16 @@ final class ADBTVInstallOperationTests: XCTestCase {
             },
             modificationTime: { 123 }
         )
+        let eventRecorder = InstallOperationEventRecorder()
 
-        let report = try await operation.installSelectedPackage(from: model, using: &connection)
+        let report = try await operation.installSelectedPackage(
+            from: model,
+            using: &connection,
+            eventHandler: { event in
+                await eventRecorder.record(event)
+            }
+        )
+        let streamedEvents = await eventRecorder.recordedEvents()
 
         XCTAssertEqual(report.result, .success)
         XCTAssertEqual(connection.installedContents, [[1, 2, 3]])
@@ -30,6 +38,7 @@ final class ADBTVInstallOperationTests: XCTestCase {
             "/data/local/tmp/adbtv/app.apk"
         ])
         XCTAssertEqual(connection.modificationTimes, [123])
+        XCTAssertEqual(streamedEvents, [.installResult(.success)])
     }
 
     func testInstallSelectedPackageDownloadsURLAndCallsConnection() async throws {
@@ -117,14 +126,27 @@ private struct RecordingInstallConnection: ADBTVAPKInstallConnection {
     mutating func installAPK(
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
-        modificationTime: UInt32
+        modificationTime: UInt32,
+        eventHandler: @escaping ADBAPKInstallEventHandler
     ) async throws -> ADBAPKInstallReport {
         installedContents.append(contents)
         installedPlans.append(plan)
         modificationTimes.append(modificationTime)
-        return ADBAPKInstallReport(plan: plan, result: result, events: [
-            .installResult(result)
-        ])
+        let event = ADBAPKInstallEvent.installResult(result)
+        await eventHandler(event)
+        return ADBAPKInstallReport(plan: plan, result: result, events: [event])
+    }
+}
+
+private actor InstallOperationEventRecorder {
+    private var events: [ADBAPKInstallEvent] = []
+
+    func record(_ event: ADBAPKInstallEvent) {
+        events.append(event)
+    }
+
+    func recordedEvents() -> [ADBAPKInstallEvent] {
+        events
     }
 }
 

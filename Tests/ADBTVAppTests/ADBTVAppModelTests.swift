@@ -241,11 +241,27 @@ final class ADBTVAppModelTests: XCTestCase {
         ))
     }
 
-    func testInstallEventsUpdatePresentationStatus() {
+    func testInstallEventsUpdatePresentationStatus() throws {
         var model = ADBTVAppModel()
 
         model.recordInstallEvent(.phaseStarted(.transferPackage))
         XCTAssertEqual(model.installDraft.status, .running(.transferPackage))
+
+        model.recordInstallEvent(.transfer(.started(
+            remotePath: try ADBRemotePath("/data/local/tmp/adbtv/app.apk"),
+            totalByteCount: 100
+        )))
+        XCTAssertEqual(
+            model.installDraft.status,
+            .transferring(sentByteCount: 0, totalByteCount: 100)
+        )
+        XCTAssertTrue(model.installDraft.status.isRunning)
+
+        model.recordInstallEvent(.transfer(.progress(sentByteCount: 64, totalByteCount: 100)))
+        XCTAssertEqual(
+            model.installDraft.status,
+            .transferring(sentByteCount: 64, totalByteCount: 100)
+        )
 
         model.recordInstallEvent(.transfer(.failed(message: "remote rejected write")))
         XCTAssertEqual(model.installDraft.status, .failed(

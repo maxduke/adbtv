@@ -130,11 +130,14 @@ final class ADBDeviceSessionTests: XCTestCase {
             totalByteCount: 3
         )
         let contents: [UInt8] = [1, 2, 3]
-        let syncBytes = try plan.encode(contents: contents).encodedBytes()
+        let encoding = try plan.encode(contents: contents)
+        let syncBytes = try encoding.encodedBytes()
         let maxData: UInt32 = 12
-        let syncWriteChunks = syncBytes.chunks(maxByteCount: Int(maxData))
+        let syncWriteChunkCount = try encoding.frames.reduce(into: 0) { count, frame in
+            count += try frame.encoded().chunks(maxByteCount: Int(maxData)).count
+        }
         let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
-            writeChunkCount: syncWriteChunks.count,
+            writeChunkCount: syncWriteChunkCount,
             responsePayload: ADBSyncFrame(id: .okay, value: 0).encoded()
         ))
         var session = ADBDeviceSession(
@@ -142,7 +145,15 @@ final class ADBDeviceSessionTests: XCTestCase {
             transport: transport
         )
 
-        let events = try await session.pushFile(contents: contents, plan: plan)
+        let eventRecorder = SyncPushEventRecorder()
+        let events = try await session.pushFile(
+            contents: contents,
+            plan: plan,
+            eventHandler: { event in
+                await eventRecorder.record(event)
+            }
+        )
+        let streamedEvents = await eventRecorder.recordedEvents()
         let sentChunks = await transport.sentChunks()
         let sentPackets = try sentChunks.map { try $0.decodedPacket() }
         let writePackets = sentPackets.filter { $0.command == .write }
@@ -154,6 +165,7 @@ final class ADBDeviceSessionTests: XCTestCase {
             .finishedSending(sentByteCount: 3, totalByteCount: 3),
             .completed
         ])
+        XCTAssertEqual(streamedEvents, events)
         XCTAssertEqual(sentPackets.first, ADBPacket(
             command: .open,
             arg0: 1,
@@ -169,11 +181,14 @@ final class ADBDeviceSessionTests: XCTestCase {
     func testPushFileReturnsFailedEventFromSyncFailResponse() async throws {
         let remotePath = try ADBRemotePath("/data/local/tmp/adbtv/app.apk")
         let plan = try ADBSyncPushPlan(remotePath: remotePath, totalByteCount: 0)
-        let syncBytes = try plan.encode(contents: []).encodedBytes()
+        let encoding = try plan.encode(contents: [])
         let maxData: UInt32 = 16
         let failMessage = Array("permission denied".utf8)
+        let syncWriteChunkCount = try encoding.frames.reduce(into: 0) { count, frame in
+            count += try frame.encoded().chunks(maxByteCount: Int(maxData)).count
+        }
         let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
-            writeChunkCount: syncBytes.chunks(maxByteCount: Int(maxData)).count,
+            writeChunkCount: syncWriteChunkCount,
             responsePayload: ADBSyncFrame(id: .fail, value: UInt32(failMessage.count), payload: failMessage).encoded()
         ))
         var session = ADBDeviceSession(
@@ -238,6 +253,18 @@ final class ADBDeviceSessionTests: XCTestCase {
             try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
         )
         return chunks
+    }
+}
+
+private actor SyncPushEventRecorder {
+    private var events: [ADBSyncPushEvent] = []
+
+    func record(_ event: ADBSyncPushEvent) {
+        events.append(event)
+    }
+
+    func recordedEvents() -> [ADBSyncPushEvent] {
+        events
     }
 }
 
