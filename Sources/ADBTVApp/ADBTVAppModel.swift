@@ -9,6 +9,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
     public var discoveryStatus: ADBTVDiscoveryStatus
     public var discoveredServices: [ADBDiscoveredService]
     public var pairingDraft: ADBTVPairingDraft
+    public var pairingStatus: ADBTVPairingStatus
 
     public init(
         devices: [ADBTVDeviceSummary] = [],
@@ -17,7 +18,8 @@ public struct ADBTVAppModel: Equatable, Sendable {
         remoteStatus: ADBTVRemoteStatus = .idle,
         discoveryStatus: ADBTVDiscoveryStatus = .idle,
         discoveredServices: [ADBDiscoveredService] = [],
-        pairingDraft: ADBTVPairingDraft = ADBTVPairingDraft()
+        pairingDraft: ADBTVPairingDraft = ADBTVPairingDraft(),
+        pairingStatus: ADBTVPairingStatus = .idle
     ) {
         self.devices = devices
         self.selectedDeviceID = selectedDeviceID ?? devices.first?.id
@@ -26,6 +28,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
         self.discoveryStatus = discoveryStatus
         self.discoveredServices = discoveredServices.sortedForPresentation()
         self.pairingDraft = pairingDraft
+        self.pairingStatus = pairingStatus
     }
 
     public var selectedDevice: ADBTVDeviceSummary? {
@@ -140,6 +143,19 @@ public struct ADBTVAppModel: Equatable, Sendable {
 
     public mutating func setPairingQRCodePayload(_ value: String) {
         pairingDraft.qrPayload = value
+    }
+
+    public mutating func startPairing(source: ADBTVPairingSource, target: String) {
+        pairingStatus = .pairing(source: source, target: target)
+    }
+
+    public mutating func finishPairing(device: ADBTVDeviceSummary) {
+        pairingStatus = .paired(device)
+        addDevice(device)
+    }
+
+    public mutating func failPairing(userMessage: String, diagnosticDetail: DiagnosticDetail) {
+        pairingStatus = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
     }
 }
 
@@ -334,6 +350,26 @@ public enum ADBTVDiscoveryStatus: Equatable, Sendable {
 
     public var isBrowsing: Bool {
         if case .browsing = self {
+            return true
+        }
+
+        return false
+    }
+}
+
+public enum ADBTVPairingSource: Equatable, Sendable {
+    case manualCode
+    case qrCode
+}
+
+public enum ADBTVPairingStatus: Equatable, Sendable {
+    case idle
+    case pairing(source: ADBTVPairingSource, target: String)
+    case paired(ADBTVDeviceSummary)
+    case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
+
+    public var isPairing: Bool {
+        if case .pairing = self {
             return true
         }
 

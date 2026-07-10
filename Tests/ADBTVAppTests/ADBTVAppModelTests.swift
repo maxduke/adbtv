@@ -268,4 +268,39 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertFalse(model.pairingDraft.canStartManualPairing)
         XCTAssertFalse(model.pairingDraft.canStartQRPairing)
     }
+
+    func testPairingStatusTracksStartSuccessAndSelectedDevice() {
+        var model = ADBTVAppModel()
+        let device = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
+
+        model.startPairing(source: .manualCode, target: "192.168.1.50:37123")
+
+        XCTAssertEqual(model.pairingStatus, .pairing(source: .manualCode, target: "192.168.1.50:37123"))
+        XCTAssertTrue(model.pairingStatus.isPairing)
+
+        model.finishPairing(device: device)
+
+        XCTAssertEqual(model.pairingStatus, .paired(device))
+        XCTAssertEqual(model.devices, [device])
+        XCTAssertEqual(model.selectedDevice, device)
+    }
+
+    func testPairingFailureStoresUserAndDiagnosticDetails() {
+        var model = ADBTVAppModel()
+        let diagnosticDetail = DiagnosticDetail(
+            summary: "SPAKE2 authentication failed",
+            context: ["operation": "pairDevice"]
+        )
+
+        model.failPairing(
+            userMessage: "Could not pair with this Android TV.",
+            diagnosticDetail: diagnosticDetail
+        )
+
+        XCTAssertEqual(model.pairingStatus, .failed(
+            userMessage: "Could not pair with this Android TV.",
+            diagnosticDetail: diagnosticDetail
+        ))
+        XCTAssertFalse(model.pairingStatus.isPairing)
+    }
 }
