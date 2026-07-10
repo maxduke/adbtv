@@ -15,6 +15,7 @@ enum {
     ADB_PAIRING_CRYPTO_MESSAGE_BYTE_COUNT = 32,
     ADB_PAIRING_CRYPTO_KEY_MATERIAL_BYTE_COUNT = 64,
     ADB_PAIRING_CRYPTO_MAX_CERTIFICATE_BYTE_COUNT = 4096,
+    ADB_PAIRING_CRYPTO_MAX_PKCS12_BYTE_COUNT = 8192,
 };
 
 ADBPairingCryptoContext *adb_pairing_crypto_client_create(
@@ -45,6 +46,15 @@ bool adb_pairing_crypto_generate_certificate(
     uint8_t *output_certificate_der,
     size_t output_capacity,
     size_t *output_certificate_der_length
+);
+
+bool adb_pairing_crypto_generate_pkcs12(
+    const uint8_t *rsa_private_key_der,
+    size_t rsa_private_key_der_length,
+    const char *password,
+    uint8_t *output_pkcs12_der,
+    size_t output_capacity,
+    size_t *output_pkcs12_der_length
 );
 
 void adb_pairing_crypto_destroy(ADBPairingCryptoContext *context);

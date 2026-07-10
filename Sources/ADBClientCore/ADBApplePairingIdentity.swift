@@ -6,10 +6,16 @@ import Security
 public struct ADBApplePairingIdentity: @unchecked Sendable {
     public let material: ADBPairingIdentityMaterial
     let securityIdentity: sec_identity_t
+    let appleIdentity: SecIdentity
 
-    init(material: ADBPairingIdentityMaterial, securityIdentity: sec_identity_t) {
+    init(
+        material: ADBPairingIdentityMaterial,
+        securityIdentity: sec_identity_t,
+        appleIdentity: SecIdentity
+    ) {
         self.material = material
         self.securityIdentity = securityIdentity
+        self.appleIdentity = appleIdentity
     }
 }
 
@@ -21,11 +27,7 @@ public extension ADBAppleAuthenticationIdentity {
         guard let certificate = SecCertificateCreateWithData(nil, Data(certificateDER) as CFData) else {
             throw ADBApplePairingIdentityError.invalidGeneratedCertificate
         }
-        var identity: SecIdentity?
-        let identityStatus = SecIdentityCreateWithCertificate(nil, certificate, &identity)
-        guard identityStatus == errSecSuccess, let identity else {
-            throw ADBApplePairingIdentityError.identityCreationFailed(identityStatus)
-        }
+        let identity = try Self.importIdentity(privateKeyDER: privateKeyDER)
         guard let networkIdentity = sec_identity_create(identity) else {
             throw ADBApplePairingIdentityError.networkIdentityCreationFailed
         }
@@ -37,8 +39,58 @@ public extension ADBAppleAuthenticationIdentity {
         )
         return ADBApplePairingIdentity(
             material: material,
-            securityIdentity: networkIdentity
+            securityIdentity: networkIdentity,
+            appleIdentity: identity
         )
+    }
+
+    private static let pkcs12Password = "adbtv-ephemeral-pkcs12"
+
+    private static func importIdentity(privateKeyDER: [UInt8]) throws -> SecIdentity {
+        let pkcs12DER = try generatePKCS12(privateKeyDER: privateKeyDER)
+        let options = [kSecImportExportPassphrase as String: pkcs12Password]
+        var importedItems: CFArray?
+        let status = SecPKCS12Import(
+            Data(pkcs12DER) as CFData,
+            options as CFDictionary,
+            &importedItems
+        )
+        guard status == errSecSuccess,
+              let items = importedItems as? [[String: Any]],
+              let identity = items.first?[kSecImportItemIdentity as String] as? SecIdentity else {
+            throw ADBApplePairingIdentityError.identityImportFailed(status)
+        }
+
+        return identity
+    }
+
+    private static func generatePKCS12(privateKeyDER: [UInt8]) throws -> [UInt8] {
+        var pkcs12DER = [UInt8](
+            repeating: 0,
+            count: Int(ADB_PAIRING_CRYPTO_MAX_PKCS12_BYTE_COUNT)
+        )
+        let pkcs12Capacity = pkcs12DER.count
+        var pkcs12ByteCount = 0
+
+        let generated = privateKeyDER.withUnsafeBytes { privateKeyBuffer in
+            pkcs12DER.withUnsafeMutableBytes { pkcs12Buffer in
+                pkcs12Password.withCString { password in
+                    adb_pairing_crypto_generate_pkcs12(
+                        privateKeyBuffer.bindMemory(to: UInt8.self).baseAddress,
+                        privateKeyDER.count,
+                        password,
+                        pkcs12Buffer.bindMemory(to: UInt8.self).baseAddress,
+                        pkcs12Capacity,
+                        &pkcs12ByteCount
+                    )
+                }
+            }
+        }
+        guard generated, pkcs12ByteCount > 0 else {
+            throw ADBApplePairingIdentityError.pkcs12GenerationFailed
+        }
+
+        return Array(pkcs12DER.prefix(pkcs12ByteCount))
     }
 
     private static func generateCertificate(privateKeyDER: [UInt8]) throws -> [UInt8] {
@@ -85,8 +137,9 @@ public extension ADBAppleAuthenticationIdentity {
 
 public enum ADBApplePairingIdentityError: Error, Equatable, Sendable {
     case certificateGenerationFailed
+    case pkcs12GenerationFailed
     case invalidGeneratedCertificate
-    case identityCreationFailed(OSStatus)
+    case identityImportFailed(OSStatus)
     case networkIdentityCreationFailed
 }
 #endif

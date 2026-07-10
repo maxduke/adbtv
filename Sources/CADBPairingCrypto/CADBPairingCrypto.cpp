@@ -3,6 +3,7 @@
 #include <openssl/curve25519.h>
 #include <openssl/evp.h>
 #include <openssl/obj.h>
+#include <openssl/pkcs8.h>
 #include <openssl/rsa.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
@@ -260,6 +261,83 @@ bool adb_pairing_crypto_generate_certificate(
     }
 
     *output_certificate_der_length = static_cast<size_t>(encoded_length);
+    return true;
+}
+
+bool adb_pairing_crypto_generate_pkcs12(
+    const uint8_t *rsa_private_key_der,
+    size_t rsa_private_key_der_length,
+    const char *password,
+    uint8_t *output_pkcs12_der,
+    size_t output_capacity,
+    size_t *output_pkcs12_der_length
+) {
+    if (rsa_private_key_der == nullptr || rsa_private_key_der_length == 0 || password == nullptr ||
+        output_pkcs12_der == nullptr || output_pkcs12_der_length == nullptr) {
+        return false;
+    }
+    *output_pkcs12_der_length = 0;
+
+    uint8_t certificate_der[ADB_PAIRING_CRYPTO_MAX_CERTIFICATE_BYTE_COUNT];
+    size_t certificate_der_length = 0;
+    if (!adb_pairing_crypto_generate_certificate(
+            rsa_private_key_der,
+            rsa_private_key_der_length,
+            certificate_der,
+            sizeof(certificate_der),
+            &certificate_der_length
+        )) {
+        return false;
+    }
+
+    const uint8_t *certificate_cursor = certificate_der;
+    X509 *certificate = d2i_X509(
+        nullptr,
+        &certificate_cursor,
+        static_cast<long>(certificate_der_length)
+    );
+    RSA *rsa = RSA_private_key_from_bytes(rsa_private_key_der, rsa_private_key_der_length);
+    EVP_PKEY *key = EVP_PKEY_new();
+    if (certificate == nullptr || rsa == nullptr || key == nullptr || EVP_PKEY_set1_RSA(key, rsa) != 1) {
+        X509_free(certificate);
+        RSA_free(rsa);
+        EVP_PKEY_free(key);
+        return false;
+    }
+    RSA_free(rsa);
+
+    PKCS12 *pkcs12 = PKCS12_create(
+        password,
+        "ADB TV",
+        key,
+        certificate,
+        nullptr,
+        NID_aes_256_cbc,
+        NID_aes_256_cbc,
+        PKCS12_DEFAULT_ITER,
+        PKCS12_DEFAULT_ITER,
+        0
+    );
+    X509_free(certificate);
+    EVP_PKEY_free(key);
+    if (pkcs12 == nullptr) {
+        return false;
+    }
+
+    int encoded_length = i2d_PKCS12(pkcs12, nullptr);
+    bool can_encode = encoded_length > 0
+        && static_cast<size_t>(encoded_length) <= output_capacity;
+    if (can_encode) {
+        uint8_t *cursor = output_pkcs12_der;
+        can_encode = i2d_PKCS12(pkcs12, &cursor) == encoded_length;
+    }
+    PKCS12_free(pkcs12);
+
+    if (!can_encode) {
+        return false;
+    }
+
+    *output_pkcs12_der_length = static_cast<size_t>(encoded_length);
     return true;
 }
 

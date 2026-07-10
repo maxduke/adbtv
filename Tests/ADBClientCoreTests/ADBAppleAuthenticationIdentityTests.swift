@@ -16,14 +16,10 @@ final class ADBAppleAuthenticationIdentityTests: XCTestCase {
     }
 
     func testAuthenticationIdentityCreatesMatchingTLSIdentityAndPairingMaterial() throws {
-        let applicationTag = "com.adbtv.tests.identity.\(UUID().uuidString)"
-        defer { deleteKey(applicationTag: applicationTag) }
-        let store = ADBAppleAuthenticationIdentityStore(
-            applicationTag: applicationTag,
-            publicKeyComment: "tester@adbtv",
-            synchronizable: false
+        let authenticationIdentity = ADBAppleAuthenticationIdentity(
+            privateKey: try makePrivateKey(),
+            publicKeyComment: "tester@adbtv"
         )
-        let authenticationIdentity = try store.createIdentity()
 
         let pairingIdentity = try authenticationIdentity.pairingIdentity()
         XCTAssertEqual(
@@ -42,7 +38,7 @@ final class ADBAppleAuthenticationIdentityTests: XCTestCase {
         var recoveredPrivateKey: SecKey?
         XCTAssertEqual(
             SecIdentityCopyPrivateKey(
-                sec_identity_copy_ref(pairingIdentity.securityIdentity),
+                pairingIdentity.appleIdentity,
                 &recoveredPrivateKey
             ),
             errSecSuccess
@@ -50,13 +46,16 @@ final class ADBAppleAuthenticationIdentityTests: XCTestCase {
         XCTAssertNotNil(recoveredPrivateKey)
     }
 
-    private func deleteKey(applicationTag: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassKey,
+    private func makePrivateKey() throws -> SecKey {
+        let attributes: [String: Any] = [
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrApplicationTag as String: Data(applicationTag.utf8)
+            kSecAttrKeySizeInBits as String: 2048
         ]
-        SecItemDelete(query as CFDictionary)
+        var error: Unmanaged<CFError>?
+        guard let key = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
+            throw error!.takeRetainedValue()
+        }
+        return key
     }
 }
 #endif
