@@ -35,12 +35,14 @@ Implemented so far:
 - Bonjour discovery of ADB pairing and connect services;
 - AOSP-compatible TLS 1.3, TLS exporter, SPAKE2, and encrypted peer-info pairing stack;
 - self-signed TLS identity generation from the synchronized ADB RSA key;
+- manual Pairing Code app flow with separate pairing and connection ports, cancellation, diagnostics, and saved-device handoff;
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - unsigned IPA packaging in GitHub Actions.
 
 Still in progress:
 
-- app-facing discovery selection, Pairing Code entry, and saved-device handoff;
+- app-facing Bonjour service selection and automatic endpoint resolution;
+- authenticated TLS reconnect through `_adb-tls-connect._tcp`;
 - real-device validation of pairing, reconnect, remote actions, and APK install;
 - QR camera scanning and app flow; QR payload parsing is implemented;
 - text input, volume, and power remote controls.
