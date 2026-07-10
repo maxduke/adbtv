@@ -54,7 +54,9 @@ static ADBPairingCryptoContext *create_context(
             return NULL;
     }
 
-    ADBPairingCryptoContext *context = calloc(1, sizeof(ADBPairingCryptoContext));
+    ADBPairingCryptoContext *context = static_cast<ADBPairingCryptoContext *>(
+        calloc(1, sizeof(ADBPairingCryptoContext))
+    );
     if (context == NULL) {
         return NULL;
     }

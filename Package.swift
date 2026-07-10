@@ -47,5 +47,6 @@ let package = Package(
             name: "ADBTVAppTests",
             dependencies: ["ADBTVApp"]
         )
-    ]
+    ],
+    cxxLanguageStandard: .cxx17
 )
