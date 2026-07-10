@@ -3,13 +3,17 @@
 #include <openssl/curve25519.h>
 #include <openssl/evp.h>
 #include <openssl/obj.h>
+#include <openssl/pem.h>
 #include <openssl/pkcs8.h>
 #include <openssl/rsa.h>
+#include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
 #include <stdlib.h>
 #include <string.h>
+
+#include <limits.h>
 
 #include <vector>
 
@@ -18,6 +22,14 @@ struct ADBPairingCryptoContext {
     uint8_t message[ADB_PAIRING_CRYPTO_MESSAGE_BYTE_COUNT];
     size_t message_length;
     bool did_process_message;
+};
+
+struct ADBTLSContext {
+    SSL_CTX *ssl_context;
+    SSL *ssl;
+    BIO *encrypted_input;
+    BIO *encrypted_output;
+    bool handshake_complete;
 };
 
 typedef enum {
@@ -51,6 +63,34 @@ static bool add_certificate_extension(X509 *certificate, int identifier, const c
     int result = X509_add_ext(certificate, extension, -1);
     X509_EXTENSION_free(extension);
     return result == 1;
+}
+
+static int accept_peer_certificate(int, X509_STORE_CTX *) {
+    return 1;
+}
+
+static int select_configured_certificate(SSL *, void *) {
+    return 1;
+}
+
+static ADBTLSResult classify_tls_result(ADBTLSContext *context, int result) {
+    if (context == nullptr || context->ssl == nullptr) {
+        return ADB_TLS_RESULT_ERROR;
+    }
+    if (result > 0) {
+        return ADB_TLS_RESULT_COMPLETE;
+    }
+
+    switch (SSL_get_error(context->ssl, result)) {
+        case SSL_ERROR_WANT_READ:
+            return ADB_TLS_RESULT_WANT_READ;
+        case SSL_ERROR_WANT_WRITE:
+            return ADB_TLS_RESULT_WANT_WRITE;
+        case SSL_ERROR_ZERO_RETURN:
+            return ADB_TLS_RESULT_CLOSED;
+        default:
+            return ADB_TLS_RESULT_ERROR;
+    }
 }
 
 static ADBPairingCryptoContext *create_context(
@@ -339,6 +379,240 @@ bool adb_pairing_crypto_generate_pkcs12(
 
     *output_pkcs12_der_length = static_cast<size_t>(encoded_length);
     return true;
+}
+
+ADBTLSContext *adb_tls_create(
+    ADBTLSRole role,
+    const uint8_t *certificate_pem,
+    size_t certificate_pem_length,
+    const uint8_t *private_key_pem,
+    size_t private_key_pem_length
+) {
+    if ((role != ADB_TLS_ROLE_CLIENT && role != ADB_TLS_ROLE_SERVER) ||
+        certificate_pem == nullptr || certificate_pem_length == 0 ||
+        certificate_pem_length > INT_MAX || private_key_pem == nullptr ||
+        private_key_pem_length == 0 || private_key_pem_length > INT_MAX) {
+        return nullptr;
+    }
+
+    BIO *certificate_bio = BIO_new_mem_buf(
+        certificate_pem,
+        static_cast<int>(certificate_pem_length)
+    );
+    BIO *private_key_bio = BIO_new_mem_buf(
+        private_key_pem,
+        static_cast<int>(private_key_pem_length)
+    );
+    X509 *certificate = certificate_bio == nullptr
+        ? nullptr
+        : PEM_read_bio_X509(certificate_bio, nullptr, nullptr, nullptr);
+    EVP_PKEY *private_key = private_key_bio == nullptr
+        ? nullptr
+        : PEM_read_bio_PrivateKey(private_key_bio, nullptr, nullptr, nullptr);
+    BIO_free(certificate_bio);
+    BIO_free(private_key_bio);
+    if (certificate == nullptr || private_key == nullptr) {
+        X509_free(certificate);
+        EVP_PKEY_free(private_key);
+        return nullptr;
+    }
+
+    SSL_CTX *ssl_context = SSL_CTX_new(TLS_method());
+    bool configured = ssl_context != nullptr
+        && SSL_CTX_set_min_proto_version(ssl_context, TLS1_3_VERSION) == 1
+        && SSL_CTX_set_max_proto_version(ssl_context, TLS1_3_VERSION) == 1
+        && SSL_CTX_use_certificate(ssl_context, certificate) == 1
+        && SSL_CTX_use_PrivateKey(ssl_context, private_key) == 1
+        && SSL_CTX_check_private_key(ssl_context) == 1;
+    X509_free(certificate);
+    EVP_PKEY_free(private_key);
+    if (!configured) {
+        SSL_CTX_free(ssl_context);
+        return nullptr;
+    }
+
+    if (role == ADB_TLS_ROLE_SERVER) {
+        SSL_CTX_set_verify(
+            ssl_context,
+            SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT,
+            accept_peer_certificate
+        );
+    } else {
+        SSL_CTX_set_verify(ssl_context, SSL_VERIFY_NONE, nullptr);
+        SSL_CTX_set_cert_cb(ssl_context, select_configured_certificate, nullptr);
+    }
+
+    SSL *ssl = SSL_new(ssl_context);
+    BIO *encrypted_input = BIO_new(BIO_s_mem());
+    BIO *encrypted_output = BIO_new(BIO_s_mem());
+    if (ssl == nullptr || encrypted_input == nullptr || encrypted_output == nullptr) {
+        SSL_free(ssl);
+        BIO_free(encrypted_input);
+        BIO_free(encrypted_output);
+        SSL_CTX_free(ssl_context);
+        return nullptr;
+    }
+    BIO_set_mem_eof_return(encrypted_input, -1);
+    BIO_set_mem_eof_return(encrypted_output, -1);
+    SSL_set_bio(ssl, encrypted_input, encrypted_output);
+    if (role == ADB_TLS_ROLE_SERVER) {
+        SSL_set_accept_state(ssl);
+    } else {
+        SSL_set_connect_state(ssl);
+    }
+
+    ADBTLSContext *context = static_cast<ADBTLSContext *>(calloc(1, sizeof(ADBTLSContext)));
+    if (context == nullptr) {
+        SSL_free(ssl);
+        SSL_CTX_free(ssl_context);
+        return nullptr;
+    }
+    context->ssl_context = ssl_context;
+    context->ssl = ssl;
+    context->encrypted_input = encrypted_input;
+    context->encrypted_output = encrypted_output;
+    return context;
+}
+
+ADBTLSResult adb_tls_handshake(ADBTLSContext *context) {
+    if (context == nullptr || context->ssl == nullptr) {
+        return ADB_TLS_RESULT_ERROR;
+    }
+    if (context->handshake_complete) {
+        return ADB_TLS_RESULT_COMPLETE;
+    }
+
+    int result = SSL_do_handshake(context->ssl);
+    ADBTLSResult classified = classify_tls_result(context, result);
+    if (classified == ADB_TLS_RESULT_COMPLETE) {
+        context->handshake_complete = true;
+    }
+    return classified;
+}
+
+bool adb_tls_provide_encrypted_input(
+    ADBTLSContext *context,
+    const uint8_t *bytes,
+    size_t byte_count
+) {
+    if (context == nullptr || context->encrypted_input == nullptr ||
+        (bytes == nullptr && byte_count > 0) || byte_count > INT_MAX) {
+        return false;
+    }
+
+    size_t offset = 0;
+    while (offset < byte_count) {
+        int written = BIO_write(
+            context->encrypted_input,
+            bytes + offset,
+            static_cast<int>(byte_count - offset)
+        );
+        if (written <= 0) {
+            return false;
+        }
+        offset += static_cast<size_t>(written);
+    }
+    return true;
+}
+
+size_t adb_tls_pending_encrypted_output(const ADBTLSContext *context) {
+    if (context == nullptr || context->encrypted_output == nullptr) {
+        return 0;
+    }
+
+    return BIO_ctrl_pending(context->encrypted_output);
+}
+
+bool adb_tls_copy_encrypted_output(
+    ADBTLSContext *context,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *output_byte_count
+) {
+    if (context == nullptr || context->encrypted_output == nullptr || output == nullptr ||
+        output_byte_count == nullptr || output_capacity > INT_MAX) {
+        return false;
+    }
+    *output_byte_count = 0;
+
+    size_t pending = adb_tls_pending_encrypted_output(context);
+    if (pending == 0) {
+        return true;
+    }
+    if (pending > output_capacity || pending > INT_MAX) {
+        return false;
+    }
+
+    int read = BIO_read(context->encrypted_output, output, static_cast<int>(pending));
+    if (read <= 0 || static_cast<size_t>(read) != pending) {
+        return false;
+    }
+    *output_byte_count = static_cast<size_t>(read);
+    return true;
+}
+
+ADBTLSResult adb_tls_write_plaintext(
+    ADBTLSContext *context,
+    const uint8_t *bytes,
+    size_t byte_count,
+    size_t *consumed_byte_count
+) {
+    if (context == nullptr || context->ssl == nullptr || !context->handshake_complete ||
+        bytes == nullptr || byte_count == 0 || byte_count > INT_MAX ||
+        consumed_byte_count == nullptr) {
+        return ADB_TLS_RESULT_ERROR;
+    }
+    *consumed_byte_count = 0;
+
+    int result = SSL_write(context->ssl, bytes, static_cast<int>(byte_count));
+    if (result > 0) {
+        *consumed_byte_count = static_cast<size_t>(result);
+    }
+    return classify_tls_result(context, result);
+}
+
+ADBTLSResult adb_tls_read_plaintext(
+    ADBTLSContext *context,
+    uint8_t *output,
+    size_t output_capacity,
+    size_t *output_byte_count
+) {
+    if (context == nullptr || context->ssl == nullptr || !context->handshake_complete ||
+        output == nullptr || output_capacity == 0 || output_capacity > INT_MAX ||
+        output_byte_count == nullptr) {
+        return ADB_TLS_RESULT_ERROR;
+    }
+    *output_byte_count = 0;
+
+    int result = SSL_read(context->ssl, output, static_cast<int>(output_capacity));
+    if (result > 0) {
+        *output_byte_count = static_cast<size_t>(result);
+    }
+    return classify_tls_result(context, result);
+}
+
+bool adb_tls_has_peer_certificate(const ADBTLSContext *context) {
+    if (context == nullptr || context->ssl == nullptr || !context->handshake_complete) {
+        return false;
+    }
+
+    X509 *certificate = SSL_get_peer_certificate(context->ssl);
+    if (certificate == nullptr) {
+        return false;
+    }
+    X509_free(certificate);
+    return true;
+}
+
+void adb_tls_destroy(ADBTLSContext *context) {
+    if (context == nullptr) {
+        return;
+    }
+
+    SSL_free(context->ssl);
+    SSL_CTX_free(context->ssl_context);
+    memset(context, 0, sizeof(ADBTLSContext));
+    free(context);
 }
 
 void adb_pairing_crypto_destroy(ADBPairingCryptoContext *context) {
