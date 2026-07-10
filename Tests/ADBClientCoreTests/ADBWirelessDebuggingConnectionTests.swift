@@ -44,6 +44,44 @@ final class ADBWirelessDebuggingConnectionTests: XCTestCase {
         )
     }
 
+    func testLoopbackLegacyAuthenticationConnectionRunsShellCommand() async throws {
+        let queue = DispatchQueue(label: "ADBWirelessDebuggingConnectionTests.legacyAuthentication")
+        let (listener, acceptedTransports, port) = try await makeListener(queue: queue)
+        defer { listener.cancel() }
+
+        async let serverResult = runLegacyAuthenticationServer(
+            acceptedTransports: acceptedTransports
+        )
+        var connection = try await ADBDeviceConnection.connectedToWirelessDebugging(
+            target: .hostPort(ADBNetworkEndpoint(host: "127.0.0.1", port: port)),
+            authenticationIdentity: makeAuthenticationIdentity(),
+            queue: queue
+        )
+        defer { connection.cancel() }
+
+        let connectedDevice = try await connection.connect()
+        XCTAssertEqual(connectedDevice.banner, "device::ro.product.model=Legacy TV")
+        let output = try await connection.runShellCommand(
+            try ADBShellCommand("getprop ro.product.model")
+        )
+        let observed = try await serverResult
+
+        XCTAssertEqual(output.utf8String, "Legacy TV\n")
+        XCTAssertEqual(observed.signature.command, .auth)
+        XCTAssertEqual(observed.signature.arg0, ADBAuthenticationType.signature.rawValue)
+        XCTAssertEqual(observed.signature.payload.count, 256)
+        XCTAssertEqual(observed.publicKey.command, .auth)
+        XCTAssertEqual(observed.publicKey.arg0, ADBAuthenticationType.rsaPublicKey.rawValue)
+        XCTAssertEqual(observed.publicKey.payload.last, 0)
+        XCTAssertFalse(
+            ADBPayload.stringFromNullTerminatedUTF8(observed.publicKey.payload).isEmpty
+        )
+        XCTAssertEqual(
+            observed.openService,
+            "shell:getprop ro.product.model"
+        )
+    }
+
     func testLoopbackSTARTTLSConnectionInstallsAPK() async throws {
         let queue = DispatchQueue(label: "ADBWirelessDebuggingConnectionTests.installLoopback")
         let (listener, acceptedTransports, port) = try await makeListener(queue: queue)
@@ -133,6 +171,65 @@ final class ADBWirelessDebuggingConnectionTests: XCTestCase {
             connect: secureConnection.connect,
             secureTLS: secureConnection.secureTLS,
             open: openFrame.packet
+        )
+    }
+
+    private func runLegacyAuthenticationServer(
+        acceptedTransports: AsyncStream<ADBNetworkTransport>
+    ) async throws -> ObservedLegacyAuthentication {
+        var iterator = acceptedTransports.makeAsyncIterator()
+        guard let transport = await iterator.next() else {
+            throw LoopbackServerError.connectionNotAccepted
+        }
+        defer { transport.cancel() }
+
+        var reader = LoopbackPacketReader(transport: transport)
+        let connect = try await reader.next()
+        try require(connect.command == .connect, packet: connect)
+
+        try await transport.send(try ADBPacket(
+            command: .auth,
+            arg0: ADBAuthenticationType.token.rawValue,
+            arg1: 0,
+            payload: [UInt8](repeating: 0x41, count: 20)
+        ).encoded())
+        let signature = try await reader.next()
+        try require(
+            signature.command == .auth
+                && signature.arg0 == ADBAuthenticationType.signature.rawValue,
+            packet: signature
+        )
+
+        try await transport.send(try ADBPacket(
+            command: .auth,
+            arg0: ADBAuthenticationType.token.rawValue,
+            arg1: 0,
+            payload: [UInt8](repeating: 0x42, count: 20)
+        ).encoded())
+        let publicKey = try await reader.next()
+        try require(
+            publicKey.command == .auth
+                && publicKey.arg0 == ADBAuthenticationType.rsaPublicKey.rawValue,
+            packet: publicKey
+        )
+
+        try await transport.send(try ADBPacket(
+            command: .connect,
+            arg0: ADBConnectionState.defaultProtocolVersion,
+            arg1: ADBConnectionState.defaultMaxData,
+            payload: ADBPayload.nullTerminatedUTF8("device::ro.product.model=Legacy TV")
+        ).encoded())
+        let open = try await serveShellCommand(
+            reader: &reader,
+            transport: transport,
+            output: Array("Legacy TV\n".utf8)
+        )
+
+        return ObservedLegacyAuthentication(
+            connect: connect,
+            signature: signature,
+            publicKey: publicKey,
+            openService: "shell:\(open)"
         )
     }
 
@@ -234,7 +331,7 @@ final class ADBWirelessDebuggingConnectionTests: XCTestCase {
 
     private func serveShellCommand(
         reader: inout LoopbackPacketReader,
-        transport: ADBTLSByteTransport,
+        transport: any ADBByteTransport,
         output: [UInt8]
     ) async throws -> String {
         let open = try await reader.next()
@@ -462,6 +559,13 @@ private struct ObservedInstall: Sendable {
     var syncBytes: [UInt8]
     var installCommand: String
     var cleanupCommand: String
+}
+
+private struct ObservedLegacyAuthentication: Sendable {
+    var connect: ADBPacket
+    var signature: ADBPacket
+    var publicKey: ADBPacket
+    var openService: String
 }
 
 private struct ObservedSyncPush: Sendable {

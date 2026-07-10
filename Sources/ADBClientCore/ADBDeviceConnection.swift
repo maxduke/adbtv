@@ -73,51 +73,48 @@ public struct ADBDeviceConnection: Sendable {
 
         return try await withTaskCancellationHandler {
             do {
-                let pairingIdentity = try authenticationIdentity.pairingIdentity()
-                var driver = ADBClientDriver()
+                var driver = ADBClientDriver(authenticationIdentity: authenticationIdentity)
 
                 networkTransport.start()
                 let connectOutput = try driver.startConnection(systemIdentity: systemIdentity)
                 try await networkTransport.send(connectOutput.bytesToSend)
 
                 let initialFrame = try await receiveInitialFrame(from: networkTransport)
-                let secureTransportOutput = try driver.receiveBytes(
-                    try initialFrame.packet.encoded()
-                )
-                guard secureTransportOutput.actions.contains(where: { action in
-                    action.events.contains(where: { event in
-                        if case .secureTransportRequested = event {
-                            return true
-                        }
-                        return false
-                    })
-                }) else {
-                    throw ADBWirelessDebuggingConnectionError.secureTransportNotRequested(
+                switch initialFrame.packet.command {
+                case .secureTLS:
+                    let secureTransportOutput = try driver.receiveBytes(
+                        try initialFrame.packet.encoded()
+                    )
+                    try await networkTransport.send(secureTransportOutput.bytesToSend)
+
+                    let pairingIdentity = try authenticationIdentity.pairingIdentity()
+                    let tlsTransport = try await ADBTLSByteTransport.upgrade(
+                        underlying: networkTransport,
+                        identity: pairingIdentity.material,
+                        initialEncryptedInput: initialFrame.trailingBytes
+                    )
+                    return try await finishConnection(
+                        networkTransport: networkTransport,
+                        byteTransport: tlsTransport,
+                        driver: driver
+                    )
+
+                case .auth, .connect:
+                    let initialOutput = try driver.receiveBytes(
+                        try initialFrame.packet.encoded() + initialFrame.trailingBytes
+                    )
+                    try await networkTransport.send(initialOutput.bytesToSend)
+                    return try await finishConnection(
+                        networkTransport: networkTransport,
+                        byteTransport: networkTransport,
+                        driver: driver,
+                        initialOutput: initialOutput
+                    )
+
+                default:
+                    throw ADBWirelessDebuggingConnectionError.unexpectedInitialCommand(
                         initialFrame.packet.command
                     )
-                }
-                try await networkTransport.send(secureTransportOutput.bytesToSend)
-
-                let tlsTransport = try await ADBTLSByteTransport.upgrade(
-                    underlying: networkTransport,
-                    identity: pairingIdentity.material,
-                    initialEncryptedInput: initialFrame.trailingBytes
-                )
-                var transportSession = ADBTransportSession(
-                    driver: driver,
-                    transport: tlsTransport
-                )
-                while true {
-                    guard let output = try await transportSession.receiveNext() else {
-                        throw ADBWirelessDebuggingConnectionError.transportClosedBeforeConnection
-                    }
-                    if output.connectedDevice != nil {
-                        return ADBDeviceConnection(
-                            transport: networkTransport,
-                            session: ADBDeviceSession(transportSession: transportSession),
-                            hasStarted: true
-                        )
-                    }
                 }
             } catch {
                 networkTransport.cancel()
@@ -216,7 +213,7 @@ public struct ADBDeviceConnection: Sendable {
                 switch error {
                 case .incompleteHeader, .incompletePayload:
                     guard let bytes = try await transport.receive() else {
-                        throw ADBWirelessDebuggingConnectionError.transportClosedBeforeSecureTransport
+                        throw ADBWirelessDebuggingConnectionError.transportClosedBeforeInitialResponse
                     }
                     bufferedBytes.append(contentsOf: bytes)
                     guard bufferedBytes.count <= ADBInitialConnectionFrame.maximumBufferedByteCount else {
@@ -230,6 +227,36 @@ public struct ADBDeviceConnection: Sendable {
             }
         }
     }
+
+    private static func finishConnection(
+        networkTransport: ADBNetworkTransport,
+        byteTransport: any ADBByteTransport,
+        driver: ADBClientDriver,
+        initialOutput: ADBClientDriverOutput? = nil
+    ) async throws -> ADBDeviceConnection {
+        var transportSession = ADBTransportSession(driver: driver, transport: byteTransport)
+        if let initialOutput,
+           ADBTransportSessionOutput(driverOutput: initialOutput).connectedDevice != nil {
+            return ADBDeviceConnection(
+                transport: networkTransport,
+                session: ADBDeviceSession(transportSession: transportSession),
+                hasStarted: true
+            )
+        }
+
+        while true {
+            guard let output = try await transportSession.receiveNext() else {
+                throw ADBWirelessDebuggingConnectionError.transportClosedBeforeConnection
+            }
+            if output.connectedDevice != nil {
+                return ADBDeviceConnection(
+                    transport: networkTransport,
+                    session: ADBDeviceSession(transportSession: transportSession),
+                    hasStarted: true
+                )
+            }
+        }
+    }
 }
 
 private struct ADBInitialConnectionFrame {
@@ -240,9 +267,9 @@ private struct ADBInitialConnectionFrame {
 }
 
 public enum ADBWirelessDebuggingConnectionError: Error, Equatable, Sendable {
-    case transportClosedBeforeSecureTransport
+    case transportClosedBeforeInitialResponse
     case initialFrameTooLarge(Int)
-    case secureTransportNotRequested(ADBCommand)
+    case unexpectedInitialCommand(ADBCommand)
     case transportClosedBeforeConnection
 }
 #endif
