@@ -37,12 +37,13 @@ Implemented so far:
 - self-signed TLS identity generation from the synchronized ADB RSA key;
 - manual Pairing Code app flow with separate pairing and connection ports, cancellation, diagnostics, and saved-device handoff;
 - selectable Bonjour pairing services with device-GUID correlation and persisted connect-service handoff;
+- AOSP-compatible CNXN/STLS mutual-TLS reconnect for host/port and Bonjour targets;
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
+- end-to-end loopback coverage for secure reconnect and an encrypted ADB shell command;
 - unsigned IPA packaging in GitHub Actions.
 
 Still in progress:
 
-- authenticated TLS reconnect through `_adb-tls-connect._tcp`;
 - real-device validation of pairing, reconnect, remote actions, and APK install;
 - QR camera scanning and app flow; QR payload parsing is implemented;
 - text input, volume, and power remote controls.
