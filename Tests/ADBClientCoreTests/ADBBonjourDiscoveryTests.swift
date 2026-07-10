@@ -27,6 +27,9 @@ final class ADBBonjourDiscoveryTests: XCTestCase {
     }
 
     func testWirelessDebuggingServiceKindsExposeBonjourTypes() {
+#if canImport(Network)
+        XCTAssertEqual(ADBBonjourServiceBrowser.localDomain, "local.")
+#endif
         XCTAssertEqual(ADBWirelessDebuggingServiceKind.pairing.bonjourType, "_adb-tls-pairing._tcp")
         XCTAssertEqual(ADBWirelessDebuggingServiceKind.connect.bonjourType, "_adb-tls-connect._tcp")
         XCTAssertEqual(

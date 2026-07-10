@@ -151,6 +151,8 @@ import Dispatch
 @preconcurrency import Network
 
 public final class ADBBonjourServiceBrowser: @unchecked Sendable {
+    public static let localDomain = "local."
+
     public typealias UpdateHandler = @MainActor ([ADBDiscoveredService]) -> Void
     public typealias FailureHandler = @MainActor (ADBBonjourDiscoveryFailure) -> Void
 
@@ -177,7 +179,10 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
 
         let parameters = NWParameters.tcp
         browsers = serviceKinds.map { serviceKind in
-            let descriptor = NWBrowser.Descriptor.bonjour(type: serviceKind.bonjourType, domain: nil)
+            let descriptor = NWBrowser.Descriptor.bonjour(
+                type: serviceKind.bonjourType,
+                domain: Self.localDomain
+            )
             let browser = NWBrowser(for: descriptor, using: parameters)
             browser.browseResultsChangedHandler = { [weak self] results, _ in
                 self?.record(
