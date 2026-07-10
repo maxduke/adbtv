@@ -397,13 +397,16 @@ public struct ADBTVRootView: View {
                     return
                 }
                 completion = .failure(
-                    userMessage: "Could not pair with this Android TV.",
+                    userMessage: Self.pairingUserMessage(for: error),
                     diagnosticDetail: DiagnosticDetail(
                         summary: String(describing: error),
-                        context: [
-                            "operation": "pairDevice",
-                            "target": target
-                        ]
+                        context: Self.operationDiagnosticContext(
+                            error: error,
+                            base: [
+                                "operation": "pairDevice",
+                                "target": target
+                            ]
+                        )
                     )
                 )
             }
@@ -419,7 +422,9 @@ public struct ADBTVRootView: View {
 
     private static func pairDevice(using draft: ADBTVPairingDraft) async throws -> ADBTVDeviceSummary {
 #if canImport(Network)
-        try await ADBTVPairingOperation().pairManualCode(from: draft)
+        try await ADBTVOperationTimeoutPolicy.pairing.run(operation: .pairing) {
+            try await ADBTVPairingOperation().pairManualCode(from: draft)
+        }
 #else
         throw ADBTVPairingViewError.unsupportedPlatform
 #endif
@@ -427,7 +432,9 @@ public struct ADBTVRootView: View {
 
     private static func pairDiscoveredDevice(using draft: ADBTVPairingDraft) async throws -> String {
 #if canImport(Network)
-        try await ADBTVPairingOperation().pairDiscoveredService(from: draft)
+        try await ADBTVOperationTimeoutPolicy.pairing.run(operation: .pairing) {
+            try await ADBTVPairingOperation().pairDiscoveredService(from: draft)
+        }
 #else
         throw ADBTVPairingViewError.unsupportedPlatform
 #endif
@@ -435,7 +442,9 @@ public struct ADBTVRootView: View {
 
     private static func pairQRCode(using draft: ADBTVPairingDraft) async throws -> String {
 #if canImport(Network)
-        try await ADBTVPairingOperation().pairQRCode(from: draft)
+        try await ADBTVOperationTimeoutPolicy.pairing.run(operation: .pairing) {
+            try await ADBTVPairingOperation().pairQRCode(from: draft)
+        }
 #else
         throw ADBTVPairingViewError.unsupportedPlatform
 #endif
@@ -468,6 +477,13 @@ public struct ADBTVRootView: View {
 
     private static func endpointDescription(host: String, port: UInt16) -> String {
         host.contains(":") ? "[\(host)]:\(port)" : "\(host):\(port)"
+    }
+
+    private static func pairingUserMessage(for error: Error) -> String {
+        if error is ADBTVOperationTimeoutError {
+            return "Pairing timed out. Check the TV and try again."
+        }
+        return "Could not pair with this Android TV."
     }
 
     private func startInstall(for device: ADBTVDeviceSummary) {
@@ -514,13 +530,15 @@ public struct ADBTVRootView: View {
         eventHandler: @escaping ADBAPKInstallEventHandler
     ) async throws -> ADBAPKInstallReport {
 #if canImport(Network) && canImport(Security)
-        var connection = try await connectedDevice(for: device)
-        defer { connection.cancel() }
-        return try await ADBTVInstallOperation().installSelectedPackage(
-            from: installModel,
-            using: &connection,
-            eventHandler: eventHandler
-        )
+        return try await ADBTVOperationTimeoutPolicy.apkInstallation.run(operation: .apkInstallation) {
+            var connection = try await connectedDevice(for: device)
+            defer { connection.cancel() }
+            return try await ADBTVInstallOperation().installSelectedPackage(
+                from: installModel,
+                using: &connection,
+                eventHandler: eventHandler
+            )
+        }
 #else
         throw ADBTVInstallOperationError.unsupportedPlatform
 #endif
@@ -544,6 +562,7 @@ public struct ADBTVRootView: View {
         if error is ADBAPKValidationError {
             context["phase"] = "validatePackage"
         }
+        context = operationDiagnosticContext(error: error, base: context)
 
         return DiagnosticDetail(
             summary: String(describing: error),
@@ -552,6 +571,9 @@ public struct ADBTVRootView: View {
     }
 
     private static func installUserMessage(for error: Error) -> String {
+        if error is ADBTVOperationTimeoutError {
+            return "APK installation timed out."
+        }
         if error is ADBAPKValidationError {
             return "The selected file is not a valid APK."
         }
@@ -574,7 +596,7 @@ public struct ADBTVRootView: View {
             } catch {
                 completion = .failure(
                     action: action,
-                    userMessage: "Could not send remote action.",
+                    userMessage: Self.remoteUserMessage(for: error),
                     diagnosticDetail: Self.remoteDiagnosticDetail(error, action: action, device: device)
                 )
             }
@@ -611,13 +633,16 @@ public struct ADBTVRootView: View {
                     return
                 }
                 completion = .textFailure(
-                    userMessage: "Could not send text.",
+                    userMessage: Self.remoteTextUserMessage(for: error),
                     diagnosticDetail: DiagnosticDetail(
                         summary: String(describing: error),
-                        context: [
-                            "device": device.connectionDescription,
-                            "operation": "sendRemoteText"
-                        ]
+                        context: Self.operationDiagnosticContext(
+                            error: error,
+                            base: [
+                                "device": device.connectionDescription,
+                                "operation": "sendRemoteText"
+                            ]
+                        )
                     )
                 )
             }
@@ -637,13 +662,15 @@ public struct ADBTVRootView: View {
         using remoteModel: ADBTVAppModel
     ) async throws -> ADBShellOutput {
 #if canImport(Network) && canImport(Security)
-        var connection = try await connectedDevice(for: device)
-        defer { connection.cancel() }
-        return try await ADBTVRemoteOperation().sendAction(
-            action,
-            from: remoteModel,
-            using: &connection
-        )
+        return try await ADBTVOperationTimeoutPolicy.remoteAction.run(operation: .remoteAction) {
+            var connection = try await connectedDevice(for: device)
+            defer { connection.cancel() }
+            return try await ADBTVRemoteOperation().sendAction(
+                action,
+                from: remoteModel,
+                using: &connection
+            )
+        }
 #else
         throw ADBTVRemoteOperationError.unsupportedPlatform
 #endif
@@ -655,13 +682,15 @@ public struct ADBTVRootView: View {
         using remoteModel: ADBTVAppModel
     ) async throws -> ADBShellOutput {
 #if canImport(Network) && canImport(Security)
-        var connection = try await connectedDevice(for: device)
-        defer { connection.cancel() }
-        return try await ADBTVRemoteOperation().sendText(
-            text,
-            from: remoteModel,
-            using: &connection
-        )
+        return try await ADBTVOperationTimeoutPolicy.remoteAction.run(operation: .remoteAction) {
+            var connection = try await connectedDevice(for: device)
+            defer { connection.cancel() }
+            return try await ADBTVRemoteOperation().sendText(
+                text,
+                from: remoteModel,
+                using: &connection
+            )
+        }
 #else
         throw ADBTVRemoteOperationError.unsupportedPlatform
 #endif
@@ -671,25 +700,31 @@ public struct ADBTVRootView: View {
     private static func connectedDevice(
         for device: ADBTVDeviceSummary
     ) async throws -> ADBDeviceConnection {
-        try await ADBDeviceConnection.connectedToWirelessDebugging(
-            target: device.networkTarget()
-        )
+        try await ADBTVOperationTimeoutPolicy.deviceConnection.run(operation: .deviceConnection) {
+            try await ADBDeviceConnection.connectedToWirelessDebugging(
+                target: device.networkTarget()
+            )
+        }
     }
 
     private static func verifyManualDevice(
         _ device: ADBTVDeviceSummary
     ) async throws -> ADBTVDeviceSummary {
-        var connection = try await connectedDevice(for: device)
-        defer { connection.cancel() }
+        try await ADBTVOperationTimeoutPolicy.manualDeviceVerification.run(
+            operation: .manualDeviceVerification
+        ) {
+            var connection = try await connectedDevice(for: device)
+            defer { connection.cancel() }
 
-        _ = try await connection.connect()
-        let output = try await connection.runShellCommand(
-            try ADBShellCommand("getprop ro.product.model")
-        )
-        let model = output.utf8String.trimmingCharacters(in: .whitespacesAndNewlines)
-        var verifiedDevice = device
-        verifiedDevice.model = model.isEmpty ? nil : model
-        return verifiedDevice
+            _ = try await connection.connect()
+            let output = try await connection.runShellCommand(
+                try ADBShellCommand("getprop ro.product.model")
+            )
+            let model = output.utf8String.trimmingCharacters(in: .whitespacesAndNewlines)
+            var verifiedDevice = device
+            verifiedDevice.model = model.isEmpty ? nil : model
+            return verifiedDevice
+        }
     }
 #else
     private static func verifyManualDevice(
@@ -723,12 +758,39 @@ public struct ADBTVRootView: View {
     ) -> DiagnosticDetail {
         DiagnosticDetail(
             summary: String(describing: error),
-            context: [
-                "action": action.displayTitle,
-                "device": device.connectionDescription,
-                "operation": "sendRemoteAction"
-            ]
+            context: operationDiagnosticContext(
+                error: error,
+                base: [
+                    "action": action.displayTitle,
+                    "device": device.connectionDescription,
+                    "operation": "sendRemoteAction"
+                ]
+            )
         )
+    }
+
+    private static func remoteUserMessage(for error: Error) -> String {
+        error is ADBTVOperationTimeoutError
+            ? "The TV did not respond in time."
+            : "Could not send remote action."
+    }
+
+    private static func remoteTextUserMessage(for error: Error) -> String {
+        error is ADBTVOperationTimeoutError
+            ? "The TV did not respond in time."
+            : "Could not send text."
+    }
+
+    private static func operationDiagnosticContext(
+        error: Error,
+        base: [String: String]
+    ) -> [String: String] {
+        var context = base
+        if case let ADBTVOperationTimeoutError.timedOut(operation, seconds) = error {
+            context["timedOperation"] = operation.rawValue
+            context["timeoutSeconds"] = String(seconds)
+        }
+        return context
     }
 }
 
@@ -982,17 +1044,38 @@ private struct AddDeviceView: View {
                     return
                 }
                 status = .failed(
-                    userMessage: "Could not connect to this Android TV device.",
+                    userMessage: manualConnectionUserMessage(for: error),
                     diagnosticDetail: DiagnosticDetail(
                         summary: String(describing: error),
-                        context: [
-                            "device": device.connectionDescription,
-                            "operation": "verifyManualDevice"
-                        ]
+                        context: manualConnectionDiagnosticContext(
+                            error: error,
+                            base: [
+                                "device": device.connectionDescription,
+                                "operation": "verifyManualDevice"
+                            ]
+                        )
                     )
                 )
             }
         }
+    }
+
+    private func manualConnectionUserMessage(for error: Error) -> String {
+        error is ADBTVOperationTimeoutError
+            ? "The TV did not respond in time."
+            : "Could not connect to this Android TV device."
+    }
+
+    private func manualConnectionDiagnosticContext(
+        error: Error,
+        base: [String: String]
+    ) -> [String: String] {
+        var context = base
+        if case let ADBTVOperationTimeoutError.timedOut(operation, seconds) = error {
+            context["timedOperation"] = operation.rawValue
+            context["timeoutSeconds"] = String(seconds)
+        }
+        return context
     }
 }
 
