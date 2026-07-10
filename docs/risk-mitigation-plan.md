@@ -100,7 +100,7 @@ GitHub Actions can build and run unit tests, but it cannot prove real Android TV
 **Mitigation**:
 - Keep protocol framing, parsing, URL validation, and operation state machines unit-testable.
 - Use simulator CI for build and non-device tests.
-- Maintain a manual hardware test checklist for pairing, reconnect, remote actions, and APK installation.
+- Maintain the [manual hardware release checklist](./hardware-test-checklist.md) for pairing, reconnect, remote actions, and APK installation.
 - Add sample Diagnostic Detail from failed hardware tests to improve error handling.
 
 **Fallback**:

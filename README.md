@@ -43,7 +43,7 @@ Implemented so far:
 - AVFoundation Pairing QR Code scanning with Bonjour service matching and the same saved-device handoff;
 - AOSP-compatible CNXN/STLS mutual-TLS reconnect for host/port and Bonjour targets;
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
-- end-to-end loopback coverage for secure reconnect and an encrypted ADB shell command;
+- end-to-end loopback coverage for secure reconnect, an encrypted ADB shell command, and encrypted APK installation;
 - remote text input, menu, volume, and power controls in addition to D-pad navigation;
 - unsigned IPA packaging in GitHub Actions.
 
@@ -58,6 +58,7 @@ Still in progress:
 - [Development flow](./docs/development-flow.md)
 - [Initial architecture plan](./docs/initial-architecture-plan.md)
 - [Risk mitigation plan](./docs/risk-mitigation-plan.md)
+- [Hardware release checklist](./docs/hardware-test-checklist.md)
 - [Architecture decision records](./docs/adr/)
 
 ## Development
