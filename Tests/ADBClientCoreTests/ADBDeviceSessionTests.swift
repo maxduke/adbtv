@@ -122,7 +122,7 @@ final class ADBDeviceSessionTests: XCTestCase {
         }
     }
 
-    func testPushFileOpensSyncServiceWritesChunksAndReturnsCompletedEvent() async throws {
+    func testPushFileHandlesResponseCoalescedWithFinalWriteAcknowledgement() async throws {
         let remotePath = try ADBRemotePath("/data/local/tmp/adbtv/app.apk")
         let plan = try ADBSyncPushPlan(
             remotePath: remotePath,
@@ -138,7 +138,8 @@ final class ADBDeviceSessionTests: XCTestCase {
         }
         let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
             writeChunkCount: syncWriteChunkCount,
-            responsePayload: ADBSyncFrame(id: .okay, value: 0).encoded()
+            responsePayload: ADBSyncFrame(id: .okay, value: 0).encoded(),
+            coalesceResponseWithFinalWriteAcknowledgement: true
         ))
         var session = ADBDeviceSession(
             driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: maxData))),
@@ -239,16 +240,31 @@ final class ADBDeviceSessionTests: XCTestCase {
         )
     }
 
-    private func syncPushInboundChunks(writeChunkCount: Int, responsePayload: [UInt8]) throws -> [[UInt8]] {
+    private func syncPushInboundChunks(
+        writeChunkCount: Int,
+        responsePayload: [UInt8],
+        coalesceResponseWithFinalWriteAcknowledgement: Bool = false
+    ) throws -> [[UInt8]] {
         var chunks = [
             try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
         ]
-        chunks.append(contentsOf: try (0..<writeChunkCount).map { _ in
-            try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
-        })
-        chunks.append(
-            try ADBPacket(command: .write, arg0: 42, arg1: 1, payload: responsePayload).encoded()
-        )
+        for writeIndex in 0..<writeChunkCount {
+            var acknowledgement = try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
+            if coalesceResponseWithFinalWriteAcknowledgement && writeIndex == writeChunkCount - 1 {
+                acknowledgement.append(contentsOf: try ADBPacket(
+                    command: .write,
+                    arg0: 42,
+                    arg1: 1,
+                    payload: responsePayload
+                ).encoded())
+            }
+            chunks.append(acknowledgement)
+        }
+        if !coalesceResponseWithFinalWriteAcknowledgement {
+            chunks.append(
+                try ADBPacket(command: .write, arg0: 42, arg1: 1, payload: responsePayload).encoded()
+            )
+        }
         chunks.append(
             try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
         )

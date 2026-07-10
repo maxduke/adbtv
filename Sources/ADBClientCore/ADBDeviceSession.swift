@@ -61,18 +61,31 @@ public struct ADBDeviceSession: Sendable {
         let encoding = try plan.encode(contents: contents)
         var events: [ADBSyncPushEvent] = []
         let maxPayloadByteCount = try streamWritePayloadByteCount()
+        var responseDecoder = ADBSyncResponseDecoder()
+        var bufferedResponse: ADBSyncResponse?
 
         for (frame, event) in zip(encoding.frames, encoding.events) {
             for chunk in try frame.encoded().chunks(maxByteCount: maxPayloadByteCount) {
                 _ = try await transportSession.writeStream(localID: localID, payload: chunk)
-                try await waitForStreamWritable(localID: localID)
+                let outputs = try await waitForStreamWritable(localID: localID)
+                for output in outputs where bufferedResponse == nil {
+                    bufferedResponse = try syncResponse(
+                        in: output,
+                        localID: localID,
+                        decoder: &responseDecoder
+                    )
+                }
             }
             events.append(event)
             await eventHandler(event)
         }
 
-        var responseDecoder = ADBSyncResponseDecoder()
-        let response = try await waitForSyncResponse(localID: localID, decoder: &responseDecoder)
+        let response: ADBSyncResponse
+        if let bufferedResponse {
+            response = bufferedResponse
+        } else {
+            response = try await waitForSyncResponse(localID: localID, decoder: &responseDecoder)
+        }
         let responseEvent = ADBSyncPushEvent.responseEvent(response)
         events.append(responseEvent)
         await eventHandler(responseEvent)
@@ -114,16 +127,21 @@ public struct ADBDeviceSession: Sendable {
         }
     }
 
-    private mutating func waitForStreamWritable(localID: UInt32) async throws {
+    private mutating func waitForStreamWritable(
+        localID: UInt32
+    ) async throws -> [ADBTransportSessionOutput] {
+        var outputs: [ADBTransportSessionOutput] = []
+
         while true {
             guard let output = try await transportSession.receiveNext() else {
                 throw ADBDeviceSessionError.transportClosedBeforeStreamWritable(localID: localID)
             }
+            outputs.append(output)
 
             if output.containsEvent(where: { event in
                 event.localStreamID == localID && event.isStreamWritable
             }) {
-                return
+                return outputs
             }
 
             if output.containsEvent(where: { event in
@@ -143,13 +161,11 @@ public struct ADBDeviceSession: Sendable {
                 throw ADBDeviceSessionError.transportClosedBeforeSyncResponse(localID: localID)
             }
 
-            for event in output.events {
-                if case .streamData(let eventLocalID, _, let payload) = event, eventLocalID == localID {
-                    if let response = try decoder.append(payload).first {
-                        return response
-                    }
-                }
+            if let response = try syncResponse(in: output, localID: localID, decoder: &decoder) {
+                return response
+            }
 
+            for event in output.events {
                 if event.localStreamID == localID && event.isStreamClosed {
                     throw ADBDeviceSessionError.streamClosedBeforeSyncResponse(localID: localID)
                 }
@@ -159,8 +175,23 @@ public struct ADBDeviceSession: Sendable {
 
     private mutating func finishSyncStream(localID: UInt32) async throws {
         _ = try await transportSession.writeStream(localID: localID, payload: try ADBSyncFrame.quit().encoded())
-        try await waitForStreamWritable(localID: localID)
+        _ = try await waitForStreamWritable(localID: localID)
         _ = try await transportSession.closeStream(localID: localID)
+    }
+
+    private func syncResponse(
+        in output: ADBTransportSessionOutput,
+        localID: UInt32,
+        decoder: inout ADBSyncResponseDecoder
+    ) throws -> ADBSyncResponse? {
+        for event in output.events {
+            if case .streamData(let eventLocalID, _, let payload) = event, eventLocalID == localID,
+               let response = try decoder.append(payload).first {
+                return response
+            }
+        }
+
+        return nil
     }
 }
 
