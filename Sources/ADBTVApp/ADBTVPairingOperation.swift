@@ -61,6 +61,25 @@ public struct ADBTVPairingOperation: Sendable {
         return deviceGUID
     }
 
+    public func pairQRCode(from draft: ADBTVPairingDraft) async throws -> String {
+        guard let qrCode = draft.pairingQRCode else {
+            throw ADBTVPairingOperationError.invalidPairingQRCode
+        }
+        guard let service = draft.discoveredService,
+              service.kind == .pairing,
+              service.serviceName == qrCode.serviceName else {
+            throw ADBTVPairingOperationError.mismatchedQRCodeService
+        }
+
+        let secret = try ADBPairingSecret(qrCode: qrCode)
+        let peerInfo = try await pair(.bonjourService(service), secret)
+        guard let deviceGUID = peerInfo.deviceGUID else {
+            throw ADBTVPairingOperationError.missingDeviceGUID
+        }
+
+        return deviceGUID
+    }
+
     private static func pairUsingSystemClient(
         target: ADBNetworkTarget,
         secret: ADBPairingSecret
@@ -78,7 +97,9 @@ public enum ADBTVPairingOperationError: Error, Equatable, Sendable {
     case invalidPairingPort
     case invalidConnectionPort
     case invalidPairingCode
+    case invalidPairingQRCode
     case invalidDiscoveredService
+    case mismatchedQRCodeService
     case missingDeviceGUID
     case unsupportedPlatform
 }

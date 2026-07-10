@@ -490,6 +490,50 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.pairingStatus, .paired(device))
     }
 
+    func testQRCodePairingWaitsForMatchingPairingService() {
+        let unrelatedService = ADBDiscoveredService(
+            serviceName: "other-service",
+            serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+            domain: "local."
+        )
+        let matchingService = ADBDiscoveredService(
+            serviceName: "adb-qr-service",
+            serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+            domain: "local."
+        )
+        var model = ADBTVAppModel(discoveredServices: [unrelatedService])
+
+        model.prepareQRCodePairing(
+            payload: "WIFI:T:ADB;S:adb-qr-service;P:qr-secret;;"
+        )
+
+        XCTAssertEqual(
+            model.pairingStatus,
+            .waitingForPairingService(serviceName: "adb-qr-service")
+        )
+        XCTAssertTrue(model.pairingStatus.isPairing)
+        XCTAssertFalse(model.selectQRCodePairingServiceIfAvailable())
+
+        model.updateDiscoveredServices([unrelatedService, matchingService])
+
+        XCTAssertTrue(model.selectQRCodePairingServiceIfAvailable())
+        XCTAssertEqual(model.pairingDraft.discoveredService, matchingService)
+        XCTAssertTrue(model.pairingDraft.canStartDiscoveredQRPairing)
+        XCTAssertTrue(model.pairingDraft.canStartPairing)
+    }
+
+    func testInvalidQRCodeStoresUserAndTechnicalError() {
+        var model = ADBTVAppModel()
+
+        model.prepareQRCodePairing(payload: "WIFI:T:WPA;S:Network;P:secret;;")
+
+        guard case let .failed(userMessage, diagnosticDetail) = model.pairingStatus else {
+            return XCTFail("Expected an invalid QR failure.")
+        }
+        XCTAssertEqual(userMessage, "This is not an Android pairing QR code.")
+        XCTAssertEqual(diagnosticDetail.context["operation"], "parsePairingQRCode")
+    }
+
     func testPairingStatusTracksStartSuccessAndSelectedDevice() {
         var model = ADBTVAppModel()
         let device = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)

@@ -13,6 +13,10 @@ public struct ADBTVRootView: View {
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
     @State private var pairingTask: Task<Void, Never>?
+#if os(iOS) && canImport(AVFoundation)
+    @State private var isQRCodeScannerPresented = false
+    @State private var qrScannerError: DiagnosticDetail?
+#endif
 #if canImport(Network)
     @State private var discoveryBrowser: ADBBonjourServiceBrowser?
 #endif
@@ -63,6 +67,14 @@ public struct ADBTVRootView: View {
                         } label: {
                             Label("Pair with Code", systemImage: "key")
                         }
+
+#if os(iOS) && canImport(AVFoundation)
+                        Button {
+                            presentQRCodeScanner()
+                        } label: {
+                            Label("Scan Pairing QR Code", systemImage: "qrcode.viewfinder")
+                        }
+#endif
 
                         Button {
                             isAddDevicePresented = true
@@ -120,6 +132,44 @@ public struct ADBTVRootView: View {
                 cancelPairing: cancelPairing
             )
         }
+#if os(iOS) && canImport(AVFoundation)
+        .sheet(isPresented: $isQRCodeScannerPresented) {
+            NavigationStack {
+                ADBQRCodeScannerView(
+                    onPayload: handleQRCodePayload,
+                    onFailure: handleQRCodeScannerFailure
+                )
+                .ignoresSafeArea(edges: .bottom)
+                .navigationTitle("Scan Pairing QR")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button {
+                            isQRCodeScannerPresented = false
+                        } label: {
+                            Label("Cancel", systemImage: "xmark")
+                                .labelStyle(.iconOnly)
+                        }
+                    }
+                }
+            }
+        }
+        .alert(
+            "Camera unavailable",
+            isPresented: Binding(
+                get: { qrScannerError != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        qrScannerError = nil
+                    }
+                }
+            ),
+            presenting: qrScannerError
+        ) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { detail in
+            Text("\(detail.summary)\n\nReason: \(detail.context["reason"] ?? "unknown")")
+        }
+#endif
         .alert(
             "Could not save devices",
             isPresented: Binding(
@@ -204,6 +254,9 @@ public struct ADBTVRootView: View {
             if model.updateDiscoveredServices(services) {
                 saveDevices()
             }
+            if model.selectQRCodePairingServiceIfAvailable() {
+                startPairing()
+            }
         }, failureHandler: { message in
             model.failDiscovery(
                 userMessage: "Could not discover Android TV devices.",
@@ -233,6 +286,29 @@ public struct ADBTVRootView: View {
         isPairDevicePresented = true
     }
 
+#if os(iOS) && canImport(AVFoundation)
+    private func presentQRCodeScanner() {
+        if !model.discoveryStatus.isBrowsing {
+            startDiscovery()
+        }
+        isQRCodeScannerPresented = true
+    }
+
+    private func handleQRCodePayload(_ payload: String) {
+        model.prepareQRCodePairing(payload: payload)
+        isQRCodeScannerPresented = false
+        isPairDevicePresented = true
+        if model.selectQRCodePairingServiceIfAvailable() {
+            startPairing()
+        }
+    }
+
+    private func handleQRCodeScannerFailure(_ detail: DiagnosticDetail) {
+        isQRCodeScannerPresented = false
+        qrScannerError = detail
+    }
+#endif
+
     private func stopDiscovery() {
 #if canImport(Network)
         discoveryBrowser?.cancel()
@@ -249,7 +325,14 @@ public struct ADBTVRootView: View {
 
         let source: ADBTVPairingSource
         let target: String
-        if let service = draft.discoveredService {
+        if let qrCode = draft.pairingQRCode,
+           let service = draft.discoveredService {
+            source = .qrCode
+            target = qrCode.serviceName
+            guard service.serviceName == qrCode.serviceName else {
+                return
+            }
+        } else if let service = draft.discoveredService {
             source = .discoveredService
             target = service.displayName
         } else if let pairingPort = draft.pairingPort {
@@ -264,7 +347,12 @@ public struct ADBTVRootView: View {
         pairingTask = Task {
             let completion: PairingCompletion
             do {
-                if draft.discoveredService != nil {
+                if draft.pairingQRCode != nil {
+                    completion = .discovered(
+                        deviceGUID: try await Self.pairQRCode(using: draft),
+                        displayName: draft.normalizedDisplayName
+                    )
+                } else if draft.discoveredService != nil {
                     completion = .discovered(
                         deviceGUID: try await Self.pairDiscoveredDevice(using: draft),
                         displayName: draft.normalizedDisplayName
@@ -308,6 +396,14 @@ public struct ADBTVRootView: View {
     private static func pairDiscoveredDevice(using draft: ADBTVPairingDraft) async throws -> String {
 #if canImport(Network)
         try await ADBTVPairingOperation().pairDiscoveredService(from: draft)
+#else
+        throw ADBTVPairingViewError.unsupportedPlatform
+#endif
+    }
+
+    private static func pairQRCode(using draft: ADBTVPairingDraft) async throws -> String {
+#if canImport(Network)
+        try await ADBTVPairingOperation().pairQRCode(from: draft)
 #else
         throw ADBTVPairingViewError.unsupportedPlatform
 #endif
@@ -594,7 +690,9 @@ private struct PairDeviceView: View {
             Form {
                 Section("Device") {
                     TextField("Name", text: $draft.displayName)
-                    if let service = draft.discoveredService {
+                    if let qrCode = draft.pairingQRCode {
+                        LabeledContent("Service", value: qrCode.serviceName)
+                    } else if let service = draft.discoveredService {
                         LabeledContent("Service", value: service.displayName)
                     } else {
                         TextField("Host or IP Address", text: $draft.host)
@@ -603,11 +701,13 @@ private struct PairDeviceView: View {
                     }
                 }
 
-                Section("Pairing") {
-                    if draft.discoveredService == nil {
-                        TextField("Pairing Port", text: $draft.pairingPortString)
+                if draft.pairingQRCode == nil {
+                    Section("Pairing") {
+                        if draft.discoveredService == nil {
+                            TextField("Pairing Port", text: $draft.pairingPortString)
+                        }
+                        TextField("6-Digit Code", text: $draft.codeString)
                     }
-                    TextField("6-Digit Code", text: $draft.codeString)
                 }
 
                 PairingStatusView(status: status)
@@ -622,7 +722,7 @@ private struct PairDeviceView: View {
                     }
                 }
 
-                if !hasPaired {
+                if !hasPaired && draft.pairingQRCode == nil {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Pair") {
                             startPairing()
@@ -654,6 +754,18 @@ private struct PairingStatusView: View {
         switch status {
         case .idle:
             EmptyView()
+        case .waitingForPairingService(let serviceName):
+            Section {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Finding the pairing service")
+                        .foregroundStyle(.secondary)
+                }
+                Text(serviceName)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
         case .pairing(_, let target):
             Section {
                 HStack(spacing: 8) {

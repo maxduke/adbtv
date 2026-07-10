@@ -218,6 +218,34 @@ public struct ADBTVAppModel: Equatable, Sendable {
         pairingStatus = .idle
     }
 
+    public mutating func prepareQRCodePairing(payload: String) {
+        pairingDraft = ADBTVPairingDraft(qrPayload: payload)
+        if let serviceName = pairingDraft.pairingQRCode?.serviceName {
+            pairingStatus = .waitingForPairingService(serviceName: serviceName)
+        } else {
+            pairingStatus = .failed(
+                userMessage: "This is not an Android pairing QR code.",
+                diagnosticDetail: DiagnosticDetail(
+                    summary: "The scanned payload is not a supported ADB pairing payload.",
+                    context: ["operation": "parsePairingQRCode"]
+                )
+            )
+        }
+    }
+
+    @discardableResult
+    public mutating func selectQRCodePairingServiceIfAvailable() -> Bool {
+        guard case .waitingForPairingService(let serviceName) = pairingStatus,
+              let service = discoveredServices.first(where: {
+                  $0.kind == .pairing && $0.serviceName == serviceName
+              }) else {
+            return false
+        }
+
+        pairingDraft.discoveredService = service
+        return true
+    }
+
     public mutating func startPairing(source: ADBTVPairingSource, target: String) {
         pairingStatus = .pairing(source: source, target: target)
     }
@@ -246,6 +274,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
 
     public mutating func cancelPairing() {
         pairingDraft.codeString = ""
+        pairingDraft.qrPayload = ""
         pairingStatus = .idle
     }
 
@@ -608,6 +637,7 @@ public enum ADBTVPairingSource: Equatable, Sendable {
 
 public enum ADBTVPairingStatus: Equatable, Sendable {
     case idle
+    case waitingForPairingService(serviceName: String)
     case pairing(source: ADBTVPairingSource, target: String)
     case waitingForConnection(deviceGUID: String, displayName: String)
     case paired(ADBTVDeviceSummary)
@@ -615,7 +645,7 @@ public enum ADBTVPairingStatus: Equatable, Sendable {
 
     public var isPairing: Bool {
         switch self {
-        case .pairing, .waitingForConnection:
+        case .waitingForPairingService, .pairing, .waitingForConnection:
             return true
         default:
             return false
@@ -694,11 +724,20 @@ public struct ADBTVPairingDraft: Equatable, Sendable {
     }
 
     public var canStartPairing: Bool {
-        canStartManualPairing || canStartDiscoveredPairing
+        canStartManualPairing || canStartDiscoveredPairing || canStartDiscoveredQRPairing
     }
 
     public var canStartQRPairing: Bool {
         pairingQRCode != nil
+    }
+
+    public var canStartDiscoveredQRPairing: Bool {
+        guard let pairingQRCode, let discoveredService else {
+            return false
+        }
+
+        return discoveredService.kind == .pairing
+            && discoveredService.serviceName == pairingQRCode.serviceName
     }
 
     private func validatedPort(_ value: String) -> UInt16? {

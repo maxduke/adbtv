@@ -142,6 +142,55 @@ final class ADBTVPairingOperationTests: XCTestCase {
         }
     }
 
+    func testQRCodePairingUsesMatchingBonjourServiceAndQRSecret() async throws {
+        let service = ADBDiscoveredService(
+            serviceName: "adb-qr-service",
+            serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+            domain: "local."
+        )
+        let recorder = PairingCallRecorder()
+        let operation = ADBTVPairingOperation { target, secret in
+            await recorder.record(target: target, secret: secret)
+            return try ADBPairingPeerInfo(
+                type: .adbDeviceGUID,
+                data: Array("adb-device-guid".utf8)
+            )
+        }
+        let draft = ADBTVPairingDraft(
+            qrPayload: "WIFI:T:ADB;S:adb-qr-service;P:qr-secret;;",
+            discoveredService: service
+        )
+
+        let deviceGUID = try await operation.pairQRCode(from: draft)
+        let recordedCall = await recorder.call
+        let call = try XCTUnwrap(recordedCall)
+
+        XCTAssertEqual(deviceGUID, "adb-device-guid")
+        XCTAssertEqual(call.target, .bonjourService(service))
+        XCTAssertEqual(call.secret.source, .qrCode(serviceName: "adb-qr-service"))
+        XCTAssertEqual(call.secret.bytes, Array("qr-secret".utf8))
+    }
+
+    func testQRCodePairingRejectsInvalidAndMismatchedDrafts() async {
+        let operation = ADBTVPairingOperation { _, _ in
+            try ADBPairingPeerInfo(type: .adbDeviceGUID, data: Array("guid".utf8))
+        }
+
+        await assertThrows(.invalidPairingQRCode) {
+            try await operation.pairQRCode(from: ADBTVPairingDraft(qrPayload: "invalid"))
+        }
+        await assertThrows(.mismatchedQRCodeService) {
+            try await operation.pairQRCode(from: ADBTVPairingDraft(
+                qrPayload: "WIFI:T:ADB;S:expected-service;P:qr-secret;;",
+                discoveredService: ADBDiscoveredService(
+                    serviceName: "other-service",
+                    serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
+                    domain: "local."
+                )
+            ))
+        }
+    }
+
     private func assertThrows<T>(
         _ expectedError: ADBTVPairingOperationError,
         operation: () async throws -> T,
