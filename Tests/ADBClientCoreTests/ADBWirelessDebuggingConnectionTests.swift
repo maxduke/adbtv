@@ -120,7 +120,10 @@ final class ADBWirelessDebuggingConnectionTests: XCTestCase {
 
         XCTAssertEqual(report.result, .success)
         XCTAssertEqual(streamedEvents, report.events)
-        XCTAssertEqual(observed.prepareCommand, try plan.prepareRemoteDirectoryShellCommand().rawValue)
+        XCTAssertEqual(
+            observed.prepareCommand,
+            try plan.prepareRemoteDirectoryShellInvocation().shellCommand.rawValue
+        )
         XCTAssertEqual(observed.syncService, "sync:")
         XCTAssertEqual(observed.syncBytes, try ADBSyncPushPlan(
             remotePath: plan.remoteAPKPath,
@@ -128,7 +131,10 @@ final class ADBWirelessDebuggingConnectionTests: XCTestCase {
             totalByteCount: contents.count
         ).encode(contents: contents).encodedBytes())
         XCTAssertEqual(observed.installCommand, try plan.installShellCommand().rawValue)
-        XCTAssertEqual(observed.cleanupCommand, try plan.cleanupShellCommand().rawValue)
+        XCTAssertEqual(
+            observed.cleanupCommand,
+            try plan.cleanupShellInvocation().shellCommand.rawValue
+        )
     }
 
     private func runServer(
@@ -249,7 +255,7 @@ final class ADBWirelessDebuggingConnectionTests: XCTestCase {
         let prepareCommand = try await serveShellCommand(
             reader: &reader,
             transport: secureConnection.tlsTransport,
-            output: []
+            output: checkedInstallShellOutput()
         )
         let syncObservation = try await serveSyncPush(
             reader: &reader,
@@ -269,7 +275,7 @@ final class ADBWirelessDebuggingConnectionTests: XCTestCase {
         let cleanupCommand = try await serveShellCommand(
             reader: &reader,
             transport: secureConnection.tlsTransport,
-            output: []
+            output: checkedInstallShellOutput()
         )
 
         return ObservedInstall(
@@ -559,6 +565,10 @@ private struct ObservedInstall: Sendable {
     var syncBytes: [UInt8]
     var installCommand: String
     var cleanupCommand: String
+}
+
+private func checkedInstallShellOutput(exitCode: Int = 0) -> [UInt8] {
+    Array("\n\(ADBCheckedShellInvocation.exitStatusMarker)\(exitCode)\n".utf8)
 }
 
 private struct ObservedLegacyAuthentication: Sendable {

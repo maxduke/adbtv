@@ -100,8 +100,8 @@ final class ADBTVRemoteControlTests: XCTestCase {
 
         XCTAssertEqual(
             invocation.shellCommand.rawValue,
-            "input keyevent 176; __adbtv_remote_status=$?; "
-                + "printf '\\n__ADBTV_REMOTE_EXIT_STATUS__=%s\\n' \"$__adbtv_remote_status\""
+            "input keyevent 176; __adbtv_status=$?; "
+                + "printf '\\n__ADBTV_EXIT_STATUS__=%s\\n' \"$__adbtv_status\""
         )
         XCTAssertEqual(
             try invocation.validatedOutput(from: checkedRemoteOutput("device output\n")),
@@ -157,7 +157,7 @@ final class ADBTVRemoteControlTests: XCTestCase {
             )
         }
         XCTAssertThrowsError(try invocation.validatedOutput(
-            from: ADBShellOutput(bytes: Array("\n__ADBTV_REMOTE_EXIT_STATUS__=bad\n".utf8))
+            from: ADBShellOutput(bytes: Array("\n__ADBTV_EXIT_STATUS__=bad\n".utf8))
         )) { error in
             XCTAssertEqual(
                 error as? ADBTVRemoteShellInvocationError,

@@ -35,9 +35,9 @@ final class ADBAPKInstallerTests: XCTestCase {
 
         XCTAssertEqual(report.result, .success)
         XCTAssertEqual(session.commands, [
-            try plan.prepareRemoteDirectoryShellCommand().rawValue,
+            try plan.prepareRemoteDirectoryShellInvocation().shellCommand.rawValue,
             try plan.installShellCommand().rawValue,
-            try plan.cleanupShellCommand().rawValue
+            try plan.cleanupShellInvocation().shellCommand.rawValue
         ])
         XCTAssertEqual(session.pushedContents, [contents])
         XCTAssertEqual(session.pushedPlans, [
@@ -88,9 +88,9 @@ final class ADBAPKInstallerTests: XCTestCase {
 
         XCTAssertEqual(report.result, .failure(message: "INSTALL_FAILED_ALREADY_EXISTS"))
         XCTAssertEqual(session.commands, [
-            try plan.prepareRemoteDirectoryShellCommand().rawValue,
+            try plan.prepareRemoteDirectoryShellInvocation().shellCommand.rawValue,
             try plan.installShellCommand().rawValue,
-            try plan.cleanupShellCommand().rawValue
+            try plan.cleanupShellInvocation().shellCommand.rawValue
         ])
         XCTAssertEqual(Array(report.events.suffix(4)), [
             .installResult(.failure(message: "INSTALL_FAILED_ALREADY_EXISTS")),
@@ -116,21 +116,114 @@ final class ADBAPKInstallerTests: XCTestCase {
             _ = try await ADBAPKInstaller().install(contents: contents, plan: plan, using: &session)
             XCTFail("Expected transfer failure to throw.")
         } catch let error as ADBAPKInstallExecutionError {
-            XCTAssertEqual(error, .transferFailed(message: "permission denied", events: [
-                .phaseStarted(.prepareRemoteDirectory),
-                .phaseFinished(.prepareRemoteDirectory),
-                .phaseStarted(.transferPackage),
-                .transfer(transferEvents[0]),
-                .transfer(transferEvents[1]),
-                .phaseStarted(.cleanup),
-                .phaseFinished(.cleanup)
-            ]))
+            XCTAssertEqual(
+                error,
+                .transferFailed(
+                    message: "permission denied",
+                    events: [
+                        .phaseStarted(.prepareRemoteDirectory),
+                        .phaseFinished(.prepareRemoteDirectory),
+                        .phaseStarted(.transferPackage),
+                        .transfer(transferEvents[0]),
+                        .transfer(transferEvents[1]),
+                        .phaseStarted(.cleanup),
+                        .phaseFinished(.cleanup)
+                    ],
+                    cleanupError: nil
+                )
+            )
         }
 
         XCTAssertEqual(session.commands, [
-            try plan.prepareRemoteDirectoryShellCommand().rawValue,
-            try plan.cleanupShellCommand().rawValue
+            try plan.prepareRemoteDirectoryShellInvocation().shellCommand.rawValue,
+            try plan.cleanupShellInvocation().shellCommand.rawValue
         ])
+    }
+
+    func testPrepareFailureStopsBeforeTransfer() async throws {
+        let contents = makeTestAPK()
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "app.apk",
+            byteCount: Int64(contents.count)
+        )
+        let prepareCommand = try plan.prepareRemoteDirectoryShellInvocation().shellCommand.rawValue
+        var session = RecordingAPKInstallSession(shellOutputs: [
+            prepareCommand: checkedShellOutput("mkdir: Permission denied", exitCode: 1)
+        ])
+
+        do {
+            _ = try await ADBAPKInstaller().install(contents: contents, plan: plan, using: &session)
+            XCTFail("Expected preparation failure to throw.")
+        } catch let error as ADBAPKInstallExecutionError {
+            guard case let .prepareCommandFailed(events, underlyingError) = error else {
+                return XCTFail("Expected prepareCommandFailed, got \(error).")
+            }
+            XCTAssertEqual(events, [.phaseStarted(.prepareRemoteDirectory)])
+            XCTAssertTrue(underlyingError.contains("commandFailed(exitCode: 1"))
+            XCTAssertTrue(underlyingError.contains("mkdir: Permission denied"))
+        }
+
+        XCTAssertEqual(session.commands, [prepareCommand])
+        XCTAssertEqual(session.pushedContents, [])
+    }
+
+    func testCleanupExitFailureIsReportedAfterInstall() async throws {
+        let contents = makeTestAPK()
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "app.apk",
+            byteCount: Int64(contents.count)
+        )
+        let cleanupCommand = try plan.cleanupShellInvocation().shellCommand.rawValue
+        var session = RecordingAPKInstallSession(
+            shellOutputs: [
+                try plan.installShellCommand().rawValue: ADBShellOutput(
+                    bytes: Array("Success\n".utf8)
+                ),
+                cleanupCommand: checkedShellOutput("rm: Permission denied", exitCode: 1)
+            ],
+            pushedEvents: [.completed]
+        )
+
+        do {
+            _ = try await ADBAPKInstaller().install(contents: contents, plan: plan, using: &session)
+            XCTFail("Expected cleanup failure to throw.")
+        } catch let error as ADBAPKInstallExecutionError {
+            guard case let .cleanupFailed(result, events, underlyingError) = error else {
+                return XCTFail("Expected cleanupFailed, got \(error).")
+            }
+            XCTAssertEqual(result, .success)
+            XCTAssertEqual(events.last, .phaseStarted(.cleanup))
+            XCTAssertTrue(underlyingError.contains("commandFailed(exitCode: 1"))
+            XCTAssertTrue(underlyingError.contains("rm: Permission denied"))
+        }
+    }
+
+    func testTransferFailurePreservesCleanupFailureDetail() async throws {
+        let contents = makeTestAPK()
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "app.apk",
+            byteCount: Int64(contents.count)
+        )
+        let cleanupCommand = try plan.cleanupShellInvocation().shellCommand.rawValue
+        var session = RecordingAPKInstallSession(
+            shellOutputs: [
+                cleanupCommand: checkedShellOutput("rm failed", exitCode: 2)
+            ],
+            pushedEvents: [.failed(message: "push failed")]
+        )
+
+        do {
+            _ = try await ADBAPKInstaller().install(contents: contents, plan: plan, using: &session)
+            XCTFail("Expected transfer failure to throw.")
+        } catch let error as ADBAPKInstallExecutionError {
+            guard case let .transferFailed(message, events, cleanupError) = error else {
+                return XCTFail("Expected transferFailed, got \(error).")
+            }
+            XCTAssertEqual(message, "push failed")
+            XCTAssertEqual(events.last, .phaseStarted(.cleanup))
+            XCTAssertTrue(cleanupError?.contains("commandFailed(exitCode: 2") == true)
+            XCTAssertTrue(cleanupError?.contains("rm failed") == true)
+        }
     }
 
     func testInstallRejectsPackageByteCountMismatchBeforeCommands() async throws {
@@ -188,7 +281,13 @@ private struct RecordingAPKInstallSession: ADBAPKInstallRunningSession {
 
     mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput {
         commands.append(command.rawValue)
-        return shellOutputs[command.rawValue] ?? ADBShellOutput(bytes: [])
+        if let output = shellOutputs[command.rawValue] {
+            return output
+        }
+        if command.rawValue.contains(ADBCheckedShellInvocation.exitStatusMarker) {
+            return checkedShellOutput("")
+        }
+        return ADBShellOutput(bytes: [])
     }
 
     mutating func pushFile(
@@ -203,6 +302,16 @@ private struct RecordingAPKInstallSession: ADBAPKInstallRunningSession {
         }
         return pushedEvents
     }
+}
+
+private func checkedShellOutput(
+    _ commandOutput: String,
+    exitCode: Int = 0
+) -> ADBShellOutput {
+    ADBShellOutput(bytes: Array(
+        (commandOutput
+            + "\n\(ADBCheckedShellInvocation.exitStatusMarker)\(exitCode)\n").utf8
+    ))
 }
 
 private actor APKInstallEventRecorder {

@@ -128,6 +128,8 @@ The Protocol Spike confirmed that Apple frameworks do not expose the legacy Ed25
 
 TV text entry uses Android's built-in checked `input text` operation without requiring a companion IME; see [ADR 0012](./adr/0012-use-checked-android-input-text.md).
 
+Side-effecting shell commands use an explicit exit-status trailer when they do not have a stronger domain-specific result. APK staging and cleanup follow this rule; see [ADR 0013](./adr/0013-check-side-effecting-shell-command-status.md).
+
 ## iOS Platform Constraints
 
 **Local network access**:

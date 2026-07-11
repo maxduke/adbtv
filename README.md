@@ -40,6 +40,7 @@ Implemented so far:
 - single-APK install orchestration through the native ADB client;
 - live URL download and acknowledged APK transfer progress with byte counts in the install UI;
 - explicit APK-install cancellation with a recoverable status and same-source retry;
+- checked remote staging and cleanup with cleanup failures preserved in technical diagnostics;
 - single active install or remote operation, bound to its originating device until completion or cancellation;
 - Android TV D-pad, select, back, home, and settings remote actions;
 - user-facing operation status plus technical diagnostic details;
