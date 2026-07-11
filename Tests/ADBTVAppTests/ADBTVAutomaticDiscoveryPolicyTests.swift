@@ -23,4 +23,39 @@ final class ADBTVAutomaticDiscoveryPolicyTests: XCTestCase {
         )))
         XCTAssertFalse(failedPolicy.shouldStartDiscovery(status: .idle))
     }
+
+    func testBrowsingDiscoverySuspendsAndResumesOnce() {
+        var policy = ADBTVAutomaticDiscoveryPolicy()
+
+        XCTAssertTrue(policy.shouldSuspendDiscovery(status: .browsing))
+        XCTAssertTrue(policy.isDiscoverySuspended)
+        XCTAssertTrue(policy.shouldResumeDiscovery(status: .idle))
+        XCTAssertFalse(policy.isDiscoverySuspended)
+        XCTAssertFalse(policy.shouldResumeDiscovery(status: .idle))
+    }
+
+    func testIdleOrFailedDiscoveryDoesNotResume() {
+        var idlePolicy = ADBTVAutomaticDiscoveryPolicy()
+        XCTAssertFalse(idlePolicy.shouldSuspendDiscovery(status: .idle))
+        XCTAssertFalse(idlePolicy.shouldResumeDiscovery(status: .idle))
+
+        var failedPolicy = ADBTVAutomaticDiscoveryPolicy()
+        XCTAssertFalse(failedPolicy.shouldSuspendDiscovery(status: .failed(
+            userMessage: "Discovery failed.",
+            diagnosticDetail: DiagnosticDetail(summary: "Local network denied.")
+        )))
+        XCTAssertFalse(failedPolicy.shouldResumeDiscovery(status: .idle))
+    }
+
+    func testChangedStatusPreventsSuspendedDiscoveryFromResuming() {
+        var policy = ADBTVAutomaticDiscoveryPolicy()
+        XCTAssertTrue(policy.shouldSuspendDiscovery(status: .browsing))
+
+        XCTAssertFalse(policy.shouldResumeDiscovery(status: .failed(
+            userMessage: "Discovery failed.",
+            diagnosticDetail: DiagnosticDetail(summary: "Browser failed.")
+        )))
+        XCTAssertFalse(policy.isDiscoverySuspended)
+        XCTAssertFalse(policy.shouldResumeDiscovery(status: .idle))
+    }
 }

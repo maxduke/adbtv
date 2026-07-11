@@ -6,6 +6,7 @@ import UIKit
 #endif
 
 public struct ADBTVRootView: View {
+    @Environment(\.scenePhase) private var scenePhase
 #if os(iOS)
     @Environment(\.openURL) private var openURL
 #endif
@@ -245,12 +246,32 @@ public struct ADBTVRootView: View {
                 startDiscovery()
             }
         }
+        .onChange(of: scenePhase) { _, newPhase in
+            handleScenePhase(newPhase)
+        }
         .onDisappear {
             installTask?.cancel()
             remoteTask?.cancel()
             model.cancelActiveDeviceOperation()
             cancelPairing()
             stopDiscovery()
+        }
+    }
+
+    private func handleScenePhase(_ phase: ScenePhase) {
+        switch phase {
+        case .active:
+            if automaticDiscoveryPolicy.shouldResumeDiscovery(status: model.discoveryStatus) {
+                startDiscovery()
+            }
+        case .background:
+            if automaticDiscoveryPolicy.shouldSuspendDiscovery(status: model.discoveryStatus) {
+                stopDiscovery()
+            }
+        case .inactive:
+            break
+        @unknown default:
+            break
         }
     }
 
