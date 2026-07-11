@@ -19,6 +19,39 @@ final class ADBAppleAuthenticationIdentityTests: XCTestCase {
         XCTAssertFalse(store.synchronizable)
     }
 
+    func testSynchronizableStoreUsesStrictSyncedKeyAttributes() throws {
+        let store = ADBAppleAuthenticationIdentityStore()
+        let query = store.baseKeychainQuery()
+        let generationAttributes = store.keyGenerationAttributes()
+        let privateKeyAttributes = try XCTUnwrap(
+            generationAttributes[kSecPrivateKeyAttrs as String] as? [String: Any]
+        )
+
+        XCTAssertEqual(query[kSecAttrSynchronizable as String] as? Bool, true)
+        XCTAssertEqual(privateKeyAttributes[kSecAttrSynchronizable as String] as? Bool, true)
+        XCTAssertEqual(
+            privateKeyAttributes[kSecAttrAccessible as String] as? String,
+            kSecAttrAccessibleWhenUnlocked as String
+        )
+        XCTAssertEqual(privateKeyAttributes[kSecAttrIsPermanent as String] as? Bool, true)
+    }
+
+    func testLocalStoreExcludesSynchronizableAttributes() throws {
+        let store = ADBAppleAuthenticationIdentityStore(synchronizable: false)
+        let query = store.baseKeychainQuery()
+        let generationAttributes = store.keyGenerationAttributes()
+        let privateKeyAttributes = try XCTUnwrap(
+            generationAttributes[kSecPrivateKeyAttrs as String] as? [String: Any]
+        )
+
+        XCTAssertNil(query[kSecAttrSynchronizable as String])
+        XCTAssertNil(privateKeyAttributes[kSecAttrSynchronizable as String])
+        XCTAssertEqual(
+            privateKeyAttributes[kSecAttrAccessible as String] as? String,
+            kSecAttrAccessibleWhenUnlocked as String
+        )
+    }
+
     func testAuthenticationIdentityCreatesMatchingTLSIdentityAndPairingMaterial() throws {
         let authenticationIdentity = ADBAppleAuthenticationIdentity(
             privateKey: try makePrivateKey(),

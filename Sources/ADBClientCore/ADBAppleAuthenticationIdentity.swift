@@ -109,23 +109,8 @@ public struct ADBAppleAuthenticationIdentityStore: Sendable {
     }
 
     public func createIdentity() throws -> ADBAppleAuthenticationIdentity {
-        var privateKeyAttributes: [String: Any] = [
-            kSecAttrIsPermanent as String: true,
-            kSecAttrApplicationTag as String: applicationTagData
-        ]
-
-        if synchronizable {
-            privateKeyAttributes[kSecAttrSynchronizable as String] = true
-        }
-
-        let attributes: [String: Any] = [
-            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrKeySizeInBits as String: ADBRSAPublicKeyComponents.adbModulusByteCount * 8,
-            kSecPrivateKeyAttrs as String: privateKeyAttributes
-        ]
-
         var error: Unmanaged<CFError>?
-        guard let privateKey = SecKeyCreateRandomKey(attributes as CFDictionary, &error) else {
+        guard let privateKey = SecKeyCreateRandomKey(keyGenerationAttributes() as CFDictionary, &error) else {
             throw ADBAppleAuthenticationIdentityError.keyGenerationFailed(describe(error))
         }
 
@@ -136,7 +121,25 @@ public struct ADBAppleAuthenticationIdentityStore: Sendable {
         Data(applicationTag.utf8)
     }
 
-    private func baseKeychainQuery() -> [String: Any] {
+    func keyGenerationAttributes() -> [String: Any] {
+        var privateKeyAttributes: [String: Any] = [
+            kSecAttrIsPermanent as String: true,
+            kSecAttrApplicationTag as String: applicationTagData,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlocked
+        ]
+
+        if synchronizable {
+            privateKeyAttributes[kSecAttrSynchronizable as String] = true
+        }
+
+        return [
+            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+            kSecAttrKeySizeInBits as String: ADBRSAPublicKeyComponents.adbModulusByteCount * 8,
+            kSecPrivateKeyAttrs as String: privateKeyAttributes
+        ]
+    }
+
+    func baseKeychainQuery() -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassKey,
             kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
@@ -144,7 +147,7 @@ public struct ADBAppleAuthenticationIdentityStore: Sendable {
         ]
 
         if synchronizable {
-            query[kSecAttrSynchronizable as String] = kSecAttrSynchronizableAny
+            query[kSecAttrSynchronizable as String] = true
         }
 
         return query

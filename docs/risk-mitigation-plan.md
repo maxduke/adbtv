@@ -29,6 +29,7 @@ ADB pairing and reconnect require identity material that must work with TLS and 
 - In Milestone 1, prove key generation, certificate creation, TLS use, and persistence before building Device Library screens.
 - Keep Device Credential storage behind a small `DeviceIdentityStore` interface.
 - First support local Keychain storage; add Synced ADB Identity only after local reconnect works.
+- Query synchronizable identities strictly and use a sync-compatible When Unlocked accessibility class.
 - Write import/export tests for the exact identity data format used by the ADB client.
 
 **Fallback**:
