@@ -97,6 +97,8 @@ Some Android TV remote inputs may vary by device, OS version, or app focus. Powe
 - Start with the most stable key events: D-pad, select, back, and home.
 - Add settings, text input, volume, and power as separate tested actions.
 - Record per-action failures with Diagnostic Detail.
+- Bind every install and remote operation to its originating Managed Device until completion or cancellation.
+- Permit only one active device operation so selection changes and stale callbacks cannot present a result under another TV.
 
 **Fallback**:
 If an action is device-specific, expose it only when supported or label it as best-effort.

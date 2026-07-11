@@ -20,6 +20,7 @@ Current direction:
 - Android TV as the primary target;
 - Wireless Debugging pairing by code and QR;
 - multiple saved devices;
+- target-bound device operations that prevent cross-device status or endpoint confusion;
 - synced ADB identity through iCloud Keychain;
 - structured actions instead of raw shell in the first version;
 - APK installation from Files or HTTP/HTTPS URL.
@@ -37,6 +38,7 @@ Implemented so far:
 - single-APK install orchestration through the native ADB client;
 - live URL download and acknowledged APK transfer progress with byte counts in the install UI;
 - explicit APK-install cancellation with a recoverable status and same-source retry;
+- single active install or remote operation, bound to its originating device until completion or cancellation;
 - Android TV D-pad, select, back, home, and settings remote actions;
 - user-facing operation status plus technical diagnostic details;
 - bounded connection, pairing, remote-action, and APK-install operations with timeout diagnostics;

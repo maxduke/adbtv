@@ -57,6 +57,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Restart Wireless Debugging so its port changes, then reconnect through the saved Bonjour service.
 - [ ] Restart the Android TV and reconnect after discovery returns.
 - [ ] Add at least two Managed Devices and switch between them without mixing endpoints.
+- [ ] Start a long APK download or install on the first device and confirm device selection, deletion, pairing, and remote controls stay unavailable until it completes or is cancelled.
+- [ ] While that operation is active, attempt to select or remove its target and confirm progress remains attached to the original device; after completion or cancellation, confirm switching works normally.
 - [ ] Add a port 5555 endpoint manually, approve its RSA prompt on the TV, and confirm **Connected and saved** appears.
 - [ ] Reject a manual endpoint's RSA prompt and confirm the add sheet remains open with technical detail.
 - [ ] Remove one device and confirm other saved devices remain.
