@@ -94,7 +94,10 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
     }
 
     func testDownloadRejectsEmptyBody() async {
-        StubURLProtocol.stub = StubURLResponse(statusCode: 200)
+        StubURLProtocol.stub = StubURLResponse(
+            statusCode: 200,
+            headers: ["Content-Type": "application/octet-stream"]
+        )
 
         await XCTAssertThrowsDownloadError({ try await self.download() }, .emptyResponse)
     }
