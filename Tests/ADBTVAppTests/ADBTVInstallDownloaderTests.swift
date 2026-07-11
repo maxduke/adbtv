@@ -137,6 +137,10 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
         } catch {
             XCTFail("Expected CancellationError, got \(error).")
         }
+
+        for _ in 0 ..< 100 where StubURLProtocol.stopCount == 0 {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
         XCTAssertGreaterThan(StubURLProtocol.stopCount, 0)
     }
 
