@@ -2,6 +2,8 @@ enum ADBTVTimedOperation: String, Equatable, Sendable {
     case deviceConnection
     case manualDeviceVerification
     case pairing
+    case pairingServiceDiscovery
+    case connectionServiceDiscovery
     case remoteAction
     case apkInstallation
 }
@@ -48,12 +50,23 @@ struct ADBTVOperationTimeout: Sendable {
             return result
         }
     }
+
+    func waitUntilTimedOut(operation: ADBTVTimedOperation) async throws -> Never {
+        try await sleep(.seconds(seconds))
+        try Task.checkCancellation()
+        throw ADBTVOperationTimeoutError.timedOut(
+            operation: operation,
+            seconds: seconds
+        )
+    }
 }
 
 enum ADBTVOperationTimeoutPolicy {
     static let deviceConnection = ADBTVOperationTimeout(seconds: 30)
     static let manualDeviceVerification = ADBTVOperationTimeout(seconds: 45)
     static let pairing = ADBTVOperationTimeout(seconds: 90)
+    static let pairingServiceDiscovery = ADBTVOperationTimeout(seconds: 45)
+    static let connectionServiceDiscovery = ADBTVOperationTimeout(seconds: 45)
     static let remoteAction = ADBTVOperationTimeout(seconds: 20)
     static let apkInstallation = ADBTVOperationTimeout(seconds: 15 * 60)
 }

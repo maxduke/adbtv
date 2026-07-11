@@ -28,6 +28,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Discover an active `_adb-tls-pairing._tcp` service automatically.
 - [ ] Pair using the six-digit code shown by Android Wireless Debugging.
 - [ ] Match the paired device to its `_adb-tls-connect._tcp` service automatically.
+- [ ] Suppress or isolate the connect advertisement after pairing and confirm the wait ends with a pairing-succeeded discovery timeout.
 - [ ] Save the Managed Device once without creating a duplicate entry.
 - [ ] Cancel an active pairing attempt and start a new attempt successfully.
 - [ ] Enter an incorrect or expired code and confirm a clear User Error plus technical detail.
@@ -35,6 +36,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## QR Pairing
 
+- [ ] Scan a valid QR code while its pairing advertisement is unavailable and confirm the pairing-service wait times out.
 - [ ] Scan a valid Android Wireless Debugging QR code in portrait orientation.
 - [ ] Scan in landscape orientation and verify the camera framing remains usable.
 - [ ] Deny camera access and confirm the app explains the failure and retains Pairing Code fallback.

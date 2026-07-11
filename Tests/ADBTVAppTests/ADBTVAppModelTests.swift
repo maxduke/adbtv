@@ -526,6 +526,69 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.pairingStatus, .paired(device))
     }
 
+    func testConnectionServiceFailureOnlyAppliesToMatchingPendingPairing() {
+        let diagnostic = DiagnosticDetail(
+            summary: "timed out",
+            context: ["operation": "findConnectionService"]
+        )
+        var model = ADBTVAppModel()
+        XCTAssertFalse(model.waitForDiscoveredConnection(
+            deviceGUID: "expected-guid",
+            displayName: "Living Room TV"
+        ))
+
+        XCTAssertFalse(model.failWaitingForConnection(
+            deviceGUID: "stale-guid",
+            userMessage: "Connection service not found.",
+            diagnosticDetail: diagnostic
+        ))
+        XCTAssertEqual(model.pairingStatus, .waitingForConnection(
+            deviceGUID: "expected-guid",
+            displayName: "Living Room TV"
+        ))
+
+        XCTAssertTrue(model.failWaitingForConnection(
+            deviceGUID: "expected-guid",
+            userMessage: "Connection service not found.",
+            diagnosticDetail: diagnostic
+        ))
+        XCTAssertEqual(model.pairingStatus, .failed(
+            userMessage: "Connection service not found.",
+            diagnosticDetail: diagnostic
+        ))
+    }
+
+    func testPairingServiceFailureOnlyAppliesToMatchingPendingQRCode() {
+        let diagnostic = DiagnosticDetail(
+            summary: "timed out",
+            context: ["operation": "findPairingService"]
+        )
+        var model = ADBTVAppModel()
+        model.prepareQRCodePairing(
+            payload: "WIFI:T:ADB;S:expected-service;P:pair-secret;;"
+        )
+
+        XCTAssertFalse(model.failWaitingForPairingService(
+            serviceName: "stale-service",
+            userMessage: "Pairing service not found.",
+            diagnosticDetail: diagnostic
+        ))
+        XCTAssertEqual(
+            model.pairingStatus,
+            .waitingForPairingService(serviceName: "expected-service")
+        )
+
+        XCTAssertTrue(model.failWaitingForPairingService(
+            serviceName: "expected-service",
+            userMessage: "Pairing service not found.",
+            diagnosticDetail: diagnostic
+        ))
+        XCTAssertEqual(model.pairingStatus, .failed(
+            userMessage: "Pairing service not found.",
+            diagnosticDetail: diagnostic
+        ))
+    }
+
     func testQRCodePairingWaitsForMatchingPairingService() {
         let unrelatedService = ADBDiscoveredService(
             serviceName: "other-service",

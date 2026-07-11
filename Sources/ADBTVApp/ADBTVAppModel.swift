@@ -268,6 +268,34 @@ public struct ADBTVAppModel: Equatable, Sendable {
     }
 
     @discardableResult
+    public mutating func failWaitingForPairingService(
+        serviceName: String,
+        userMessage: String,
+        diagnosticDetail: DiagnosticDetail
+    ) -> Bool {
+        guard case .waitingForPairingService(let currentServiceName) = pairingStatus,
+              currentServiceName == serviceName else {
+            return false
+        }
+        failPairing(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        return true
+    }
+
+    @discardableResult
+    public mutating func failWaitingForConnection(
+        deviceGUID: String,
+        userMessage: String,
+        diagnosticDetail: DiagnosticDetail
+    ) -> Bool {
+        guard case .waitingForConnection(let currentGUID, _) = pairingStatus,
+              currentGUID == deviceGUID else {
+            return false
+        }
+        failPairing(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        return true
+    }
+
+    @discardableResult
     public mutating func waitForDiscoveredConnection(
         deviceGUID: String,
         displayName: String

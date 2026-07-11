@@ -257,6 +257,8 @@ public struct ADBTVRootView: View {
         discoveryBrowser = browser
         browser.start(updateHandler: { services in
             if model.updateDiscoveredServices(services) {
+                pairingTask?.cancel()
+                pairingTask = nil
                 saveDevices()
             }
             if model.selectQRCodePairingServiceIfAvailable() {
@@ -333,6 +335,8 @@ public struct ADBTVRootView: View {
         isPairDevicePresented = true
         if model.selectQRCodePairingServiceIfAvailable() {
             startPairing()
+        } else if let serviceName = model.pairingDraft.pairingQRCode?.serviceName {
+            waitForPairingService(serviceName: serviceName)
         }
     }
 
@@ -464,9 +468,91 @@ public struct ADBTVRootView: View {
                 displayName: displayName
             ) {
                 saveDevices()
+            } else {
+                waitForConnectionService(deviceGUID: deviceGUID)
             }
         case .failure(let userMessage, let diagnosticDetail):
             model.failPairing(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        }
+    }
+
+    @MainActor
+    private func waitForPairingService(serviceName: String) {
+        pairingTask?.cancel()
+        pairingTask = Task {
+            do {
+                try await ADBTVOperationTimeoutPolicy.pairingServiceDiscovery.waitUntilTimedOut(
+                    operation: .pairingServiceDiscovery
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                await MainActor.run {
+                    guard !Task.isCancelled else {
+                        return
+                    }
+                    let didFailWaitingPairing = model.failWaitingForPairingService(
+                        serviceName: serviceName,
+                        userMessage: "The QR pairing service was not found on the local network.",
+                        diagnosticDetail: DiagnosticDetail(
+                            summary: String(describing: error),
+                            context: Self.operationDiagnosticContext(
+                                error: error,
+                                base: [
+                                    "operation": "findPairingService",
+                                    "serviceName": serviceName
+                                ]
+                            )
+                        )
+                    )
+                    if didFailWaitingPairing {
+                        pairingTask = nil
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func waitForConnectionService(deviceGUID: String) {
+        pairingTask?.cancel()
+        pairingTask = Task {
+            do {
+                try await ADBTVOperationTimeoutPolicy.connectionServiceDiscovery.waitUntilTimedOut(
+                    operation: .connectionServiceDiscovery
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                await MainActor.run {
+                    guard !Task.isCancelled else {
+                        return
+                    }
+                    let didFailWaitingPairing = model.failWaitingForConnection(
+                        deviceGUID: deviceGUID,
+                        userMessage: "Pairing succeeded, but the TV connection service was not found.",
+                        diagnosticDetail: DiagnosticDetail(
+                            summary: String(describing: error),
+                            context: Self.operationDiagnosticContext(
+                                error: error,
+                                base: [
+                                    "deviceGUID": deviceGUID,
+                                    "operation": "findConnectionService"
+                                ]
+                            )
+                        )
+                    )
+                    if didFailWaitingPairing {
+                        pairingTask = nil
+                    }
+                }
+            }
         }
     }
 

@@ -49,6 +49,42 @@ final class ADBTVOperationTimeoutTests: XCTestCase {
             XCTFail("Expected TestOperationError, got \(error).")
         }
     }
+
+    func testWaitUntilTimedOutIdentifiesConnectionServiceDiscovery() async {
+        let timeout = ADBTVOperationTimeout(
+            seconds: 45,
+            sleep: { _ in }
+        )
+
+        do {
+            try await timeout.waitUntilTimedOut(operation: .connectionServiceDiscovery)
+        } catch let error as ADBTVOperationTimeoutError {
+            XCTAssertEqual(
+                error,
+                .timedOut(operation: .connectionServiceDiscovery, seconds: 45)
+            )
+        } catch {
+            XCTFail("Expected ADBTVOperationTimeoutError, got \(error).")
+        }
+    }
+
+    func testWaitUntilTimedOutIdentifiesPairingServiceDiscovery() async {
+        let timeout = ADBTVOperationTimeout(
+            seconds: 45,
+            sleep: { _ in }
+        )
+
+        do {
+            try await timeout.waitUntilTimedOut(operation: .pairingServiceDiscovery)
+        } catch let error as ADBTVOperationTimeoutError {
+            XCTAssertEqual(
+                error,
+                .timedOut(operation: .pairingServiceDiscovery, seconds: 45)
+            )
+        } catch {
+            XCTFail("Expected ADBTVOperationTimeoutError, got \(error).")
+        }
+    }
 }
 
 private enum TestOperationError: Error, Equatable {
