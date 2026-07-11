@@ -481,7 +481,7 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.pairingStatus, .idle)
     }
 
-    func testDiscoveredPairingWaitsForMatchingConnectServiceThenSavesDevice() {
+    func testDiscoveredPairingWaitsForMatchingConnectServiceThenRequiresVerification() {
         let pairingService = ADBDiscoveredService(
             serviceName: "pairing-session",
             serviceType: ADBWirelessDebuggingServiceKind.pairing.bonjourType,
@@ -500,7 +500,7 @@ final class ADBTVAppModelTests: XCTestCase {
         )
         var model = ADBTVAppModel(discoveredServices: [pairingService, unrelatedConnectService])
 
-        XCTAssertFalse(model.waitForDiscoveredConnection(
+        XCTAssertNil(model.waitForDiscoveredConnection(
             deviceGUID: "adb-device-guid",
             displayName: "Living Room TV"
         ))
@@ -511,19 +511,21 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertTrue(model.pairingStatus.isPairing)
         XCTAssertTrue(model.devices.isEmpty)
 
-        XCTAssertTrue(model.updateDiscoveredServices([
+        let candidate = model.updateDiscoveredServices([
             pairingService,
             unrelatedConnectService,
             matchingConnectService
-        ]))
+        ])
 
-        guard let device = model.selectedDevice else {
-            return XCTFail("Expected the discovered device to be saved.")
+        guard let candidate else {
+            return XCTFail("Expected a discovered connection candidate.")
         }
-        XCTAssertEqual(device.displayName, "Living Room TV")
-        XCTAssertEqual(device.bonjourService, matchingConnectService)
-        XCTAssertEqual(device.connectionDescription, "adb-device-guid via Bonjour")
-        XCTAssertEqual(model.pairingStatus, .paired(device))
+        XCTAssertEqual(candidate.displayName, "Living Room TV")
+        XCTAssertEqual(candidate.bonjourService, matchingConnectService)
+        XCTAssertEqual(candidate.connectionDescription, "adb-device-guid via Bonjour")
+        XCTAssertEqual(model.pairingStatus, .verifyingConnection(candidate))
+        XCTAssertTrue(model.pairingStatus.isPairing)
+        XCTAssertTrue(model.devices.isEmpty)
     }
 
     func testConnectionServiceFailureOnlyAppliesToMatchingPendingPairing() {
@@ -532,7 +534,7 @@ final class ADBTVAppModelTests: XCTestCase {
             context: ["operation": "findConnectionService"]
         )
         var model = ADBTVAppModel()
-        XCTAssertFalse(model.waitForDiscoveredConnection(
+        XCTAssertNil(model.waitForDiscoveredConnection(
             deviceGUID: "expected-guid",
             displayName: "Living Room TV"
         ))
@@ -648,6 +650,65 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.devices, [device])
         XCTAssertEqual(model.selectedDevice, device)
         XCTAssertEqual(model.pairingDraft.codeString, "")
+    }
+
+    func testPairingConnectionVerificationSavesOnlyMatchingVerifiedDevice() {
+        var model = ADBTVAppModel()
+        let candidate = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "192.168.1.50",
+            port: 5555
+        )
+        var verifiedDevice = candidate
+        verifiedDevice.model = "Chromecast"
+        model.beginPairingConnectionVerification(device: candidate)
+
+        XCTAssertFalse(model.finishPairingConnectionVerification(
+            expectedDeviceID: UUID(),
+            verifiedDevice: verifiedDevice
+        ))
+        XCTAssertTrue(model.devices.isEmpty)
+        XCTAssertEqual(model.pairingStatus, .verifyingConnection(candidate))
+
+        XCTAssertTrue(model.finishPairingConnectionVerification(
+            expectedDeviceID: candidate.id,
+            verifiedDevice: verifiedDevice
+        ))
+        XCTAssertEqual(model.devices, [verifiedDevice])
+        XCTAssertEqual(model.selectedDevice, verifiedDevice)
+        XCTAssertEqual(model.pairingStatus, .paired(verifiedDevice))
+    }
+
+    func testPairingConnectionVerificationFailureIgnoresStaleResult() {
+        var model = ADBTVAppModel()
+        let candidate = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "192.168.1.50",
+            port: 5555
+        )
+        let diagnostic = DiagnosticDetail(
+            summary: "connection refused",
+            context: ["operation": "verifyPairedDevice"]
+        )
+        model.beginPairingConnectionVerification(device: candidate)
+
+        XCTAssertFalse(model.failPairingConnectionVerification(
+            expectedDeviceID: UUID(),
+            userMessage: "Could not verify the TV connection.",
+            diagnosticDetail: diagnostic
+        ))
+        XCTAssertEqual(model.pairingStatus, .verifyingConnection(candidate))
+
+        XCTAssertTrue(model.failPairingConnectionVerification(
+            expectedDeviceID: candidate.id,
+            userMessage: "Could not verify the TV connection.",
+            diagnosticDetail: diagnostic
+        ))
+        XCTAssertEqual(model.pairingStatus, .failed(
+            userMessage: "Could not verify the TV connection.",
+            diagnosticDetail: diagnostic
+        ))
+        XCTAssertTrue(model.devices.isEmpty)
     }
 
     func testPairingFailureStoresUserAndDiagnosticDetails() {

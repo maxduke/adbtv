@@ -262,10 +262,10 @@ public struct ADBTVRootView: View {
         let browser = ADBBonjourServiceBrowser()
         discoveryBrowser = browser
         browser.start(updateHandler: { services in
-            if model.updateDiscoveredServices(services) {
+            if let device = model.updateDiscoveredServices(services) {
                 pairingTask?.cancel()
                 pairingTask = nil
-                saveDevices()
+                verifyPairingConnection(device)
             }
             if model.selectQRCodePairingServiceIfAvailable() {
                 startPairing()
@@ -466,19 +466,69 @@ public struct ADBTVRootView: View {
         pairingTask = nil
         switch completion {
         case .success(let device):
-            model.finishPairing(device: device)
-            saveDevices()
+            verifyPairingConnection(device)
         case let .discovered(deviceGUID, displayName):
-            if model.waitForDiscoveredConnection(
+            if let device = model.waitForDiscoveredConnection(
                 deviceGUID: deviceGUID,
                 displayName: displayName
             ) {
-                saveDevices()
+                verifyPairingConnection(device)
             } else {
                 waitForConnectionService(deviceGUID: deviceGUID)
             }
         case .failure(let userMessage, let diagnosticDetail):
             model.failPairing(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        }
+    }
+
+    @MainActor
+    private func verifyPairingConnection(_ device: ADBTVDeviceSummary) {
+        model.beginPairingConnectionVerification(device: device)
+        pairingTask?.cancel()
+        pairingTask = Task {
+            do {
+                let verifiedDevice = try await Self.verifyPairedDevice(device)
+                guard !Task.isCancelled else {
+                    return
+                }
+                await MainActor.run {
+                    guard !Task.isCancelled else {
+                        return
+                    }
+                    if model.finishPairingConnectionVerification(
+                        expectedDeviceID: device.id,
+                        verifiedDevice: verifiedDevice
+                    ) {
+                        saveDevices()
+                        pairingTask = nil
+                    }
+                }
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                await MainActor.run {
+                    guard !Task.isCancelled else {
+                        return
+                    }
+                    if model.failPairingConnectionVerification(
+                        expectedDeviceID: device.id,
+                        userMessage: "Pairing succeeded, but the app could not connect to the TV.",
+                        diagnosticDetail: DiagnosticDetail(
+                            summary: String(describing: error),
+                            context: Self.operationDiagnosticContext(
+                                error: error,
+                                base: [
+                                    "operation": "verifyPairedDevice",
+                                    "target": device.connectionDescription
+                                ]
+                            )
+                        )
+                    ) {
+                        pairingTask = nil
+                    }
+                }
+            }
         }
     }
 
@@ -816,9 +866,29 @@ public struct ADBTVRootView: View {
     private static func verifyManualDevice(
         _ device: ADBTVDeviceSummary
     ) async throws -> ADBTVDeviceSummary {
-        try await ADBTVOperationTimeoutPolicy.manualDeviceVerification.run(
+        try await verifyDevice(
+            device,
+            timeout: ADBTVOperationTimeoutPolicy.manualDeviceVerification,
             operation: .manualDeviceVerification
-        ) {
+        )
+    }
+
+    private static func verifyPairedDevice(
+        _ device: ADBTVDeviceSummary
+    ) async throws -> ADBTVDeviceSummary {
+        try await verifyDevice(
+            device,
+            timeout: ADBTVOperationTimeoutPolicy.pairingConnectionVerification,
+            operation: .pairingConnectionVerification
+        )
+    }
+
+    private static func verifyDevice(
+        _ device: ADBTVDeviceSummary,
+        timeout: ADBTVOperationTimeout,
+        operation: ADBTVTimedOperation
+    ) async throws -> ADBTVDeviceSummary {
+        try await timeout.run(operation: operation) {
             var connection = try await connectedDevice(for: device)
             defer { connection.cancel() }
 
@@ -834,6 +904,12 @@ public struct ADBTVRootView: View {
     }
 #else
     private static func verifyManualDevice(
+        _ device: ADBTVDeviceSummary
+    ) async throws -> ADBTVDeviceSummary {
+        throw ADBTVManualDeviceError.unsupportedPlatform
+    }
+
+    private static func verifyPairedDevice(
         _ device: ADBTVDeviceSummary
     ) async throws -> ADBTVDeviceSummary {
         throw ADBTVManualDeviceError.unsupportedPlatform
@@ -1031,6 +1107,18 @@ private struct PairingStatusView: View {
                         .foregroundStyle(.secondary)
                 }
                 Text(deviceGUID)
+                    .font(.footnote.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+        case .verifyingConnection(let device):
+            Section {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Verifying the TV connection")
+                        .foregroundStyle(.secondary)
+                }
+                Text(device.connectionDescription)
                     .font(.footnote.monospaced())
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)

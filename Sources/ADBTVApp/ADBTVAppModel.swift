@@ -174,13 +174,15 @@ public struct ADBTVAppModel: Equatable, Sendable {
     }
 
     @discardableResult
-    public mutating func updateDiscoveredServices(_ services: [ADBDiscoveredService]) -> Bool {
+    public mutating func updateDiscoveredServices(
+        _ services: [ADBDiscoveredService]
+    ) -> ADBTVDeviceSummary? {
         discoveredServices = services.sortedForPresentation()
         if !discoveryStatus.isBrowsing {
             discoveryStatus = .browsing
         }
 
-        return finishPendingDiscoveredPairingIfPossible()
+        return beginPendingDiscoveredPairingVerificationIfPossible()
     }
 
     public mutating func stopDiscovery() {
@@ -263,6 +265,40 @@ public struct ADBTVAppModel: Equatable, Sendable {
         pairingStatus = .paired(savedDevice)
     }
 
+    public mutating func beginPairingConnectionVerification(device: ADBTVDeviceSummary) {
+        pairingStatus = .verifyingConnection(device)
+    }
+
+    @discardableResult
+    public mutating func finishPairingConnectionVerification(
+        expectedDeviceID: UUID,
+        verifiedDevice: ADBTVDeviceSummary
+    ) -> Bool {
+        guard case .verifyingConnection(let candidate) = pairingStatus,
+              candidate.id == expectedDeviceID,
+              verifiedDevice.id == expectedDeviceID else {
+            return false
+        }
+
+        finishPairing(device: verifiedDevice)
+        return true
+    }
+
+    @discardableResult
+    public mutating func failPairingConnectionVerification(
+        expectedDeviceID: UUID,
+        userMessage: String,
+        diagnosticDetail: DiagnosticDetail
+    ) -> Bool {
+        guard case .verifyingConnection(let candidate) = pairingStatus,
+              candidate.id == expectedDeviceID else {
+            return false
+        }
+
+        failPairing(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        return true
+    }
+
     public mutating func failPairing(userMessage: String, diagnosticDetail: DiagnosticDetail) {
         pairingStatus = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
     }
@@ -299,12 +335,12 @@ public struct ADBTVAppModel: Equatable, Sendable {
     public mutating func waitForDiscoveredConnection(
         deviceGUID: String,
         displayName: String
-    ) -> Bool {
+    ) -> ADBTVDeviceSummary? {
         pairingStatus = .waitingForConnection(
             deviceGUID: deviceGUID,
             displayName: displayName
         )
-        return finishPendingDiscoveredPairingIfPossible()
+        return beginPendingDiscoveredPairingVerificationIfPossible()
     }
 
     public mutating func cancelPairing() {
@@ -313,20 +349,21 @@ public struct ADBTVAppModel: Equatable, Sendable {
         pairingStatus = .idle
     }
 
-    private mutating func finishPendingDiscoveredPairingIfPossible() -> Bool {
+    private mutating func beginPendingDiscoveredPairingVerificationIfPossible(
+    ) -> ADBTVDeviceSummary? {
         guard case let .waitingForConnection(deviceGUID, displayName) = pairingStatus,
               let service = discoveredServices.first(where: {
                   $0.kind == .connect && $0.serviceName == deviceGUID
               }) else {
-            return false
+            return nil
         }
 
-        finishPairing(device: ADBTVDeviceSummary(
+        let device = ADBTVDeviceSummary(
             displayName: displayName,
-            bonjourService: service,
-            model: "Android TV"
-        ))
-        return true
+            bonjourService: service
+        )
+        beginPairingConnectionVerification(device: device)
+        return device
     }
 }
 
@@ -692,12 +729,13 @@ public enum ADBTVPairingStatus: Equatable, Sendable {
     case waitingForPairingService(serviceName: String)
     case pairing(source: ADBTVPairingSource, target: String)
     case waitingForConnection(deviceGUID: String, displayName: String)
+    case verifyingConnection(ADBTVDeviceSummary)
     case paired(ADBTVDeviceSummary)
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 
     public var isPairing: Bool {
         switch self {
-        case .waitingForPairingService, .pairing, .waitingForConnection:
+        case .waitingForPairingService, .pairing, .waitingForConnection, .verifyingConnection:
             return true
         default:
             return false

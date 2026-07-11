@@ -1,6 +1,7 @@
 enum ADBTVTimedOperation: String, Equatable, Sendable {
     case deviceConnection
     case manualDeviceVerification
+    case pairingConnectionVerification
     case pairing
     case pairingServiceDiscovery
     case connectionServiceDiscovery
@@ -64,6 +65,7 @@ struct ADBTVOperationTimeout: Sendable {
 enum ADBTVOperationTimeoutPolicy {
     static let deviceConnection = ADBTVOperationTimeout(seconds: 30)
     static let manualDeviceVerification = ADBTVOperationTimeout(seconds: 45)
+    static let pairingConnectionVerification = ADBTVOperationTimeout(seconds: 45)
     static let pairing = ADBTVOperationTimeout(seconds: 90)
     static let pairingServiceDiscovery = ADBTVOperationTimeout(seconds: 45)
     static let connectionServiceDiscovery = ADBTVOperationTimeout(seconds: 45)
