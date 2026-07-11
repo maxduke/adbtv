@@ -269,6 +269,12 @@ public enum ADBTVInstallDownloader: Sendable {
         guard maximumByteCount > 0 else {
             throw ADBTVInstallDownloadError.invalidMaximumByteCount(maximumByteCount)
         }
+        if let policyError = ADBTVInstallURLPolicy.violation(
+            sourceURL: url,
+            destinationURL: url
+        ) {
+            throw policyError
+        }
 
         let delegateQueue = OperationQueue()
         delegateQueue.maxConcurrentOperationCount = 1
@@ -304,12 +310,35 @@ public enum ADBTVInstallDownloader: Sendable {
 
 public enum ADBTVInstallDownloadError: Error, Equatable, Sendable {
     case invalidMaximumByteCount(Int64)
+    case unsupportedURLScheme(String?)
+    case insecureTransportDowngrade
     case nonHTTPResponse
     case unacceptableStatusCode(Int)
     case unacceptableContentType(String)
     case packageTooLarge(maximumByteCount: Int64, receivedByteCount: Int64)
     case missingResponse
     case emptyResponse
+}
+
+enum ADBTVInstallURLPolicy {
+    static func violation(
+        sourceURL: URL,
+        destinationURL: URL
+    ) -> ADBTVInstallDownloadError? {
+        let sourceScheme = sourceURL.scheme?.lowercased()
+        guard sourceScheme == "http" || sourceScheme == "https" else {
+            return .unsupportedURLScheme(sourceScheme)
+        }
+
+        let destinationScheme = destinationURL.scheme?.lowercased()
+        guard destinationScheme == "http" || destinationScheme == "https" else {
+            return .unsupportedURLScheme(destinationScheme)
+        }
+        if sourceScheme == "https", destinationScheme == "http" {
+            return .insecureTransportDowngrade
+        }
+        return nil
+    }
 }
 
 private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelegate,
@@ -348,13 +377,57 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
 
     func urlSession(
         _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        guard terminalError == nil else {
+            completionHandler(nil)
+            return
+        }
+        guard let destinationURL = request.url else {
+            terminalError = .unsupportedURLScheme(nil)
+            completionHandler(nil)
+            return
+        }
+        if let policyError = ADBTVInstallURLPolicy.violation(
+            sourceURL: sourceURL,
+            destinationURL: destinationURL
+        ) {
+            terminalError = policyError
+            completionHandler(nil)
+            return
+        }
+        completionHandler(request)
+    }
+
+    func urlSession(
+        _ session: URLSession,
         dataTask: URLSessionDataTask,
         didReceive response: URLResponse,
         completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
     ) {
+        guard terminalError == nil else {
+            completionHandler(.cancel)
+            return
+        }
         let expectedByteCount = response.expectedContentLength > 0
             ? response.expectedContentLength
             : nil
+        guard let responseURL = response.url else {
+            terminalError = .unsupportedURLScheme(nil)
+            completionHandler(.cancel)
+            return
+        }
+        if let policyError = ADBTVInstallURLPolicy.violation(
+            sourceURL: sourceURL,
+            destinationURL: responseURL
+        ) {
+            terminalError = policyError
+            completionHandler(.cancel)
+            return
+        }
         guard let statusCode = (response as? HTTPURLResponse)?.statusCode else {
             terminalError = .nonHTTPResponse
             completionHandler(.cancel)

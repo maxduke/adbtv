@@ -112,6 +112,53 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
         XCTAssertEqual(StubURLProtocol.startCount, 0)
     }
 
+    func testDownloadRejectsUnsupportedSourceSchemeBeforeStartingRequest() async {
+        StubURLProtocol.stub = StubURLResponse(statusCode: 200, chunks: [Data([1])])
+
+        await XCTAssertThrowsDownloadError(
+            { try await self.download(url: URL(string: "ftp://example.com/app.apk")!) },
+            .unsupportedURLScheme("ftp")
+        )
+        XCTAssertEqual(StubURLProtocol.startCount, 0)
+    }
+
+    func testURLPolicyAllowsSecureAndExplicitlyInsecureRedirects() {
+        let httpsSource = URL(string: "https://example.com/app.apk")!
+        let httpSource = URL(string: "http://example.com/app.apk")!
+
+        XCTAssertNil(ADBTVInstallURLPolicy.violation(
+            sourceURL: httpsSource,
+            destinationURL: URL(string: "https://cdn.example.com/app.apk")!
+        ))
+        XCTAssertNil(ADBTVInstallURLPolicy.violation(
+            sourceURL: httpSource,
+            destinationURL: URL(string: "https://cdn.example.com/app.apk")!
+        ))
+        XCTAssertNil(ADBTVInstallURLPolicy.violation(
+            sourceURL: httpSource,
+            destinationURL: URL(string: "http://cdn.example.com/app.apk")!
+        ))
+    }
+
+    func testURLPolicyRejectsDowngradesAndUnsupportedRedirectSchemes() {
+        let httpsSource = URL(string: "https://example.com/app.apk")!
+
+        XCTAssertEqual(
+            ADBTVInstallURLPolicy.violation(
+                sourceURL: httpsSource,
+                destinationURL: URL(string: "http://cdn.example.com/app.apk")!
+            ),
+            .insecureTransportDowngrade
+        )
+        XCTAssertEqual(
+            ADBTVInstallURLPolicy.violation(
+                sourceURL: httpsSource,
+                destinationURL: URL(string: "ftp://cdn.example.com/app.apk")!
+            ),
+            .unsupportedURLScheme("ftp")
+        )
+    }
+
     func testCancellingDownloadCancelsURLSessionTask() async {
         StubURLProtocol.stub = StubURLResponse(statusCode: 200, waitsForCancellation: true)
         let task = Task {
