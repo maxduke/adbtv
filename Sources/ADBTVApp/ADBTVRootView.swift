@@ -30,9 +30,11 @@ public struct ADBTVRootView: View {
 #endif
 
     public init(deviceStore: ADBTVDeviceStore = ADBTVDeviceStore()) {
-        self.init(
-            model: ADBTVAppModel(devices: deviceStore.loadDevices()),
-            deviceStore: deviceStore
+        let loadResult = deviceStore.loadDevices()
+        self.deviceStore = deviceStore
+        self._model = State(initialValue: ADBTVAppModel(devices: loadResult.devices))
+        self._devicePersistenceError = State(
+            initialValue: Self.deviceLoadDiagnosticDetail(for: loadResult)
         )
     }
 
@@ -197,7 +199,7 @@ public struct ADBTVRootView: View {
         }
 #endif
         .alert(
-            "Could not save devices",
+            "Device Library issue",
             isPresented: Binding(
                 get: { devicePersistenceError != nil },
                 set: { isPresented in
@@ -272,6 +274,35 @@ public struct ADBTVRootView: View {
                 context: ["operation": "saveDevices"]
             )
         }
+    }
+
+    private static func deviceLoadDiagnosticDetail(
+        for result: ADBTVDeviceStoreLoadResult
+    ) -> DiagnosticDetail? {
+        guard result.hasFailures else {
+            return nil
+        }
+
+        var context = [
+            "operation": "loadDevices",
+            "recoveredDeviceCount": String(result.devices.count),
+            "rejectedRecordCount": String(result.rejectedRecordCount)
+        ]
+        if result.rejectedRecordCount == 0 {
+            context["reason"] = "invalidDeviceArchive"
+        } else {
+            context["reason"] = "partiallyInvalidDeviceArchive"
+        }
+        if let failureDescription = result.failureDescription {
+            context["underlyingError"] = failureDescription
+        }
+
+        return DiagnosticDetail(
+            summary: result.rejectedRecordCount == 0
+                ? "Saved devices could not be loaded because the Device Library data is invalid."
+                : "Some saved devices could not be loaded. Valid devices were recovered.",
+            context: context
+        )
     }
 
     private func toggleDiscovery() {

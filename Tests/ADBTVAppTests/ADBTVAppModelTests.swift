@@ -195,7 +195,7 @@ final class ADBTVAppModelTests: XCTestCase {
 
         try store.saveDevices(devices)
 
-        XCTAssertEqual(store.loadDevices(), devices)
+        XCTAssertEqual(store.loadDevices(), ADBTVDeviceStoreLoadResult(devices: devices))
     }
 
     func testDeviceStoreLoadsLegacyHostPortDeviceWithoutBonjourField() throws {
@@ -209,11 +209,58 @@ final class ADBTVAppModelTests: XCTestCase {
         """.data(using: .utf8))
         userDefaults.set(data, forKey: "ADBTV.savedDevices")
 
-        let devices = ADBTVDeviceStore(userDefaults: userDefaults).loadDevices()
+        let result = ADBTVDeviceStore(userDefaults: userDefaults).loadDevices()
 
-        XCTAssertEqual(devices.count, 1)
-        XCTAssertEqual(devices.first?.displayName, "Legacy TV")
-        XCTAssertNil(devices.first?.bonjourService)
+        XCTAssertEqual(result.devices.count, 1)
+        XCTAssertEqual(result.devices.first?.displayName, "Legacy TV")
+        XCTAssertNil(result.devices.first?.bonjourService)
+        XCTAssertFalse(result.hasFailures)
+    }
+
+    func testDeviceStoreRecoversValidRecordsFromPartiallyInvalidArchive() throws {
+        let suiteName = "ADBTVDeviceStorePartialRecoveryTests.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+        let device = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "192.168.1.50",
+            port: 5555
+        )
+        let validRecordData = try JSONEncoder().encode(device)
+        let validRecord = try JSONSerialization.jsonObject(with: validRecordData)
+        let archive = try JSONSerialization.data(withJSONObject: [
+            validRecord,
+            ["id": "not-a-uuid", "displayName": "Broken TV"]
+        ])
+        userDefaults.set(archive, forKey: "ADBTV.savedDevices")
+
+        let result = ADBTVDeviceStore(userDefaults: userDefaults).loadDevices()
+
+        XCTAssertEqual(result.devices, [device])
+        XCTAssertEqual(result.rejectedRecordCount, 1)
+        XCTAssertNotNil(result.failureDescription)
+        XCTAssertTrue(result.hasFailures)
+        XCTAssertEqual(userDefaults.data(forKey: "ADBTV.savedDevices"), archive)
+    }
+
+    func testDeviceStoreReportsUnreadableArchiveWithoutDeletingIt() throws {
+        let suiteName = "ADBTVDeviceStoreInvalidArchiveTests.\(UUID().uuidString)"
+        let userDefaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            userDefaults.removePersistentDomain(forName: suiteName)
+        }
+        let archive = Data("not-json".utf8)
+        userDefaults.set(archive, forKey: "ADBTV.savedDevices")
+
+        let result = ADBTVDeviceStore(userDefaults: userDefaults).loadDevices()
+
+        XCTAssertEqual(result.devices, [])
+        XCTAssertEqual(result.rejectedRecordCount, 0)
+        XCTAssertNotNil(result.failureDescription)
+        XCTAssertTrue(result.hasFailures)
+        XCTAssertEqual(userDefaults.data(forKey: "ADBTV.savedDevices"), archive)
     }
 
     func testModelSelectsPackageFromFileURL() {
