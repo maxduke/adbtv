@@ -99,8 +99,28 @@ public struct ADBTVAppModel: Equatable, Sendable {
         installDraft.status = installDraft.canBuildInstallPlan ? .ready : .idle
     }
 
-    public mutating func recordInstallEvent(_ event: ADBAPKInstallEvent) {
-        installDraft.status = ADBTVInstallStatus(event: event)
+    public mutating func startInstall() {
+        if installDraft.selectedPackage == nil, installDraft.validatedURL != nil {
+            installDraft.status = .downloading(receivedByteCount: 0, totalByteCount: nil)
+        } else {
+            installDraft.status = .running(.validatePackage)
+        }
+    }
+
+    public mutating func recordInstallEvent(_ event: ADBTVInstallEvent) {
+        guard installDraft.status.isRunning else {
+            return
+        }
+
+        switch event {
+        case .download(let progress):
+            installDraft.status = .downloading(
+                receivedByteCount: progress.receivedByteCount,
+                totalByteCount: progress.totalByteCount
+            )
+        case .installer(let event):
+            installDraft.status = ADBTVInstallStatus(event: event)
+        }
     }
 
     public mutating func finishInstall(result: ADBAPKInstallResult) {
@@ -623,6 +643,7 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
     case idle
     case ready
     case running(ADBAPKInstallPhase)
+    case downloading(receivedByteCount: Int64, totalByteCount: Int64?)
     case transferring(sentByteCount: Int, totalByteCount: Int)
     case succeeded
     case cancelled
@@ -673,7 +694,7 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
 
     public var isRunning: Bool {
         switch self {
-        case .running, .transferring:
+        case .running, .downloading, .transferring:
             return true
         case .idle, .ready, .succeeded, .cancelled, .failed:
             return false

@@ -649,7 +649,7 @@ public struct ADBTVRootView: View {
 
     private func startInstall(for device: ADBTVDeviceSummary) {
         let installModel = model
-        model.recordInstallEvent(.phaseStarted(.validatePackage))
+        model.startInstall()
 
         installTask?.cancel()
         installTask = Task {
@@ -700,14 +700,19 @@ public struct ADBTVRootView: View {
     private static func installPackage(
         for device: ADBTVDeviceSummary,
         using installModel: ADBTVAppModel,
-        eventHandler: @escaping ADBAPKInstallEventHandler
+        eventHandler: @escaping ADBTVInstallEventHandler
     ) async throws -> ADBAPKInstallReport {
 #if canImport(Network) && canImport(Security)
         return try await ADBTVOperationTimeoutPolicy.apkInstallation.run(operation: .apkInstallation) {
+            let operation = ADBTVInstallOperation()
+            let package = try await operation.prepareSelectedPackage(
+                from: installModel,
+                eventHandler: eventHandler
+            )
             var connection = try await connectedDevice(for: device)
             defer { connection.cancel() }
-            return try await ADBTVInstallOperation().installSelectedPackage(
-                from: installModel,
+            return try await operation.installPreparedPackage(
+                package,
                 using: &connection,
                 eventHandler: eventHandler
             )
@@ -733,8 +738,11 @@ public struct ADBTVRootView: View {
             "device": device.connectionDescription,
             "operation": "installAPK"
         ]
-        if error is ADBAPKValidationError {
+        if error is ADBAPKValidationError || error is ADBTVInstallFileError {
             context["phase"] = "validatePackage"
+        }
+        if error is ADBTVInstallDownloadError {
+            context["phase"] = "downloadPackage"
         }
         context = operationDiagnosticContext(error: error, base: context)
 
@@ -750,6 +758,12 @@ public struct ADBTVRootView: View {
         }
         if error is ADBAPKValidationError {
             return "The selected file is not a valid APK."
+        }
+        if error is ADBTVInstallFileError {
+            return "Could not read the selected APK."
+        }
+        if error is ADBTVInstallDownloadError {
+            return "Could not download APK."
         }
 
         return "Could not install APK."
@@ -1620,6 +1634,22 @@ private struct InstallStatusView: View {
                 Label(statusTitle(for: phase), systemImage: "arrow.triangle.2.circlepath")
                     .foregroundStyle(.secondary)
             }
+        case .downloading(let receivedByteCount, let totalByteCount):
+            VStack(alignment: .leading, spacing: 8) {
+                if let totalByteCount, totalByteCount > 0 {
+                    ProgressView(value: progressFraction(receivedByteCount, totalByteCount))
+                    Text("\(receivedByteCount) of \(totalByteCount) bytes")
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                } else {
+                    ProgressView()
+                    Text("\(receivedByteCount) bytes received")
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                Label("Downloading APK", systemImage: "arrow.down.doc")
+                    .foregroundStyle(.secondary)
+            }
         case .transferring(let sentByteCount, let totalByteCount):
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(value: transferFraction(sentByteCount, totalByteCount))
@@ -1660,11 +1690,15 @@ private struct InstallStatusView: View {
     }
 
     private func transferFraction(_ sentByteCount: Int, _ totalByteCount: Int) -> Double {
+        progressFraction(Int64(sentByteCount), Int64(totalByteCount))
+    }
+
+    private func progressFraction(_ completedByteCount: Int64, _ totalByteCount: Int64) -> Double {
         guard totalByteCount > 0 else {
             return 1
         }
 
-        return min(max(Double(sentByteCount) / Double(totalByteCount), 0), 1)
+        return min(max(Double(completedByteCount) / Double(totalByteCount), 0), 1)
     }
 }
 

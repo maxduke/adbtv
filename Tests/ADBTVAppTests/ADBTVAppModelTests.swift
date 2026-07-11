@@ -246,27 +246,50 @@ final class ADBTVAppModelTests: XCTestCase {
 
     func testInstallEventsUpdatePresentationStatus() throws {
         var model = ADBTVAppModel()
+        model.setInstallURLString("https://example.com/app.apk")
+        model.startInstall()
 
-        model.recordInstallEvent(.phaseStarted(.transferPackage))
-        XCTAssertEqual(model.installDraft.status, .running(.transferPackage))
-
-        model.recordInstallEvent(.transfer(.started(
-            remotePath: try ADBRemotePath("/data/local/tmp/adbtv/app.apk"),
+        model.recordInstallEvent(.download(ADBTVInstallDownloadProgress(
+            receivedByteCount: 25,
             totalByteCount: 100
         )))
+        XCTAssertEqual(
+            model.installDraft.status,
+            .downloading(receivedByteCount: 25, totalByteCount: 100)
+        )
+        XCTAssertTrue(model.installDraft.status.isRunning)
+
+        model.recordInstallEvent(.installer(.phaseStarted(.transferPackage)))
+        XCTAssertEqual(model.installDraft.status, .running(.transferPackage))
+
+        model.recordInstallEvent(.installer(.transfer(.started(
+            remotePath: try ADBRemotePath("/data/local/tmp/adbtv/app.apk"),
+            totalByteCount: 100
+        ))))
         XCTAssertEqual(
             model.installDraft.status,
             .transferring(sentByteCount: 0, totalByteCount: 100)
         )
         XCTAssertTrue(model.installDraft.status.isRunning)
 
-        model.recordInstallEvent(.transfer(.progress(sentByteCount: 64, totalByteCount: 100)))
+        model.recordInstallEvent(.installer(.transfer(.progress(
+            sentByteCount: 64,
+            totalByteCount: 100
+        ))))
         XCTAssertEqual(
             model.installDraft.status,
             .transferring(sentByteCount: 64, totalByteCount: 100)
         )
 
-        model.recordInstallEvent(.transfer(.failed(message: "remote rejected write")))
+        model.recordInstallEvent(.installer(.transfer(.failed(message: "remote rejected write"))))
+        XCTAssertEqual(model.installDraft.status, .failed(
+            userMessage: "APK transfer failed.",
+            diagnosticDetail: DiagnosticDetail(
+                summary: "remote rejected write",
+                context: ["phase": "transferPackage"]
+            )
+        ))
+        model.recordInstallEvent(.installer(.phaseStarted(.cleanup)))
         XCTAssertEqual(model.installDraft.status, .failed(
             userMessage: "APK transfer failed.",
             diagnosticDetail: DiagnosticDetail(
@@ -292,7 +315,7 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.installDraft.status, .idle)
 
         model.selectPackage(fileName: "app.apk", byteCount: 100)
-        model.recordInstallEvent(.phaseStarted(.transferPackage))
+        model.startInstall()
         XCTAssertTrue(model.installDraft.status.isRunning)
 
         model.cancelInstall()
@@ -300,6 +323,22 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.installDraft.status, .cancelled)
         XCTAssertFalse(model.installDraft.status.isRunning)
         XCTAssertTrue(model.installDraft.canBuildInstallPlan)
+
+        model.recordInstallEvent(.installer(.phaseStarted(.installPackage)))
+        XCTAssertEqual(model.installDraft.status, .cancelled)
+    }
+
+    func testStartURLInstallImmediatelyEntersDownloadingStatus() {
+        var model = ADBTVAppModel()
+        model.setInstallURLString("https://example.com/app.apk")
+
+        model.startInstall()
+
+        XCTAssertEqual(
+            model.installDraft.status,
+            .downloading(receivedByteCount: 0, totalByteCount: nil)
+        )
+        XCTAssertTrue(model.installDraft.status.isRunning)
     }
 
     func testRemoteActionsUpdatePresentationStatus() {

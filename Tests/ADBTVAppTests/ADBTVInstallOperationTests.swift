@@ -6,18 +6,22 @@ import XCTest
 final class ADBTVInstallOperationTests: XCTestCase {
     func testInstallSelectedPackageReadsFileAndCallsConnection() async throws {
         let fileURL = URL(fileURLWithPath: "/tmp/app.apk")
+        let contents = makeADBTVTestAPK()
         let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
         let model = ADBTVAppModel(
             devices: [device],
             installDraft: ADBTVInstallDraft(
-                selectedPackage: ADBTVInstallPackageDraft(fileURL: fileURL, byteCount: 3)
+                selectedPackage: ADBTVInstallPackageDraft(
+                    fileURL: fileURL,
+                    byteCount: Int64(contents.count)
+                )
             )
         )
         var connection = RecordingInstallConnection(result: .success)
         let operation = ADBTVInstallOperation(
             readFile: { url in
                 XCTAssertEqual(url, fileURL)
-                return [1, 2, 3]
+                return contents
             },
             modificationTime: { 123 }
         )
@@ -33,16 +37,21 @@ final class ADBTVInstallOperationTests: XCTestCase {
         let streamedEvents = await eventRecorder.recordedEvents()
 
         XCTAssertEqual(report.result, .success)
-        XCTAssertEqual(connection.installedContents, [[1, 2, 3]])
+        XCTAssertEqual(connection.installedContents, [contents])
         XCTAssertEqual(connection.installedPlans.map(\.remoteAPKPath.rawValue), [
             "/data/local/tmp/adbtv/app.apk"
         ])
         XCTAssertEqual(connection.modificationTimes, [123])
-        XCTAssertEqual(streamedEvents, [.installResult(.success)])
+        XCTAssertEqual(streamedEvents, [
+            .installer(.phaseStarted(.validatePackage)),
+            .installer(.phaseFinished(.validatePackage)),
+            .installer(.installResult(.success))
+        ])
     }
 
     func testInstallSelectedPackageDownloadsURLAndCallsConnection() async throws {
         let url = URL(string: "https://example.com/Remote%20App.apk")!
+        let contents = makeADBTVTestAPK()
         let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
         let model = ADBTVAppModel(
             devices: [device],
@@ -54,22 +63,54 @@ final class ADBTVInstallOperationTests: XCTestCase {
                 XCTFail("URL installs should not read a local file.")
                 return []
             },
-            downloadPackage: { downloadURL in
+            downloadPackage: { downloadURL, progressHandler in
                 XCTAssertEqual(downloadURL, url)
-                return ADBTVDownloadedPackage(contents: [9, 8, 7], fileName: "Remote App.apk")
+                await progressHandler(ADBTVInstallDownloadProgress(
+                    receivedByteCount: 0,
+                    totalByteCount: Int64(contents.count)
+                ))
+                await progressHandler(ADBTVInstallDownloadProgress(
+                    receivedByteCount: Int64(contents.count),
+                    totalByteCount: Int64(contents.count)
+                ))
+                return ADBTVDownloadedPackage(contents: contents, fileName: "Remote App.apk")
             },
             modificationTime: { 456 }
         )
+        let eventRecorder = InstallOperationEventRecorder()
 
-        let report = try await operation.installSelectedPackage(from: model, using: &connection)
+        let report = try await operation.installSelectedPackage(
+            from: model,
+            using: &connection,
+            eventHandler: { event in
+                await eventRecorder.record(event)
+            }
+        )
+        let streamedEvents = await eventRecorder.recordedEvents()
 
         XCTAssertEqual(report.result, .success)
-        XCTAssertEqual(connection.installedContents, [[9, 8, 7]])
+        XCTAssertEqual(connection.installedContents, [contents])
         XCTAssertEqual(connection.installedPlans.map(\.remoteAPKPath.rawValue), [
             "/data/local/tmp/adbtv/Remote_App.apk"
         ])
-        XCTAssertEqual(connection.installedPlans.map(\.package.byteCount), [Optional(Int64(3))])
+        XCTAssertEqual(
+            connection.installedPlans.map(\.package.byteCount),
+            [Optional(Int64(contents.count))]
+        )
         XCTAssertEqual(connection.modificationTimes, [456])
+        XCTAssertEqual(streamedEvents, [
+            .download(ADBTVInstallDownloadProgress(
+                receivedByteCount: 0,
+                totalByteCount: Int64(contents.count)
+            )),
+            .download(ADBTVInstallDownloadProgress(
+                receivedByteCount: Int64(contents.count),
+                totalByteCount: Int64(contents.count)
+            )),
+            .installer(.phaseStarted(.validatePackage)),
+            .installer(.phaseFinished(.validatePackage)),
+            .installer(.installResult(.success))
+        ])
     }
 
     func testInstallSelectedPackageRejectsMissingDevicePackageAndFileURL() async throws {
@@ -108,6 +149,43 @@ final class ADBTVInstallOperationTests: XCTestCase {
             .missingPackageFile
         )
     }
+
+    func testPrepareRejectsInvalidAPKBeforeDeviceInstallation() async throws {
+        let fileURL = URL(fileURLWithPath: "/tmp/invalid.apk")
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        let model = ADBTVAppModel(
+            devices: [device],
+            installDraft: ADBTVInstallDraft(
+                selectedPackage: ADBTVInstallPackageDraft(fileURL: fileURL, byteCount: 22)
+            )
+        )
+        let operation = ADBTVInstallOperation(
+            readFile: { _ in Array(repeating: 0, count: 22) }
+        )
+
+        do {
+            _ = try await operation.prepareSelectedPackage(from: model)
+            XCTFail("Expected APK validation to fail.")
+        } catch let error as ADBAPKValidationError {
+            XCTAssertEqual(error, .invalidZIPSignature)
+        }
+    }
+
+    func testFileReaderRejectsPackageAboveLimit() throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBTVInstallOperationTests-\(UUID().uuidString).apk")
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        try Data([1, 2, 3]).write(to: fileURL)
+
+        XCTAssertThrowsError(
+            try ADBTVInstallFileReader.readFileBytes(from: fileURL, maximumByteCount: 2)
+        ) { error in
+            XCTAssertEqual(
+                error as? ADBTVInstallFileError,
+                .packageTooLarge(maximumByteCount: 2, actualByteCount: 3)
+            )
+        }
+    }
 }
 
 private struct RecordingInstallConnection: ADBTVAPKInstallConnection {
@@ -139,13 +217,13 @@ private struct RecordingInstallConnection: ADBTVAPKInstallConnection {
 }
 
 private actor InstallOperationEventRecorder {
-    private var events: [ADBAPKInstallEvent] = []
+    private var events: [ADBTVInstallEvent] = []
 
-    func record(_ event: ADBAPKInstallEvent) {
+    func record(_ event: ADBTVInstallEvent) {
         events.append(event)
     }
 
-    func recordedEvents() -> [ADBAPKInstallEvent] {
+    func recordedEvents() -> [ADBTVInstallEvent] {
         events
     }
 }
