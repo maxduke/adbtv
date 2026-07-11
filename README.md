@@ -72,6 +72,8 @@ Still in progress:
 ## Planning Docs
 
 - [Domain glossary](./CONTEXT.md)
+- [Contributing](./CONTRIBUTING.md)
+- [Security policy](./SECURITY.md)
 - [Development flow](./docs/development-flow.md)
 - [Initial architecture plan](./docs/initial-architecture-plan.md)
 - [Risk mitigation plan](./docs/risk-mitigation-plan.md)
@@ -128,3 +130,7 @@ For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB ses
 The package currently contains `ADBClientCore` and `ADBTVApp`. GitHub Actions runs package tests, an unsigned iOS simulator build, and the manual unsigned IPA package workflow on macOS.
 
 Remote text uses Android's built-in `input text` command. Spaces and shell punctuation are escaped, and every command's exit status is verified. Non-ASCII input is attempted, but Android can only inject characters available through the TV's virtual key character map; unsupported text returns a User Error and Diagnostic Detail instead of a false success. A companion Android keyboard is not required.
+
+## License
+
+ADB TV is available under the [MIT License](./LICENSE).
