@@ -6,6 +6,7 @@ ADB TV uses small, reviewable branches and git worktrees for feature work.
 
 - Keep `main` clean and releasable.
 - Do feature work in a separate worktree on a topic branch.
+- Merge changes through a pull request after required checks pass.
 - Commit planning, protocol, UI, and CI changes separately when possible.
 - Do not mix unrelated refactors with feature work.
 - Do not commit secrets, provisioning profiles, private certificates, or local signing material.
@@ -75,3 +76,16 @@ Use imperative messages:
 - `Add ADB packet framing tests`
 - `Implement Bonjour discovery`
 - `Add simulator CI workflow`
+
+## Main Branch Protection
+
+The GitHub `main` branch requires:
+
+- a pull request, with no separate approval required for the solo maintainer;
+- an up-to-date passing **SwiftPM Tests** check;
+- an up-to-date passing **iOS Simulator Build** check;
+- resolved review conversations;
+- linear history;
+- no force-pushes or branch deletion.
+
+Unsigned IPA packaging remains a release and pull-request validation check, but it is not required for documentation-only changes because that workflow uses path filtering.
