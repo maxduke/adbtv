@@ -25,6 +25,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Pairing Code
 
+- [ ] Launch a fresh app session and confirm discovery starts without tapping **Discover Devices**.
+- [ ] Stop discovery manually and confirm it stays stopped until **Discover Devices** is tapped.
 - [ ] Discover an active `_adb-tls-pairing._tcp` service automatically.
 - [ ] Pair using the six-digit code shown by Android Wireless Debugging.
 - [ ] Match the paired device to its `_adb-tls-connect._tcp` service automatically.

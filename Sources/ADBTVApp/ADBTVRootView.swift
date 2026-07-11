@@ -16,6 +16,7 @@ public struct ADBTVRootView: View {
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
     @State private var pairingTask: Task<Void, Never>?
+    @State private var automaticDiscoveryPolicy = ADBTVAutomaticDiscoveryPolicy()
 #if os(iOS) && canImport(AVFoundation)
     @State private var isQRCodeScannerPresented = false
     @State private var qrScannerError: DiagnosticDetail?
@@ -210,6 +211,11 @@ public struct ADBTVRootView: View {
                         context: ["source": "fileImporter"]
                     )
                 )
+            }
+        }
+        .task {
+            if automaticDiscoveryPolicy.shouldStartDiscovery(status: model.discoveryStatus) {
+                startDiscovery()
             }
         }
         .onDisappear {

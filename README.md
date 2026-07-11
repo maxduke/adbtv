@@ -38,7 +38,7 @@ Implemented so far:
 - user-facing operation status plus technical diagnostic details;
 - bounded connection, pairing, remote-action, and APK-install operations with timeout diagnostics;
 - bounded QR pairing and post-pairing discovery so missing Bonjour advertisements cannot leave the pairing sheet stuck;
-- Bonjour discovery of ADB pairing and connect services;
+- automatic, manually restartable Bonjour discovery of ADB pairing and connect services;
 - AOSP-compatible TLS 1.3, TLS exporter, SPAKE2, and encrypted peer-info pairing stack;
 - self-signed TLS identity generation from the synchronized ADB RSA key;
 - manual Pairing Code app flow with separate pairing and connection ports, cancellation, diagnostics, and saved-device handoff;
