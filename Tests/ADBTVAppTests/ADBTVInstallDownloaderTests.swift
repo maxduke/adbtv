@@ -118,13 +118,7 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
             try await download()
         }
 
-        for _ in 0 ..< 10_000 {
-            if StubURLProtocol.startCount > 0 {
-                break
-            }
-            await Task.yield()
-        }
-        guard StubURLProtocol.startCount > 0 else {
+        guard await waitUntil({ StubURLProtocol.startCount > 0 }) else {
             task.cancel()
             return XCTFail("The URL loading task did not start.")
         }
@@ -138,10 +132,8 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
             XCTFail("Expected CancellationError, got \(error).")
         }
 
-        for _ in 0 ..< 100 where StubURLProtocol.stopCount == 0 {
-            try? await Task.sleep(for: .milliseconds(10))
-        }
-        XCTAssertGreaterThan(StubURLProtocol.stopCount, 0)
+        let didStop = await waitUntil({ StubURLProtocol.stopCount > 0 })
+        XCTAssertTrue(didStop, "The URL loading task did not stop after cancellation.")
     }
 
     private func download(
@@ -157,6 +149,16 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
             maximumByteCount: maximumByteCount,
             progressHandler: progressHandler
         )
+    }
+
+    private func waitUntil(_ condition: () -> Bool) async -> Bool {
+        for _ in 0 ..< 200 {
+            if condition() {
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return condition()
     }
 }
 
