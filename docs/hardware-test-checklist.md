@@ -83,6 +83,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Install the same package again and confirm replacement succeeds.
 - [ ] Install a known-good APK from a direct HTTPS URL.
 - [ ] Enter an HTTP URL and confirm the insecure-transport warning appears before install.
+- [ ] Redirect an HTTPS APK URL to HTTP and confirm the download is rejected with downgrade-specific Technical Details before connecting to the TV.
+- [ ] Redirect an HTTPS or HTTP APK URL to HTTPS on another host and confirm the download still succeeds.
 - [ ] Install from a local HTTP server when local-network permission is granted.
 - [ ] Return an HTTP error or HTML response from an APK URL and confirm download-specific Diagnostic Detail appears before the app connects to the TV.
 - [ ] Attempt a package advertised above 512 MiB and confirm it is rejected before buffering or connecting to the TV.

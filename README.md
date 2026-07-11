@@ -33,6 +33,7 @@ Implemented so far:
 - an explicit insecure-transport warning for HTTP APK sources;
 - ordered URL download progress with known-length and indeterminate presentation;
 - bounded 512 MiB package loading for URL and Files sources, with response validation;
+- redirect-aware APK downloads that reject unsupported schemes and HTTPS-to-HTTP transport downgrades;
 - structural APK validation as a ZIP archive containing a root `AndroidManifest.xml` before transfer;
 - package preparation and validation before opening the Android TV connection;
 - single-APK install orchestration through the native ADB client;

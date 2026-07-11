@@ -82,6 +82,7 @@ HTTP is useful for local-network package hosting but provides no transport integ
 - Prefer HTTPS visually when available.
 - For HTTP, show a User Error or warning before first use.
 - Disable URL caching so APK bytes are not retained beyond the active installation operation.
+- Allow HTTP and HTTPS redirects, but reject unsupported schemes and any HTTPS-to-HTTP downgrade so redirects cannot bypass the original transport warning.
 - Add a later option for user-supplied checksum verification if HTTP installs become common.
 
 **Fallback**:
