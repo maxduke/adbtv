@@ -28,7 +28,7 @@ A Swift module for ADB protocol framing, stream multiplexing, TLS connection set
 A Swift module for Pairing Sessions, Pairing Code entry, Pairing QR Code parsing, and pairing protocol state.
 
 **DeviceStore**:
-Stores Device Library metadata and Synced ADB Identity references. Device Credentials belong in Keychain, not normal app storage.
+Stores Device Library metadata and Synced ADB Identity references. Device Credentials belong in Keychain, not normal app storage. Loading is record-resilient so one malformed entry cannot silently discard every valid Managed Device.
 
 **Operations**:
 Coordinates Structured Actions such as TV Remote Actions and APK Installation. Converts technical failures into User Errors plus Diagnostic Detail.

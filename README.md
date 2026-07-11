@@ -28,6 +28,7 @@ Current direction:
 Implemented so far:
 
 - manual device connection verification and persistence with clear success or failure details;
+- resilient Device Library loading that preserves legacy records, recovers valid entries from partial corruption, and reports rejected data without rewriting it;
 - APK source selection from the iOS Files picker;
 - APK source entry from a direct HTTP or HTTPS URL;
 - an explicit insecure-transport warning for HTTP APK sources;

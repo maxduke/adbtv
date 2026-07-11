@@ -52,6 +52,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Reconnect And Device Library
 
 - [ ] Force-quit and relaunch the app, then reconnect without pairing again.
+- [ ] Upgrade over an earlier candidate build with multiple saved devices and confirm every valid Device Library entry remains available.
+- [ ] If a Device Library warning appears, confirm valid entries remain visible and the copyable Technical Details report recovered and rejected record counts.
 - [ ] Install a build signed by the same team and bundle identifier on a second iOS device using the same Apple Account and confirm the synchronized identity reconnects without pairing again.
 - [ ] If cross-device reconnect does not work, record iCloud Keychain state, signing team, bundle identifier, elapsed sync time, and Diagnostic Detail.
 - [ ] Restart Wireless Debugging so its port changes, then reconnect through the saved Bonjour service.

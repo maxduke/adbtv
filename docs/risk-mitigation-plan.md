@@ -120,6 +120,21 @@ GitHub Actions can build and run unit tests, but it cannot prove real Android TV
 **Fallback**:
 If hardware testing becomes too slow, build a local mock ADB server for protocol-level development while still treating real-device tests as release gates.
 
+## Risk 8: Device Library Corruption Or Schema Drift
+
+**Risk**:
+A malformed or older saved-device record could make the entire Device Library undecodable, hiding otherwise valid Managed Devices after an upgrade.
+
+**Mitigation**:
+- Decode the complete archive first so normal and legacy data follow the simplest path.
+- If archive decoding fails, decode each record independently and retain every valid Managed Device.
+- Report recovered and rejected counts with copyable Diagnostic Detail.
+- Do not rewrite malformed stored data merely by launching the app.
+- Keep backward-decoding tests for legacy host-and-port records.
+
+**Fallback**:
+If no record can be recovered, leave the stored archive untouched, show the Device Library failure, and retain Manual Connection and pairing as recovery paths.
+
 ## Release Gates
 
 Do not start a polished app UI until:
