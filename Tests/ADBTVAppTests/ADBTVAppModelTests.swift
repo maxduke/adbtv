@@ -245,27 +245,28 @@ final class ADBTVAppModelTests: XCTestCase {
     }
 
     func testInstallEventsUpdatePresentationStatus() throws {
-        var model = ADBTVAppModel()
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        var model = ADBTVAppModel(devices: [device])
         model.setInstallURLString("https://example.com/app.apk")
-        model.startInstall()
+        model.startInstall(on: device.id)
 
         model.recordInstallEvent(.download(ADBTVInstallDownloadProgress(
             receivedByteCount: 25,
             totalByteCount: 100
-        )))
+        )), on: device.id)
         XCTAssertEqual(
             model.installDraft.status,
             .downloading(receivedByteCount: 25, totalByteCount: 100)
         )
         XCTAssertTrue(model.installDraft.status.isRunning)
 
-        model.recordInstallEvent(.installer(.phaseStarted(.transferPackage)))
+        model.recordInstallEvent(.installer(.phaseStarted(.transferPackage)), on: device.id)
         XCTAssertEqual(model.installDraft.status, .running(.transferPackage))
 
         model.recordInstallEvent(.installer(.transfer(.started(
             remotePath: try ADBRemotePath("/data/local/tmp/adbtv/app.apk"),
             totalByteCount: 100
-        ))))
+        ))), on: device.id)
         XCTAssertEqual(
             model.installDraft.status,
             .transferring(sentByteCount: 0, totalByteCount: 100)
@@ -275,13 +276,16 @@ final class ADBTVAppModelTests: XCTestCase {
         model.recordInstallEvent(.installer(.transfer(.progress(
             sentByteCount: 64,
             totalByteCount: 100
-        ))))
+        ))), on: device.id)
         XCTAssertEqual(
             model.installDraft.status,
             .transferring(sentByteCount: 64, totalByteCount: 100)
         )
 
-        model.recordInstallEvent(.installer(.transfer(.failed(message: "remote rejected write"))))
+        model.recordInstallEvent(
+            .installer(.transfer(.failed(message: "remote rejected write"))),
+            on: device.id
+        )
         XCTAssertEqual(model.installDraft.status, .failed(
             userMessage: "APK transfer failed.",
             diagnosticDetail: DiagnosticDetail(
@@ -289,7 +293,7 @@ final class ADBTVAppModelTests: XCTestCase {
                 context: ["phase": "transferPackage"]
             )
         ))
-        model.recordInstallEvent(.installer(.phaseStarted(.cleanup)))
+        model.recordInstallEvent(.installer(.phaseStarted(.cleanup)), on: device.id)
         XCTAssertEqual(model.installDraft.status, .failed(
             userMessage: "APK transfer failed.",
             diagnosticDetail: DiagnosticDetail(
@@ -298,7 +302,10 @@ final class ADBTVAppModelTests: XCTestCase {
             )
         ))
 
-        model.finishInstall(result: .failure(message: "INSTALL_FAILED_INVALID_APK"))
+        model.finishInstall(
+            result: .failure(message: "INSTALL_FAILED_INVALID_APK"),
+            on: device.id
+        )
         XCTAssertEqual(model.installDraft.status, .failed(
             userMessage: "APK install failed.",
             diagnosticDetail: DiagnosticDetail(
@@ -309,30 +316,89 @@ final class ADBTVAppModelTests: XCTestCase {
     }
 
     func testCancelInstallStopsRunningStatusAndAllowsRetry() {
-        var model = ADBTVAppModel()
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        var model = ADBTVAppModel(devices: [device])
 
-        model.cancelInstall()
+        model.cancelInstall(on: device.id)
         XCTAssertEqual(model.installDraft.status, .idle)
 
         model.selectPackage(fileName: "app.apk", byteCount: 100)
-        model.startInstall()
+        model.startInstall(on: device.id)
         XCTAssertTrue(model.installDraft.status.isRunning)
 
-        model.cancelInstall()
+        model.cancelInstall(on: device.id)
 
         XCTAssertEqual(model.installDraft.status, .cancelled)
         XCTAssertFalse(model.installDraft.status.isRunning)
         XCTAssertTrue(model.installDraft.canBuildInstallPlan)
 
-        model.recordInstallEvent(.installer(.phaseStarted(.installPackage)))
+        model.recordInstallEvent(.installer(.phaseStarted(.installPackage)), on: device.id)
         XCTAssertEqual(model.installDraft.status, .cancelled)
     }
 
+    func testInstallOwnsItsTargetUntilMatchingCompletion() {
+        let first = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
+        let second = ADBTVDeviceSummary(displayName: "Bedroom", host: "192.168.1.51", port: 5555)
+        var model = ADBTVAppModel(devices: [first, second])
+        model.selectPackage(fileName: "app.apk", byteCount: 100)
+
+        XCTAssertTrue(model.startInstall(on: first.id))
+        XCTAssertEqual(model.activeDeviceOperation, .install(deviceID: first.id))
+        XCTAssertFalse(model.canInstallSelectedPackage)
+        XCTAssertFalse(model.canStartDeviceOperation)
+        XCTAssertFalse(model.selectDevice(id: second.id))
+        XCTAssertEqual(model.selectedDevice, first)
+
+        model.removeDevices(ids: [first.id])
+        XCTAssertEqual(model.devices, [first, second])
+        XCTAssertFalse(model.recordRemoteActionStarted(.home, on: first.id))
+        XCTAssertFalse(model.recordInstallEvent(
+            .installer(.phaseStarted(.transferPackage)),
+            on: second.id
+        ))
+        XCTAssertFalse(model.finishInstall(result: .success, on: second.id))
+        XCTAssertEqual(model.activeDeviceOperation, .install(deviceID: first.id))
+
+        XCTAssertTrue(model.finishInstall(result: .success, on: first.id))
+        XCTAssertNil(model.activeDeviceOperation)
+        XCTAssertEqual(model.installDraft.status, .succeeded)
+        XCTAssertTrue(model.selectDevice(id: second.id))
+        XCTAssertEqual(model.selectedDevice, second)
+    }
+
+    func testRemoteOperationRejectsOverlapAndStaleCompletion() {
+        let first = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
+        let second = ADBTVDeviceSummary(displayName: "Bedroom", host: "192.168.1.51", port: 5555)
+        var model = ADBTVAppModel(devices: [first, second])
+        model.selectPackage(fileName: "app.apk", byteCount: 100)
+
+        XCTAssertTrue(model.recordRemoteActionStarted(.home, on: first.id))
+        XCTAssertFalse(model.startInstall(on: first.id))
+        XCTAssertFalse(model.finishRemoteAction(.settings, on: first.id))
+        XCTAssertFalse(model.finishRemoteAction(.home, on: second.id))
+        XCTAssertEqual(
+            model.activeDeviceOperation,
+            .remoteAction(deviceID: first.id, action: .home)
+        )
+
+        XCTAssertTrue(model.finishRemoteAction(.home, on: first.id))
+        XCTAssertNil(model.activeDeviceOperation)
+        XCTAssertEqual(model.remoteStatus, .sent(.home))
+
+        model.setRemoteTextString("hello")
+        XCTAssertTrue(model.recordRemoteTextStarted(on: first.id))
+        model.cancelActiveDeviceOperation()
+        XCTAssertNil(model.activeDeviceOperation)
+        XCTAssertEqual(model.remoteStatus, .idle)
+        XCTAssertEqual(model.remoteTextString, "hello")
+    }
+
     func testStartURLInstallImmediatelyEntersDownloadingStatus() {
-        var model = ADBTVAppModel()
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        var model = ADBTVAppModel(devices: [device])
         model.setInstallURLString("https://example.com/app.apk")
 
-        model.startInstall()
+        model.startInstall(on: device.id)
 
         XCTAssertEqual(
             model.installDraft.status,
@@ -342,23 +408,26 @@ final class ADBTVAppModelTests: XCTestCase {
     }
 
     func testRemoteActionsUpdatePresentationStatus() {
-        var model = ADBTVAppModel()
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        var model = ADBTVAppModel(devices: [device])
 
-        model.recordRemoteActionStarted(.home)
+        model.recordRemoteActionStarted(.home, on: device.id)
         XCTAssertEqual(model.remoteStatus, .sending(.home))
         XCTAssertTrue(model.remoteStatus.isSending)
 
-        model.finishRemoteAction(.home)
+        model.finishRemoteAction(.home, on: device.id)
         XCTAssertEqual(model.remoteStatus, .sent(.home))
         XCTAssertFalse(model.remoteStatus.isSending)
 
+        model.recordRemoteActionStarted(.settings, on: device.id)
         model.failRemoteAction(
             .settings,
             userMessage: "Could not send remote action.",
             diagnosticDetail: DiagnosticDetail(
                 summary: "network unavailable",
                 context: ["operation": "sendRemoteAction"]
-            )
+            ),
+            on: device.id
         )
         XCTAssertEqual(model.remoteStatus, .failed(
             action: .settings,
@@ -379,12 +448,12 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.remoteText, try ADBTVRemoteText("hello tv"))
         XCTAssertTrue(model.canSendRemoteText)
 
-        model.recordRemoteTextStarted()
+        model.recordRemoteTextStarted(on: device.id)
         XCTAssertEqual(model.remoteStatus, .sendingText)
         XCTAssertTrue(model.remoteStatus.isSending)
         XCTAssertFalse(model.canSendRemoteText)
 
-        model.finishRemoteText()
+        model.finishRemoteText(on: device.id)
         XCTAssertEqual(model.remoteStatus, .sentText)
         XCTAssertEqual(model.remoteTextString, "")
 
@@ -392,9 +461,12 @@ final class ADBTVAppModelTests: XCTestCase {
             summary: "device rejected input",
             context: ["operation": "sendRemoteText"]
         )
+        model.setRemoteTextString("retry")
+        model.recordRemoteTextStarted(on: device.id)
         model.failRemoteText(
             userMessage: "Could not send text.",
-            diagnosticDetail: diagnostic
+            diagnosticDetail: diagnostic,
+            on: device.id
         )
         XCTAssertEqual(model.remoteStatus, .failedText(
             userMessage: "Could not send text.",

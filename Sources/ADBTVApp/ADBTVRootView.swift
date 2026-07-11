@@ -43,7 +43,10 @@ public struct ADBTVRootView: View {
 
     public var body: some View {
         NavigationSplitView {
-            List(selection: $model.selectedDeviceID) {
+            List(selection: Binding(
+                get: { model.selectedDeviceID },
+                set: { _ = model.selectDevice(id: $0) }
+            )) {
                 Section("Devices") {
                     if model.devices.isEmpty {
                         ContentUnavailableView("No Devices", systemImage: "tv")
@@ -51,6 +54,7 @@ public struct ADBTVRootView: View {
                         ForEach(model.devices) { device in
                             DeviceRow(device: device)
                                 .tag(device.id)
+                                .deleteDisabled(model.activeDeviceOperation != nil)
                         }
                         .onDelete(perform: deleteDevices)
                     }
@@ -60,6 +64,7 @@ public struct ADBTVRootView: View {
                     DiscoveryContent(
                         status: model.discoveryStatus,
                         services: model.discoveredServices,
+                        canPair: model.activeDeviceOperation == nil,
                         toggleDiscovery: toggleDiscovery,
                         pairService: prepareDiscoveredPairing
                     )
@@ -92,6 +97,7 @@ public struct ADBTVRootView: View {
                     } label: {
                         Label("Add Device", systemImage: "plus")
                     }
+                    .disabled(model.activeDeviceOperation != nil)
                 }
             }
         } detail: {
@@ -110,6 +116,7 @@ public struct ADBTVRootView: View {
                     ),
                     canInstall: model.canInstallSelectedPackage,
                     canSendRemoteText: model.canSendRemoteText,
+                    deviceOperationInProgress: model.activeDeviceOperation != nil,
                     chooseAPK: {
                         isFileImporterPresented = true
                     },
@@ -239,6 +246,7 @@ public struct ADBTVRootView: View {
         .onDisappear {
             installTask?.cancel()
             remoteTask?.cancel()
+            model.cancelActiveDeviceOperation()
             cancelPairing()
             stopDiscovery()
         }
@@ -337,7 +345,7 @@ public struct ADBTVRootView: View {
 #endif
 
     private func prepareDiscoveredPairing(_ service: ADBDiscoveredService) {
-        guard service.kind == .pairing else {
+        guard service.kind == .pairing, model.activeDeviceOperation == nil else {
             return
         }
 
@@ -347,6 +355,9 @@ public struct ADBTVRootView: View {
 
 #if os(iOS) && canImport(AVFoundation)
     private func presentQRCodeScanner() {
+        guard model.activeDeviceOperation == nil else {
+            return
+        }
         if !model.discoveryStatus.isBrowsing {
             startDiscovery()
         }
@@ -649,7 +660,9 @@ public struct ADBTVRootView: View {
 
     private func startInstall(for device: ADBTVDeviceSummary) {
         let installModel = model
-        model.startInstall()
+        guard model.startInstall(on: device.id) else {
+            return
+        }
 
         installTask?.cancel()
         installTask = Task {
@@ -666,7 +679,7 @@ public struct ADBTVRootView: View {
                             guard !Task.isCancelled else {
                                 return
                             }
-                            model.recordInstallEvent(event)
+                            model.recordInstallEvent(event, on: device.id)
                         }
                     }
                 ))
@@ -686,7 +699,7 @@ public struct ADBTVRootView: View {
                 guard !Task.isCancelled else {
                     return
                 }
-                completeInstall(completion)
+                completeInstall(completion, on: device.id)
             }
         }
     }
@@ -694,7 +707,10 @@ public struct ADBTVRootView: View {
     private func cancelInstall() {
         installTask?.cancel()
         installTask = nil
-        model.cancelInstall()
+        guard case .install(let deviceID) = model.activeDeviceOperation else {
+            return
+        }
+        model.cancelInstall(on: deviceID)
     }
 
     private static func installPackage(
@@ -723,13 +739,20 @@ public struct ADBTVRootView: View {
     }
 
     @MainActor
-    private func completeInstall(_ completion: InstallCompletion) {
+    private func completeInstall(
+        _ completion: InstallCompletion,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) {
         installTask = nil
         switch completion {
         case .success(let report):
-            model.finishInstall(result: report.result)
+            model.finishInstall(result: report.result, on: deviceID)
         case .failure(let userMessage, let diagnosticDetail):
-            model.failInstall(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+            model.failInstall(
+                userMessage: userMessage,
+                diagnosticDetail: diagnosticDetail,
+                on: deviceID
+            )
         }
     }
 
@@ -771,7 +794,9 @@ public struct ADBTVRootView: View {
 
     private func sendRemoteAction(_ action: ADBTVRemoteAction, to device: ADBTVDeviceSummary) {
         let remoteModel = model
-        model.recordRemoteActionStarted(action)
+        guard model.recordRemoteActionStarted(action, on: device.id) else {
+            return
+        }
 
         remoteTask?.cancel()
         remoteTask = Task {
@@ -793,7 +818,7 @@ public struct ADBTVRootView: View {
                 return
             }
             await MainActor.run {
-                completeRemoteAction(completion)
+                completeRemoteAction(completion, on: device.id)
             }
         }
     }
@@ -804,7 +829,9 @@ public struct ADBTVRootView: View {
         }
 
         let remoteModel = model
-        model.recordRemoteTextStarted()
+        guard model.recordRemoteTextStarted(on: device.id) else {
+            return
+        }
 
         remoteTask?.cancel()
         remoteTask = Task {
@@ -839,7 +866,7 @@ public struct ADBTVRootView: View {
                 return
             }
             await MainActor.run {
-                completeRemoteAction(completion)
+                completeRemoteAction(completion, on: device.id)
             }
         }
     }
@@ -949,18 +976,28 @@ public struct ADBTVRootView: View {
 #endif
 
     @MainActor
-    private func completeRemoteAction(_ completion: RemoteCompletion) {
+    private func completeRemoteAction(
+        _ completion: RemoteCompletion,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) {
+        remoteTask = nil
         switch completion {
         case .success(let action):
-            model.finishRemoteAction(action)
+            model.finishRemoteAction(action, on: deviceID)
         case .textSuccess:
-            model.finishRemoteText()
+            model.finishRemoteText(on: deviceID)
         case .failure(let action, let userMessage, let diagnosticDetail):
-            model.failRemoteAction(action, userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+            model.failRemoteAction(
+                action,
+                userMessage: userMessage,
+                diagnosticDetail: diagnosticDetail,
+                on: deviceID
+            )
         case .textFailure(let userMessage, let diagnosticDetail):
             model.failRemoteText(
                 userMessage: userMessage,
-                diagnosticDetail: diagnosticDetail
+                diagnosticDetail: diagnosticDetail,
+                on: deviceID
             )
         }
     }
@@ -1351,6 +1388,7 @@ private struct ManualDeviceConnectionStatusView: View {
 private struct DiscoveryContent: View {
     var status: ADBTVDiscoveryStatus
     var services: [ADBDiscoveredService]
+    var canPair: Bool
     var toggleDiscovery: () -> Void
     var pairService: (ADBDiscoveredService) -> Void
 
@@ -1371,6 +1409,7 @@ private struct DiscoveryContent: View {
                 DiscoveredServiceRow(service: service) {
                     pairService(service)
                 }
+                .disabled(service.kind == .pairing && !canPair)
             }
         }
     }
@@ -1491,6 +1530,7 @@ private struct DeviceDetailView: View {
     var remoteTextString: Binding<String>
     var canInstall: Bool
     var canSendRemoteText: Bool
+    var deviceOperationInProgress: Bool
     var chooseAPK: () -> Void
     var install: () -> Void
     var cancelInstall: () -> Void
@@ -1505,6 +1545,7 @@ private struct DeviceDetailView: View {
                     installDraft: installDraft,
                     installURLString: installURLString,
                     canInstall: canInstall,
+                    deviceOperationInProgress: deviceOperationInProgress,
                     chooseAPK: chooseAPK,
                     install: install,
                     cancelInstall: cancelInstall
@@ -1513,6 +1554,7 @@ private struct DeviceDetailView: View {
                     status: remoteStatus,
                     text: remoteTextString,
                     canSendText: canSendRemoteText,
+                    deviceOperationInProgress: deviceOperationInProgress,
                     send: sendRemoteAction,
                     sendText: sendRemoteText
                 )
@@ -1546,6 +1588,7 @@ private struct APKInstallPanel: View {
     var installDraft: ADBTVInstallDraft
     var installURLString: Binding<String>
     var canInstall: Bool
+    var deviceOperationInProgress: Bool
     var chooseAPK: () -> Void
     var install: () -> Void
     var cancelInstall: () -> Void
@@ -1562,7 +1605,7 @@ private struct APKInstallPanel: View {
                     Label("Choose APK", systemImage: "doc.badge.plus")
                 }
                 .buttonStyle(.bordered)
-                .disabled(installDraft.status.isRunning)
+                .disabled(installDraft.status.isRunning || deviceOperationInProgress)
 
                 Button {
                     install()
@@ -1570,7 +1613,7 @@ private struct APKInstallPanel: View {
                     Label("Install", systemImage: "square.and.arrow.down")
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!canInstall || installDraft.status.isRunning)
+                .disabled(!canInstall || installDraft.status.isRunning || deviceOperationInProgress)
 
                 if installDraft.status.isRunning {
                     Button(role: .cancel) {
@@ -1585,7 +1628,7 @@ private struct APKInstallPanel: View {
             TextField("https://example.com/app.apk", text: installURLString)
                 .autocorrectionDisabled()
                 .textFieldStyle(.roundedBorder)
-                .disabled(installDraft.status.isRunning)
+                .disabled(installDraft.status.isRunning || deviceOperationInProgress)
 
             if !installURLString.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                !installDraft.canBuildInstallPlan {
@@ -1706,6 +1749,7 @@ private struct RemoteActionsPanel: View {
     var status: ADBTVRemoteStatus
     var text: Binding<String>
     var canSendText: Bool
+    var deviceOperationInProgress: Bool
     var send: (ADBTVRemoteAction) -> Void
     var sendText: () -> Void
 
@@ -1757,7 +1801,7 @@ private struct RemoteActionsPanel: View {
                 }
             }
             .buttonStyle(.bordered)
-            .disabled(status.isSending)
+            .disabled(status.isSending || deviceOperationInProgress)
 
             HStack(spacing: 8) {
                 Button {
@@ -1782,7 +1826,7 @@ private struct RemoteActionsPanel: View {
                 }
             }
             .buttonStyle(.bordered)
-            .disabled(status.isSending)
+            .disabled(status.isSending || deviceOperationInProgress)
 
             HStack(spacing: 8) {
                 Button {
@@ -1805,12 +1849,13 @@ private struct RemoteActionsPanel: View {
                 }
             }
             .buttonStyle(.bordered)
-            .disabled(status.isSending)
+            .disabled(status.isSending || deviceOperationInProgress)
 
             HStack(spacing: 8) {
                 TextField("Text", text: text)
                     .autocorrectionDisabled()
                     .textFieldStyle(.roundedBorder)
+                    .disabled(deviceOperationInProgress)
                 Button {
                     sendText()
                 } label: {

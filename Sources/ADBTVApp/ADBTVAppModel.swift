@@ -11,6 +11,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
     public var discoveredServices: [ADBDiscoveredService]
     public var pairingDraft: ADBTVPairingDraft
     public var pairingStatus: ADBTVPairingStatus
+    public var activeDeviceOperation: ADBTVActiveDeviceOperation?
 
     public init(
         devices: [ADBTVDeviceSummary] = [],
@@ -21,7 +22,8 @@ public struct ADBTVAppModel: Equatable, Sendable {
         discoveryStatus: ADBTVDiscoveryStatus = .idle,
         discoveredServices: [ADBDiscoveredService] = [],
         pairingDraft: ADBTVPairingDraft = ADBTVPairingDraft(),
-        pairingStatus: ADBTVPairingStatus = .idle
+        pairingStatus: ADBTVPairingStatus = .idle,
+        activeDeviceOperation: ADBTVActiveDeviceOperation? = nil
     ) {
         self.devices = devices
         self.selectedDeviceID = selectedDeviceID ?? devices.first?.id
@@ -32,6 +34,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
         self.discoveredServices = discoveredServices.sortedForPresentation()
         self.pairingDraft = pairingDraft
         self.pairingStatus = pairingStatus
+        self.activeDeviceOperation = activeDeviceOperation
     }
 
     public var selectedDevice: ADBTVDeviceSummary? {
@@ -43,7 +46,9 @@ public struct ADBTVAppModel: Equatable, Sendable {
     }
 
     public var canInstallSelectedPackage: Bool {
-        selectedDevice != nil && installDraft.canBuildInstallPlan
+        selectedDevice != nil
+            && installDraft.canBuildInstallPlan
+            && activeDeviceOperation == nil
     }
 
     public var remoteText: ADBTVRemoteText? {
@@ -51,11 +56,22 @@ public struct ADBTVAppModel: Equatable, Sendable {
     }
 
     public var canSendRemoteText: Bool {
-        selectedDevice != nil && remoteText != nil && !remoteStatus.isSending
+        selectedDevice != nil
+            && remoteText != nil
+            && activeDeviceOperation == nil
     }
 
-    public mutating func selectDevice(id: ADBTVDeviceSummary.ID?) {
+    public var canStartDeviceOperation: Bool {
+        selectedDevice != nil && activeDeviceOperation == nil
+    }
+
+    @discardableResult
+    public mutating func selectDevice(id: ADBTVDeviceSummary.ID?) -> Bool {
+        guard activeDeviceOperation == nil || activeDeviceOperation?.deviceID == id else {
+            return false
+        }
         selectedDeviceID = id
+        return true
     }
 
     @discardableResult
@@ -64,19 +80,24 @@ public struct ADBTVAppModel: Equatable, Sendable {
             var updatedDevice = device
             updatedDevice.id = devices[index].id
             devices[index] = updatedDevice
-            selectedDeviceID = updatedDevice.id
+            if activeDeviceOperation == nil {
+                selectedDeviceID = updatedDevice.id
+            }
             return updatedDevice
         }
 
         devices.append(device)
-        selectedDeviceID = device.id
+        if activeDeviceOperation == nil {
+            selectedDeviceID = device.id
+        }
         return device
     }
 
     public mutating func removeDevices(ids: Set<ADBTVDeviceSummary.ID>) {
-        devices.removeAll { ids.contains($0.id) }
+        let protectedDeviceID = activeDeviceOperation?.deviceID
+        devices.removeAll { ids.contains($0.id) && $0.id != protectedDeviceID }
 
-        if let selectedDeviceID, ids.contains(selectedDeviceID) {
+        if let selectedDeviceID, !devices.contains(where: { $0.id == selectedDeviceID }) {
             self.selectedDeviceID = devices.first?.id
         }
     }
@@ -99,17 +120,31 @@ public struct ADBTVAppModel: Equatable, Sendable {
         installDraft.status = installDraft.canBuildInstallPlan ? .ready : .idle
     }
 
-    public mutating func startInstall() {
+    @discardableResult
+    public mutating func startInstall(on deviceID: ADBTVDeviceSummary.ID) -> Bool {
+        guard selectedDeviceID == deviceID,
+              installDraft.canBuildInstallPlan,
+              activeDeviceOperation == nil else {
+            return false
+        }
+
+        activeDeviceOperation = .install(deviceID: deviceID)
         if installDraft.selectedPackage == nil, installDraft.validatedURL != nil {
             installDraft.status = .downloading(receivedByteCount: 0, totalByteCount: nil)
         } else {
             installDraft.status = .running(.validatePackage)
         }
+        return true
     }
 
-    public mutating func recordInstallEvent(_ event: ADBTVInstallEvent) {
-        guard installDraft.status.isRunning else {
-            return
+    @discardableResult
+    public mutating func recordInstallEvent(
+        _ event: ADBTVInstallEvent,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .install(deviceID: deviceID),
+              installDraft.status.isRunning else {
+            return false
         }
 
         switch event {
@@ -121,9 +156,18 @@ public struct ADBTVAppModel: Equatable, Sendable {
         case .installer(let event):
             installDraft.status = ADBTVInstallStatus(event: event)
         }
+        return true
     }
 
-    public mutating func finishInstall(result: ADBAPKInstallResult) {
+    @discardableResult
+    public mutating func finishInstall(
+        result: ADBAPKInstallResult,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .install(deviceID: deviceID) else {
+            return false
+        }
+        activeDeviceOperation = nil
         switch result {
         case .success:
             installDraft.status = .succeeded
@@ -136,56 +180,132 @@ public struct ADBTVAppModel: Equatable, Sendable {
                 )
             )
         }
+        return true
     }
 
     public mutating func failInstall(userMessage: String, diagnosticDetail: DiagnosticDetail) {
         installDraft.status = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
     }
 
-    public mutating func cancelInstall() {
-        guard installDraft.status.isRunning else {
+    @discardableResult
+    public mutating func failInstall(
+        userMessage: String,
+        diagnosticDetail: DiagnosticDetail,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .install(deviceID: deviceID) else {
+            return false
+        }
+        activeDeviceOperation = nil
+        failInstall(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        return true
+    }
+
+    @discardableResult
+    public mutating func cancelInstall(on deviceID: ADBTVDeviceSummary.ID) -> Bool {
+        guard activeDeviceOperation == .install(deviceID: deviceID) else {
+            return false
+        }
+        activeDeviceOperation = nil
+        installDraft.status = .cancelled
+        return true
+    }
+
+    public mutating func cancelActiveDeviceOperation() {
+        guard let activeDeviceOperation else {
             return
         }
-        installDraft.status = .cancelled
+        self.activeDeviceOperation = nil
+
+        switch activeDeviceOperation {
+        case .install:
+            installDraft.status = .cancelled
+        case .remoteAction, .remoteText:
+            remoteStatus = .idle
+        }
     }
 
-    public mutating func recordRemoteActionStarted(_ action: ADBTVRemoteAction) {
+    @discardableResult
+    public mutating func recordRemoteActionStarted(
+        _ action: ADBTVRemoteAction,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard selectedDeviceID == deviceID, activeDeviceOperation == nil else {
+            return false
+        }
+        activeDeviceOperation = .remoteAction(deviceID: deviceID, action: action)
         remoteStatus = .sending(action)
+        return true
     }
 
-    public mutating func finishRemoteAction(_ action: ADBTVRemoteAction) {
+    @discardableResult
+    public mutating func finishRemoteAction(
+        _ action: ADBTVRemoteAction,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .remoteAction(deviceID: deviceID, action: action) else {
+            return false
+        }
+        activeDeviceOperation = nil
         remoteStatus = .sent(action)
+        return true
     }
 
+    @discardableResult
     public mutating func failRemoteAction(
         _ action: ADBTVRemoteAction,
         userMessage: String,
-        diagnosticDetail: DiagnosticDetail
-    ) {
+        diagnosticDetail: DiagnosticDetail,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .remoteAction(deviceID: deviceID, action: action) else {
+            return false
+        }
+        activeDeviceOperation = nil
         remoteStatus = .failed(action: action, userMessage: userMessage, diagnosticDetail: diagnosticDetail)
+        return true
     }
 
     public mutating func setRemoteTextString(_ value: String) {
         remoteTextString = value
     }
 
-    public mutating func recordRemoteTextStarted() {
+    @discardableResult
+    public mutating func recordRemoteTextStarted(on deviceID: ADBTVDeviceSummary.ID) -> Bool {
+        guard selectedDeviceID == deviceID, activeDeviceOperation == nil else {
+            return false
+        }
+        activeDeviceOperation = .remoteText(deviceID: deviceID)
         remoteStatus = .sendingText
+        return true
     }
 
-    public mutating func finishRemoteText() {
+    @discardableResult
+    public mutating func finishRemoteText(on deviceID: ADBTVDeviceSummary.ID) -> Bool {
+        guard activeDeviceOperation == .remoteText(deviceID: deviceID) else {
+            return false
+        }
+        activeDeviceOperation = nil
         remoteStatus = .sentText
         remoteTextString = ""
+        return true
     }
 
+    @discardableResult
     public mutating func failRemoteText(
         userMessage: String,
-        diagnosticDetail: DiagnosticDetail
-    ) {
+        diagnosticDetail: DiagnosticDetail,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .remoteText(deviceID: deviceID) else {
+            return false
+        }
+        activeDeviceOperation = nil
         remoteStatus = .failedText(
             userMessage: userMessage,
             diagnosticDetail: diagnosticDetail
         )
+        return true
     }
 
     public mutating func startDiscovery() {
@@ -704,6 +824,19 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
 
 public enum ADBTVInstallDraftError: Error, Equatable, Sendable {
     case missingPackage
+}
+
+public enum ADBTVActiveDeviceOperation: Equatable, Sendable {
+    case install(deviceID: ADBTVDeviceSummary.ID)
+    case remoteAction(deviceID: ADBTVDeviceSummary.ID, action: ADBTVRemoteAction)
+    case remoteText(deviceID: ADBTVDeviceSummary.ID)
+
+    public var deviceID: ADBTVDeviceSummary.ID {
+        switch self {
+        case .install(let deviceID), .remoteAction(let deviceID, _), .remoteText(let deviceID):
+            return deviceID
+        }
+    }
 }
 
 public enum ADBTVRemoteStatus: Equatable, Sendable {
