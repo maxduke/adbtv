@@ -45,6 +45,10 @@ LOCAL_NETWORK_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUs
 CAMERA_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$INFO_PLIST_PATH")"
 ALLOWS_HTTP="$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$INFO_PLIST_PATH")"
 APP_ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$INFO_PLIST_PATH")"
+if ! /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$INFO_PLIST_PATH" >/dev/null; then
+  echo "Built app is missing its launch-screen configuration" >&2
+  exit 1
+fi
 if [[ "$PAIRING_SERVICE" != '_adb-tls-pairing._tcp' \
     || "$CONNECT_SERVICE" != '_adb-tls-connect._tcp' \
     || -z "$LOCAL_NETWORK_DESCRIPTION" \

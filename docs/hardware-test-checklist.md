@@ -21,6 +21,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Package the unsigned IPA with GitHub Actions.
 - [ ] Sign and install the IPA using the tester's normal sideloading workflow.
 - [ ] Confirm the ADB TV icon appears correctly on the Home Screen, in Settings, and in the app switcher.
+- [ ] Cold-launch in light and dark appearance and confirm the launch screen transitions without a contrasting flash.
 - [ ] Launch on iPhone and iPad layouts without clipped or overlapping controls.
 - [ ] Confirm camera and local-network permission text identifies why access is needed.
 

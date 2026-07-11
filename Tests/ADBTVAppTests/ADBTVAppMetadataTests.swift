@@ -24,6 +24,7 @@ final class ADBTVAppMetadataTests: XCTestCase {
         )
         XCTAssertFalse(try XCTUnwrap(propertyList["NSCameraUsageDescription"] as? String).isEmpty)
         XCTAssertFalse(try XCTUnwrap(propertyList["NSLocalNetworkUsageDescription"] as? String).isEmpty)
+        XCTAssertNotNil(propertyList["UILaunchScreen"] as? [String: Any])
     }
 
     func testAppIconCatalogContainsOpaqueUniversalIcon() throws {

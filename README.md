@@ -51,7 +51,8 @@ Implemented so far:
 - end-to-end loopback coverage for secure reconnect, an encrypted ADB shell command, and encrypted APK installation;
 - remote text input, menu, volume, and power controls in addition to D-pad navigation;
 - unsigned IPA packaging in GitHub Actions;
-- repository-owned app icon and accent-color assets with packaged-product validation.
+- repository-owned app icon and accent-color assets with packaged-product validation;
+- adaptive system launch-screen configuration for iPhone and iPad.
 
 Still in progress:
 
