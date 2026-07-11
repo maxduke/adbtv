@@ -940,17 +940,7 @@ private struct PairingStatusView: View {
             Section {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-                DisclosureGroup("Technical Details") {
-                    Text(diagnosticDetail.summary)
-                        .font(.footnote.monospaced())
-                        .textSelection(.enabled)
-
-                    ForEach(diagnosticDetail.context.keys.sorted(), id: \.self) { key in
-                        Text("\(key): \(diagnosticDetail.context[key] ?? "")")
-                            .font(.footnote.monospaced())
-                            .textSelection(.enabled)
-                    }
-                }
+                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
             }
         }
     }
@@ -1126,17 +1116,7 @@ private struct ManualDeviceConnectionStatusView: View {
             Section {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-                DisclosureGroup("Technical Details") {
-                    Text(diagnosticDetail.summary)
-                        .font(.footnote.monospaced())
-                        .textSelection(.enabled)
-
-                    ForEach(diagnosticDetail.context.keys.sorted(), id: \.self) { key in
-                        Text("\(key): \(diagnosticDetail.context[key] ?? "")")
-                            .font(.footnote.monospaced())
-                            .textSelection(.enabled)
-                    }
-                }
+                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
             }
         }
     }
@@ -1207,16 +1187,7 @@ private struct DiscoveryStatusView: View {
                     }
                 }
 #endif
-                DisclosureGroup("Technical Details") {
-                    Text(diagnosticDetail.summary)
-                        .font(.footnote.monospaced())
-                        .textSelection(.enabled)
-                    ForEach(diagnosticDetail.context.keys.sorted(), id: \.self) { key in
-                        Text("\(key): \(diagnosticDetail.context[key] ?? "")")
-                            .font(.footnote.monospaced())
-                            .textSelection(.enabled)
-                    }
-                }
+                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
             }
         }
     }
@@ -1439,9 +1410,7 @@ private struct InstallStatusView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-                Text(diagnosticDetail.summary)
-                    .font(.footnote.monospaced())
-                    .textSelection(.enabled)
+                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
             }
         }
     }
@@ -1635,11 +1604,24 @@ private struct RemoteFailureView: View {
         VStack(alignment: .leading, spacing: 8) {
             Label(userMessage, systemImage: "exclamationmark.triangle.fill")
                 .foregroundStyle(.red)
-            DisclosureGroup("Technical Details") {
+            DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
+        }
+    }
+}
+
+private struct DiagnosticDisclosure: View {
+    var diagnosticDetail: DiagnosticDetail
+
+    var body: some View {
+        DisclosureGroup("Technical Details") {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(diagnosticDetail.summary)
-                    .font(.footnote.monospaced())
-                    .textSelection(.enabled)
+                ForEach(diagnosticDetail.context.keys.sorted(), id: \.self) { key in
+                    Text("\(key): \(diagnosticDetail.context[key] ?? "")")
+                }
             }
+            .font(.footnote.monospaced())
+            .textSelection(.enabled)
         }
     }
 }
