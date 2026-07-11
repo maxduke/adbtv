@@ -7,6 +7,9 @@ on:
       - main
       - protocol-spike
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: SwiftPM Tests
@@ -14,7 +17,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Show Swift version
         run: swift --version
@@ -28,7 +31,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Show Xcode version
         run: xcodebuild -version
