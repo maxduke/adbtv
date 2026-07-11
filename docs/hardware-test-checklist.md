@@ -31,7 +31,9 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Pair using the six-digit code shown by Android Wireless Debugging.
 - [ ] Match the paired device to its `_adb-tls-connect._tcp` service automatically.
 - [ ] Suppress or isolate the connect advertisement after pairing and confirm the wait ends with a pairing-succeeded discovery timeout.
-- [ ] Save the Managed Device once without creating a duplicate entry.
+- [ ] Confirm **Verifying the TV connection** appears before the paired device is saved.
+- [ ] Confirm verification reads the real TV model and saves the Managed Device once without creating a duplicate entry.
+- [ ] Make the connection endpoint unreachable after pairing and confirm verification fails with technical detail without saving the device.
 - [ ] Cancel an active pairing attempt and start a new attempt successfully.
 - [ ] Enter an incorrect or expired code and confirm a clear User Error plus technical detail.
 - [ ] Pair using manual host, pairing port, and connection port fallback.
@@ -43,7 +45,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Scan in landscape orientation and verify the camera framing remains usable.
 - [ ] Deny camera access and confirm the app explains the failure and retains Pairing Code fallback.
 - [ ] Scan an unrelated QR code and confirm it is ignored.
-- [ ] Complete pairing after scanning and save the matching connect service.
+- [ ] Complete pairing after scanning, verify the matching connect service, and save the device only after the ADB model probe succeeds.
 
 ## Reconnect And Device Library
 
