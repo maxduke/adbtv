@@ -50,7 +50,8 @@ Implemented so far:
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - end-to-end loopback coverage for secure reconnect, an encrypted ADB shell command, and encrypted APK installation;
 - remote text input, menu, volume, and power controls in addition to D-pad navigation;
-- unsigned IPA packaging in GitHub Actions.
+- unsigned IPA packaging in GitHub Actions;
+- repository-owned app icon and accent-color assets with packaged-product validation.
 
 Still in progress:
 
@@ -86,6 +87,12 @@ To create an unsigned IPA artifact for later signing:
 
 ```sh
 scripts/package-unsigned-ipa.sh
+```
+
+To regenerate the committed app icon from its deterministic source:
+
+```sh
+scripts/generate-app-icon.pl Apps/ADBTViOS/Assets.xcassets/AppIcon.appiconset/ADBTV-AppIcon.png
 ```
 
 The unsigned IPA is not installable on a stock iOS device until it is signed with a valid Apple certificate and provisioning profile. GitHub Actions exposes the same packaging path through the manual **iOS Unsigned IPA** workflow.

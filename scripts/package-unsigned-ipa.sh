@@ -42,10 +42,17 @@ INFO_PLIST_PATH="$APP_PATH/Info.plist"
 PAIRING_SERVICE="$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' "$INFO_PLIST_PATH")"
 CONNECT_SERVICE="$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:1' "$INFO_PLIST_PATH")"
 LOCAL_NETWORK_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$INFO_PLIST_PATH")"
+CAMERA_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$INFO_PLIST_PATH")"
+ALLOWS_HTTP="$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$INFO_PLIST_PATH")"
+APP_ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$INFO_PLIST_PATH")"
 if [[ "$PAIRING_SERVICE" != '_adb-tls-pairing._tcp' \
     || "$CONNECT_SERVICE" != '_adb-tls-connect._tcp' \
-    || -z "$LOCAL_NETWORK_DESCRIPTION" ]]; then
-  echo "Built app is missing required Bonjour or local-network metadata" >&2
+    || -z "$LOCAL_NETWORK_DESCRIPTION" \
+    || -z "$CAMERA_DESCRIPTION" \
+    || "$ALLOWS_HTTP" != 'true' \
+    || "$APP_ICON_NAME" != 'AppIcon' \
+    || ! -f "$APP_PATH/Assets.car" ]]; then
+  echo "Built app is missing required permissions, HTTP support, or app icon metadata" >&2
   exit 1
 fi
 

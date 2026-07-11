@@ -26,10 +26,45 @@ final class ADBTVAppMetadataTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(propertyList["NSLocalNetworkUsageDescription"] as? String).isEmpty)
     }
 
+    func testAppIconCatalogContainsOpaqueUniversalIcon() throws {
+        let appIconDirectory = packageRoot
+            .appendingPathComponent("Apps/ADBTViOS/Assets.xcassets/AppIcon.appiconset")
+        let contentsData = try Data(contentsOf: appIconDirectory.appendingPathComponent("Contents.json"))
+        let contents = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: contentsData) as? [String: Any]
+        )
+        let images = try XCTUnwrap(contents["images"] as? [[String: String]])
+        let universalIcon = try XCTUnwrap(images.first)
+
+        XCTAssertEqual(universalIcon["filename"], "ADBTV-AppIcon.png")
+        XCTAssertEqual(universalIcon["idiom"], "universal")
+        XCTAssertEqual(universalIcon["platform"], "ios")
+        XCTAssertEqual(universalIcon["size"], "1024x1024")
+
+        let iconData = try Data(contentsOf: appIconDirectory.appendingPathComponent("ADBTV-AppIcon.png"))
+        XCTAssertEqual(Array(iconData.prefix(8)), [137, 80, 78, 71, 13, 10, 26, 10])
+        XCTAssertEqual(iconData.bigEndianUInt32(at: 16), 1024)
+        XCTAssertEqual(iconData.bigEndianUInt32(at: 20), 1024)
+        XCTAssertEqual(iconData[24], 8)
+        XCTAssertEqual(iconData[25], 2, "The app icon must be RGB without an alpha channel.")
+    }
+
     private var packageRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+}
+
+private extension Data {
+    func bigEndianUInt32(at offset: Int) -> UInt32? {
+        guard offset >= 0, count >= offset + 4 else {
+            return nil
+        }
+
+        return self[offset ..< offset + 4].reduce(UInt32(0)) { value, byte in
+            (value << 8) | UInt32(byte)
+        }
     }
 }
