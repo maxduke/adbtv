@@ -98,6 +98,9 @@ Some Android TV remote inputs may vary by device, OS version, or app focus. Powe
 - Start with the most stable key events: D-pad, select, back, and home.
 - Add settings, text input, volume, and power as separate tested actions.
 - Record per-action failures with Diagnostic Detail.
+- Append and parse a shell exit-status marker for every remote action so device-side `input` failures cannot appear successful.
+- Bound captured failure output before placing it in Diagnostic Detail.
+- Treat non-ASCII text as device-dependent because Android maps `input text` through the TV's virtual key character map; do not require a companion IME in the initial version.
 - Bind every install and remote operation to its originating Managed Device until completion or cancellation.
 - Permit only one active device operation so selection changes and stale callbacks cannot present a result under another TV.
 

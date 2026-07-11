@@ -58,6 +58,7 @@ Implemented so far:
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - end-to-end loopback coverage for secure reconnect, an encrypted ADB shell command, and encrypted APK installation;
 - remote text input, menu, volume, and power controls in addition to D-pad navigation;
+- checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - unsigned IPA packaging in GitHub Actions;
 - repository-owned app icon and accent-color assets with packaged-product validation;
 - adaptive system launch-screen configuration for iPhone and iPad.
@@ -124,3 +125,5 @@ If discovery reports `NoAuth` or `PolicyDenied`, open the app's iOS Settings pag
 For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
 
 The package currently contains `ADBClientCore` and `ADBTVApp`. GitHub Actions runs package tests, an unsigned iOS simulator build, and the manual unsigned IPA package workflow on macOS.
+
+Remote text uses Android's built-in `input text` command. Spaces and shell punctuation are escaped, and every command's exit status is verified. Non-ASCII input is attempted, but Android can only inject characters available through the TV's virtual key character map; unsupported text returns a User Error and Diagnostic Detail instead of a false success. A companion Android keyboard is not required.
