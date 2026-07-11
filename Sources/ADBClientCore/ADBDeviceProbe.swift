@@ -42,8 +42,9 @@ public struct ADBDeviceProbe<Session: ADBDeviceProbingSession>: Sendable {
     }
 
     public mutating func readProperty(_ property: ADBDeviceProperty) async throws -> String {
-        let output = try await session.runShellCommand(try property.shellCommand())
-        return output.normalizedPropertyValue
+        let invocation = try property.shellInvocation()
+        let output = try await session.runShellCommand(invocation.shellCommand)
+        return try invocation.validatedOutput(from: output).normalizedPropertyValue
     }
 }
 
@@ -99,6 +100,10 @@ public enum ADBDeviceProperty: String, CaseIterable, Sendable {
 
     public func shellCommand() throws -> ADBShellCommand {
         try ADBShellCommand("getprop \(rawValue)")
+    }
+
+    public func shellInvocation() throws -> ADBCheckedShellInvocation {
+        try ADBCheckedShellInvocation(command: shellCommand())
     }
 }
 

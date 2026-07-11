@@ -1004,10 +1004,11 @@ public struct ADBTVRootView: View {
             defer { connection.cancel() }
 
             _ = try await connection.connect()
-            let output = try await connection.runShellCommand(
-                try ADBShellCommand("getprop ro.product.model")
-            )
-            let model = output.utf8String.trimmingCharacters(in: .whitespacesAndNewlines)
+            let invocation = try ADBDeviceProperty.model.shellInvocation()
+            let output = try await connection.runShellCommand(invocation.shellCommand)
+            let model = try invocation.validatedOutput(from: output)
+                .utf8String
+                .trimmingCharacters(in: .whitespacesAndNewlines)
             var verifiedDevice = device
             verifiedDevice.model = model.isEmpty ? nil : model
             return verifiedDevice

@@ -5,13 +5,13 @@ final class ADBDeviceProbeTests: XCTestCase {
     func testConnectAndReadDeviceInfoConnectsAndRunsExpectedGetpropCommands() async throws {
         var probe = ADBDeviceProbe(session: FakeDeviceProbingSession(
             propertyOutputs: [
-                "getprop ro.product.manufacturer": "Sony\n",
-                "getprop ro.product.model": "BRAVIA 4K VH2\r\n",
-                "getprop ro.product.name": "atv\n",
-                "getprop ro.product.device": "bravia_atv\n",
-                "getprop ro.build.version.release": "12\n",
-                "getprop ro.build.version.sdk": "31\n",
-                "getprop ro.build.fingerprint": "sony/bravia/user/release-keys\n"
+                .manufacturer: checkedPropertyOutput("Sony\n"),
+                .model: checkedPropertyOutput("BRAVIA 4K VH2\r\n"),
+                .productName: checkedPropertyOutput("atv\n"),
+                .deviceName: checkedPropertyOutput("bravia_atv\n"),
+                .androidVersion: checkedPropertyOutput("12\n"),
+                .sdkVersion: checkedPropertyOutput("31\n"),
+                .buildFingerprint: checkedPropertyOutput("sony/bravia/user/release-keys\n")
             ]
         ))
 
@@ -29,20 +29,20 @@ final class ADBDeviceProbeTests: XCTestCase {
         ))
         XCTAssertEqual(probe.session.connectIdentities, ["host::adbtv"])
         XCTAssertEqual(probe.session.commands, [
-            "getprop ro.product.manufacturer",
-            "getprop ro.product.model",
-            "getprop ro.product.name",
-            "getprop ro.product.device",
-            "getprop ro.build.version.release",
-            "getprop ro.build.version.sdk",
-            "getprop ro.build.fingerprint"
+            try ADBDeviceProperty.manufacturer.shellInvocation().shellCommand.rawValue,
+            try ADBDeviceProperty.model.shellInvocation().shellCommand.rawValue,
+            try ADBDeviceProperty.productName.shellInvocation().shellCommand.rawValue,
+            try ADBDeviceProperty.deviceName.shellInvocation().shellCommand.rawValue,
+            try ADBDeviceProperty.androidVersion.shellInvocation().shellCommand.rawValue,
+            try ADBDeviceProperty.sdkVersion.shellInvocation().shellCommand.rawValue,
+            try ADBDeviceProperty.buildFingerprint.shellInvocation().shellCommand.rawValue
         ])
     }
 
     func testReadPropertyTrimsWhitespaceAndNewlines() async throws {
         var probe = ADBDeviceProbe(session: FakeDeviceProbingSession(
             propertyOutputs: [
-                "getprop ro.product.model": "  Chromecast HD \r\n"
+                .model: checkedPropertyOutput("  Chromecast HD \r\n")
             ]
         ))
 
@@ -51,20 +51,45 @@ final class ADBDeviceProbeTests: XCTestCase {
         XCTAssertEqual(model, "Chromecast HD")
     }
 
+    func testReadPropertyRejectsShellFailure() async throws {
+        var probe = ADBDeviceProbe(session: FakeDeviceProbingSession(
+            propertyOutputs: [
+                .model: checkedPropertyOutput("getprop failed", exitCode: 1)
+            ]
+        ))
+
+        do {
+            _ = try await probe.readProperty(.model)
+            XCTFail("Expected checked property command to fail.")
+        } catch let error as ADBCheckedShellInvocationError {
+            XCTAssertEqual(
+                error,
+                .commandFailed(exitCode: 1, output: "getprop failed")
+            )
+        }
+    }
+
     func testDevicePropertyBuildsSafeGetpropShellCommand() throws {
         let command = try ADBDeviceProperty.androidVersion.shellCommand()
 
         XCTAssertEqual(command.rawValue, "getprop ro.build.version.release")
         XCTAssertEqual(command.serviceName, "shell:getprop ro.build.version.release")
+        XCTAssertTrue(
+            try ADBDeviceProperty.androidVersion
+                .shellInvocation()
+                .shellCommand
+                .rawValue
+                .hasPrefix("getprop ro.build.version.release; ")
+        )
     }
 }
 
 private struct FakeDeviceProbingSession: ADBDeviceProbingSession {
-    var propertyOutputs: [String: String]
+    var propertyOutputs: [ADBDeviceProperty: ADBShellOutput]
     private(set) var connectIdentities: [String]
     private(set) var commands: [String]
 
-    init(propertyOutputs: [String: String]) {
+    init(propertyOutputs: [ADBDeviceProperty: ADBShellOutput]) {
         self.propertyOutputs = propertyOutputs
         self.connectIdentities = []
         self.commands = []
@@ -77,7 +102,21 @@ private struct FakeDeviceProbingSession: ADBDeviceProbingSession {
 
     mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput {
         commands.append(command.rawValue)
-        let value = propertyOutputs[command.rawValue, default: ""]
-        return ADBShellOutput(bytes: Array(value.utf8))
+        for property in ADBDeviceProperty.allCases {
+            if try property.shellInvocation().shellCommand == command {
+                return propertyOutputs[property] ?? checkedPropertyOutput("")
+            }
+        }
+        return checkedPropertyOutput("")
     }
+}
+
+private func checkedPropertyOutput(
+    _ commandOutput: String,
+    exitCode: Int = 0
+) -> ADBShellOutput {
+    ADBShellOutput(bytes: Array(
+        (commandOutput
+            + "\n\(ADBCheckedShellInvocation.exitStatusMarker)\(exitCode)\n").utf8
+    ))
 }
