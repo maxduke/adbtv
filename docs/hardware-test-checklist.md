@@ -45,7 +45,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Scan a valid QR code while its pairing advertisement is unavailable and confirm the pairing-service wait times out.
 - [ ] Scan a valid Android Wireless Debugging QR code in portrait orientation.
 - [ ] Scan in landscape orientation and verify the camera framing remains usable.
-- [ ] Deny camera access and confirm the app explains the failure and retains Pairing Code fallback.
+- [ ] Deny camera access and confirm the app shows complete copyable technical detail, opens iOS Settings, and retains Pairing Code fallback.
 - [ ] Scan an unrelated QR code and confirm it is ignored.
 - [ ] Complete pairing after scanning, verify the matching connect service, and save the device only after the ADB model probe succeeds.
 

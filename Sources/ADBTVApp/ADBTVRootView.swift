@@ -6,6 +6,10 @@ import UIKit
 #endif
 
 public struct ADBTVRootView: View {
+#if os(iOS)
+    @Environment(\.openURL) private var openURL
+#endif
+
     private let deviceStore: ADBTVDeviceStore
 
     @State private var model: ADBTVAppModel
@@ -170,10 +174,19 @@ public struct ADBTVRootView: View {
                 }
             ),
             presenting: qrScannerError
-        ) { _ in
+        ) { detail in
+            if detail.context["reason"] == "permissionDenied",
+               let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                Button("Open Settings") {
+                    openURL(settingsURL)
+                }
+            }
+            Button("Copy Technical Details") {
+                UIPasteboard.general.string = detail.formattedDescription
+            }
             Button("OK", role: .cancel) {}
         } message: { detail in
-            Text("\(detail.summary)\n\nReason: \(detail.context["reason"] ?? "unknown")")
+            Text(detail.formattedDescription)
         }
 #endif
         .alert(
@@ -187,10 +200,15 @@ public struct ADBTVRootView: View {
                 }
             ),
             presenting: devicePersistenceError
-        ) { _ in
+        ) { diagnosticDetail in
+#if os(iOS)
+            Button("Copy Technical Details") {
+                UIPasteboard.general.string = diagnosticDetail.formattedDescription
+            }
+#endif
             Button("OK", role: .cancel) {}
         } message: { diagnosticDetail in
-            Text(diagnosticDetail.summary)
+            Text(diagnosticDetail.formattedDescription)
         }
         .fileImporter(
             isPresented: $isFileImporterPresented,
@@ -1825,14 +1843,9 @@ private struct DiagnosticDisclosure: View {
 
     var body: some View {
         DisclosureGroup("Technical Details") {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(diagnosticDetail.summary)
-                ForEach(diagnosticDetail.context.keys.sorted(), id: \.self) { key in
-                    Text("\(key): \(diagnosticDetail.context[key] ?? "")")
-                }
-            }
-            .font(.footnote.monospaced())
-            .textSelection(.enabled)
+            Text(diagnosticDetail.formattedDescription)
+                .font(.footnote.monospaced())
+                .textSelection(.enabled)
         }
     }
 }

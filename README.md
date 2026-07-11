@@ -44,6 +44,7 @@ Implemented so far:
 - manual Pairing Code app flow with separate pairing and connection ports, cancellation, diagnostics, and saved-device handoff;
 - selectable Bonjour pairing services with device-GUID correlation and persisted connect-service handoff;
 - AVFoundation Pairing QR Code scanning with Bonjour service matching and the same saved-device handoff;
+- camera-permission recovery with an iOS Settings shortcut and copyable scanner diagnostics;
 - authenticated reconnect and device-model verification before any paired device is saved;
 - AOSP-compatible CNXN/STLS mutual-TLS reconnect for host/port and Bonjour targets;
 - legacy authenticated ADB-over-TCP reconnect for manually entered endpoints such as port 5555;

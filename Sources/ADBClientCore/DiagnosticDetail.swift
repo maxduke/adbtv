@@ -16,4 +16,10 @@ public struct DiagnosticDetail: Equatable, Sendable {
         self.summary = summary
         self.context = context
     }
+
+    public var formattedDescription: String {
+        ([summary] + context.keys.sorted().map { key in
+            "\(key): \(context[key] ?? "")"
+        }).joined(separator: "\n")
+    }
 }
