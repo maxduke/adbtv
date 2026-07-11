@@ -140,13 +140,9 @@ Pairing QR Code support needs camera permission. QR pairing should remain option
 **iCloud Keychain**:
 Synced ADB Identity depends on Keychain synchronizable items and the right signing capabilities. Sideloaded builds may need clear setup instructions for users building with their own Apple account.
 
-## Open Technical Questions
+## Remaining Technical Questions
 
-- Can iOS Security APIs create and persist the exact certificate/private key form needed for ADB pairing and TLS reconnect?
-- Is a small Swift SPAKE2 implementation feasible, or should the project depend on a narrow audited crypto package?
 - Which Android TV versions expose Wireless Debugging and mDNS behavior consistently enough to support automatic Device Discovery?
-- Which ADB service path is best for APK Installation in the first version: push to a temporary path plus package-manager shell command, or an install-specific service if compatible with modern devices?
-- How much Operation Progress can be reported accurately for URL download, file transfer, and device-side install phases?
 - What integrity signal, if any, should the app require for HTTP downloads before installing an APK?
 
 ## References

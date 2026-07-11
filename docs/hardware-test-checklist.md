@@ -75,12 +75,15 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## APK Installation
 
 - [ ] Install a known-good signed single APK selected from Files.
-- [ ] Observe determinate byte progress during transfer.
+- [ ] Observe determinate byte progress during a known-length URL download and ADB transfer.
+- [ ] Download from a server without `Content-Length` and confirm indeterminate progress shows received bytes.
 - [ ] Cancel during download or transfer, confirm **Installation cancelled**, then retry the same source successfully.
 - [ ] Install the same package again and confirm replacement succeeds.
 - [ ] Install a known-good APK from a direct HTTPS URL.
 - [ ] Enter an HTTP URL and confirm the insecure-transport warning appears before install.
 - [ ] Install from a local HTTP server when local-network permission is granted.
+- [ ] Return an HTTP error or HTML response from an APK URL and confirm download-specific Diagnostic Detail appears before the app connects to the TV.
+- [ ] Attempt a package advertised above 512 MiB and confirm it is rejected before buffering or connecting to the TV.
 - [ ] Select a renamed non-APK file and confirm validation fails before transfer.
 - [ ] Test an invalid signature or incompatible APK and confirm Package Manager detail is shown.
 - [ ] Confirm the temporary remote APK is removed after success and failure.

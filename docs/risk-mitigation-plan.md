@@ -64,7 +64,10 @@ APK Installation can expand quickly: single APK, split APKs, install sessions, p
 - Validate file extension and basic APK structure before transfer.
 - Split APK formats remain out of scope until single APK installation is reliable.
 - Model installation as phases: download, validate, transfer, install, result.
-- Keep Operation Progress phase-based if byte-level progress is unavailable for device-side install.
+- Report ordered byte progress for URL download and ADB transfer, with indeterminate download progress when the server does not advertise a length.
+- Limit both URL and Files packages to 512 MiB before retaining them in memory.
+- Download and structurally validate the package before opening the ADB connection.
+- Reject non-success HTTP responses and clearly non-package text, JSON, or XML content types before device work.
 
 **Fallback**:
 If direct install service support is inconsistent, use push-to-temp plus package-manager shell command as the first compatible path.
@@ -78,6 +81,7 @@ HTTP is useful for local-network package hosting but provides no transport integ
 - Clearly show the Install URL before installation.
 - Prefer HTTPS visually when available.
 - For HTTP, show a User Error or warning before first use.
+- Disable URL caching so APK bytes are not retained beyond the active installation operation.
 - Add a later option for user-supplied checksum verification if HTTP installs become common.
 
 **Fallback**:

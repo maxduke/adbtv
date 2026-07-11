@@ -30,9 +30,12 @@ Implemented so far:
 - APK source selection from the iOS Files picker;
 - APK source entry from a direct HTTP or HTTPS URL;
 - an explicit insecure-transport warning for HTTP APK sources;
+- ordered URL download progress with known-length and indeterminate presentation;
+- bounded 512 MiB package loading for URL and Files sources, with response validation;
 - structural APK validation as a ZIP archive containing a root `AndroidManifest.xml` before transfer;
+- package preparation and validation before opening the Android TV connection;
 - single-APK install orchestration through the native ADB client;
-- live, acknowledged APK transfer progress with byte counts in the install UI;
+- live URL download and acknowledged APK transfer progress with byte counts in the install UI;
 - explicit APK-install cancellation with a recoverable status and same-source retry;
 - Android TV D-pad, select, back, home, and settings remote actions;
 - user-facing operation status plus technical diagnostic details;
