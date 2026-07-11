@@ -75,6 +75,7 @@ Still in progress:
 - [Contributing](./CONTRIBUTING.md)
 - [Security policy](./SECURITY.md)
 - [Development flow](./docs/development-flow.md)
+- [Release process](./docs/release-process.md)
 - [Initial architecture plan](./docs/initial-architecture-plan.md)
 - [Risk mitigation plan](./docs/risk-mitigation-plan.md)
 - [Hardware release checklist](./docs/hardware-test-checklist.md)
@@ -109,6 +110,8 @@ scripts/generate-app-icon.pl Apps/ADBTViOS/Assets.xcassets/AppIcon.appiconset/AD
 ```
 
 The unsigned IPA is not installable on a stock iOS device until it is signed with a valid Apple certificate and provisioning profile. GitHub Actions exposes the same packaging path through the manual **iOS Unsigned IPA** workflow.
+
+Each packaged artifact includes `ADBTV-unsigned.ipa.sha256`. Semantic-version tags create a draft GitHub release only after the tag version matches the built app; see the [release process](./docs/release-process.md).
 
 ## Physical Device Signing
 

@@ -1,0 +1,68 @@
+name: iOS Draft Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Package Draft Release
+    runs-on: macos-15
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v7
+
+      - name: Validate release tag
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must use vMAJOR.MINOR.PATCH format" >&2
+            exit 1
+          fi
+          echo "EXPECTED_MARKETING_VERSION=${GITHUB_REF_NAME#v}" >>"$GITHUB_ENV"
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Package unsigned IPA
+        run: scripts/package-unsigned-ipa.sh
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ADBTV-${{ github.ref_name }}-unsigned
+          path: |
+            build/unsigned-ipa/output/ADBTV-unsigned.ipa
+            build/unsigned-ipa/output/ADBTV-unsigned.ipa.sha256
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Create or update draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IPA="build/unsigned-ipa/output/ADBTV-unsigned.ipa"
+          CHECKSUM="${IPA}.sha256"
+          RELEASE_IS_DRAFT="$(
+            gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft 2>/dev/null || true
+          )"
+          case "$RELEASE_IS_DRAFT" in
+            true)
+              gh release upload "$GITHUB_REF_NAME" "$IPA" "$CHECKSUM" --clobber
+              ;;
+            false)
+              echo "Refusing to replace assets on published release $GITHUB_REF_NAME" >&2
+              exit 1
+              ;;
+            *)
+              gh release create "$GITHUB_REF_NAME" "$IPA" "$CHECKSUM" \
+                --draft \
+                --generate-notes \
+                --title "ADB TV $GITHUB_REF_NAME" \
+                --verify-tag
+              ;;
+          esac

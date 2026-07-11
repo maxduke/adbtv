@@ -9,6 +9,8 @@ PROJECT_PATH="${PROJECT_PATH:-"$ROOT_DIR/ADBTV.xcodeproj"}"
 SCHEME="${SCHEME:-ADBTV}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 IPA_NAME="${IPA_NAME:-ADBTV-unsigned.ipa}"
+CHECKSUM_NAME="${CHECKSUM_NAME:-${IPA_NAME}.sha256}"
+EXPECTED_MARKETING_VERSION="${EXPECTED_MARKETING_VERSION:-}"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$DERIVED_DATA_DIR" "$OUTPUT_DIR"
@@ -45,6 +47,8 @@ LOCAL_NETWORK_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUs
 CAMERA_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$INFO_PLIST_PATH")"
 ALLOWS_HTTP="$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$INFO_PLIST_PATH")"
 APP_ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$INFO_PLIST_PATH")"
+MARKETING_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST_PATH")"
+BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST_PATH")"
 if ! /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$INFO_PLIST_PATH" >/dev/null; then
   echo "Built app is missing its launch-screen configuration" >&2
   exit 1
@@ -55,8 +59,15 @@ if [[ "$PAIRING_SERVICE" != '_adb-tls-pairing._tcp' \
     || -z "$CAMERA_DESCRIPTION" \
     || "$ALLOWS_HTTP" != 'true' \
     || "$APP_ICON_NAME" != 'AppIcon' \
+    || -z "$MARKETING_VERSION" \
+    || -z "$BUILD_VERSION" \
     || ! -f "$APP_PATH/Assets.car" ]]; then
   echo "Built app is missing required permissions, HTTP support, or app icon metadata" >&2
+  exit 1
+fi
+if [[ -n "$EXPECTED_MARKETING_VERSION" \
+    && "$MARKETING_VERSION" != "$EXPECTED_MARKETING_VERSION" ]]; then
+  echo "Built app version $MARKETING_VERSION does not match expected version $EXPECTED_MARKETING_VERSION" >&2
   exit 1
 fi
 
@@ -67,8 +78,10 @@ ditto "$APP_PATH" "$PAYLOAD_DIR/$(basename "$APP_PATH")"
 
 (
   cd "$OUTPUT_DIR"
-  rm -f "$IPA_NAME"
+  rm -f "$IPA_NAME" "$CHECKSUM_NAME"
   zip -qry "$IPA_NAME" Payload
+  shasum -a 256 "$IPA_NAME" >"$CHECKSUM_NAME"
 )
 
 echo "$OUTPUT_DIR/$IPA_NAME"
+echo "$OUTPUT_DIR/$CHECKSUM_NAME"
