@@ -33,6 +33,7 @@ Implemented so far:
 - structural APK validation as a ZIP archive containing a root `AndroidManifest.xml` before transfer;
 - single-APK install orchestration through the native ADB client;
 - live, acknowledged APK transfer progress with byte counts in the install UI;
+- explicit APK-install cancellation with a recoverable status and same-source retry;
 - Android TV D-pad, select, back, home, and settings remote actions;
 - user-facing operation status plus technical diagnostic details;
 - bounded connection, pairing, remote-action, and APK-install operations with timeout diagnostics;

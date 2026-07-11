@@ -285,6 +285,23 @@ final class ADBTVAppModelTests: XCTestCase {
         ))
     }
 
+    func testCancelInstallStopsRunningStatusAndAllowsRetry() {
+        var model = ADBTVAppModel()
+
+        model.cancelInstall()
+        XCTAssertEqual(model.installDraft.status, .idle)
+
+        model.selectPackage(fileName: "app.apk", byteCount: 100)
+        model.recordInstallEvent(.phaseStarted(.transferPackage))
+        XCTAssertTrue(model.installDraft.status.isRunning)
+
+        model.cancelInstall()
+
+        XCTAssertEqual(model.installDraft.status, .cancelled)
+        XCTAssertFalse(model.installDraft.status.isRunning)
+        XCTAssertTrue(model.installDraft.canBuildInstallPlan)
+    }
+
     func testRemoteActionsUpdatePresentationStatus() {
         var model = ADBTVAppModel()
 

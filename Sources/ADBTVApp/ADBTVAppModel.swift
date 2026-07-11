@@ -122,6 +122,13 @@ public struct ADBTVAppModel: Equatable, Sendable {
         installDraft.status = .failed(userMessage: userMessage, diagnosticDetail: diagnosticDetail)
     }
 
+    public mutating func cancelInstall() {
+        guard installDraft.status.isRunning else {
+            return
+        }
+        installDraft.status = .cancelled
+    }
+
     public mutating func recordRemoteActionStarted(_ action: ADBTVRemoteAction) {
         remoteStatus = .sending(action)
     }
@@ -553,6 +560,7 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
     case running(ADBAPKInstallPhase)
     case transferring(sentByteCount: Int, totalByteCount: Int)
     case succeeded
+    case cancelled
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 
     public init(event: ADBAPKInstallEvent) {
@@ -602,7 +610,7 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
         switch self {
         case .running, .transferring:
             return true
-        case .idle, .ready, .succeeded, .failed:
+        case .idle, .ready, .succeeded, .cancelled, .failed:
             return false
         }
     }

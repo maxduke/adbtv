@@ -111,6 +111,7 @@ public struct ADBTVRootView: View {
                     install: {
                         startInstall(for: device)
                     },
+                    cancelInstall: cancelInstall,
                     sendRemoteAction: { action in
                         sendRemoteAction(action, to: device)
                     },
@@ -502,6 +503,9 @@ public struct ADBTVRootView: View {
                             return
                         }
                         await MainActor.run {
+                            guard !Task.isCancelled else {
+                                return
+                            }
                             model.recordInstallEvent(event)
                         }
                     }
@@ -519,9 +523,18 @@ public struct ADBTVRootView: View {
                 return
             }
             await MainActor.run {
+                guard !Task.isCancelled else {
+                    return
+                }
                 completeInstall(completion)
             }
         }
+    }
+
+    private func cancelInstall() {
+        installTask?.cancel()
+        installTask = nil
+        model.cancelInstall()
     }
 
     private static func installPackage(
@@ -546,6 +559,7 @@ public struct ADBTVRootView: View {
 
     @MainActor
     private func completeInstall(_ completion: InstallCompletion) {
+        installTask = nil
         switch completion {
         case .success(let report):
             model.finishInstall(result: report.result)
@@ -1267,6 +1281,7 @@ private struct DeviceDetailView: View {
     var canSendRemoteText: Bool
     var chooseAPK: () -> Void
     var install: () -> Void
+    var cancelInstall: () -> Void
     var sendRemoteAction: (ADBTVRemoteAction) -> Void
     var sendRemoteText: () -> Void
 
@@ -1279,7 +1294,8 @@ private struct DeviceDetailView: View {
                     installURLString: installURLString,
                     canInstall: canInstall,
                     chooseAPK: chooseAPK,
-                    install: install
+                    install: install,
+                    cancelInstall: cancelInstall
                 )
                 RemoteActionsPanel(
                     status: remoteStatus,
@@ -1320,6 +1336,7 @@ private struct APKInstallPanel: View {
     var canInstall: Bool
     var chooseAPK: () -> Void
     var install: () -> Void
+    var cancelInstall: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1333,6 +1350,7 @@ private struct APKInstallPanel: View {
                     Label("Choose APK", systemImage: "doc.badge.plus")
                 }
                 .buttonStyle(.bordered)
+                .disabled(installDraft.status.isRunning)
 
                 Button {
                     install()
@@ -1341,11 +1359,21 @@ private struct APKInstallPanel: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(!canInstall || installDraft.status.isRunning)
+
+                if installDraft.status.isRunning {
+                    Button(role: .cancel) {
+                        cancelInstall()
+                    } label: {
+                        Label("Cancel", systemImage: "xmark.circle")
+                    }
+                    .buttonStyle(.bordered)
+                }
             }
 
             TextField("https://example.com/app.apk", text: installURLString)
                 .autocorrectionDisabled()
                 .textFieldStyle(.roundedBorder)
+                .disabled(installDraft.status.isRunning)
 
             if !installURLString.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                !installDraft.canBuildInstallPlan {
@@ -1406,6 +1434,9 @@ private struct InstallStatusView: View {
         case .succeeded:
             Label("Installed", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
+        case .cancelled:
+            Label("Installation cancelled", systemImage: "xmark.circle")
+                .foregroundStyle(.secondary)
         case .failed(let userMessage, let diagnosticDetail):
             VStack(alignment: .leading, spacing: 8) {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")

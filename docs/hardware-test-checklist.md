@@ -68,6 +68,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 - [ ] Install a known-good signed single APK selected from Files.
 - [ ] Observe determinate byte progress during transfer.
+- [ ] Cancel during download or transfer, confirm **Installation cancelled**, then retry the same source successfully.
 - [ ] Install the same package again and confirm replacement succeeds.
 - [ ] Install a known-good APK from a direct HTTPS URL.
 - [ ] Enter an HTTP URL and confirm the insecure-transport warning appears before install.
