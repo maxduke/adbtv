@@ -25,26 +25,28 @@ final class ADBTVRemoteControlTests: XCTestCase {
     }
 
     func testSendRemoteActionRunsShellCommandAndReturnsOutput() async throws {
+        let shellCommand = try ADBTVRemoteAction.home.shellInvocation().shellCommand.rawValue
         var remote = ADBTVRemoteControl(session: FakeShellCommandRunningSession(
-            outputs: ["input keyevent 3": "ok\n"]
+            outputs: [shellCommand: checkedRemoteOutput("ok\n")]
         ))
 
         let output = try await remote.send(.home)
 
         XCTAssertEqual(output.utf8String, "ok\n")
-        XCTAssertEqual(remote.session.commands, ["input keyevent 3"])
+        XCTAssertEqual(remote.session.commands, [shellCommand])
     }
 
     func testSendRemoteActionsRunsCommandsInOrder() async throws {
         var remote = ADBTVRemoteControl(session: FakeShellCommandRunningSession())
 
         try await remote.send([.up, .select, .back])
+        let expectedCommands = [
+            try ADBTVRemoteAction.up.shellInvocation().shellCommand.rawValue,
+            try ADBTVRemoteAction.select.shellInvocation().shellCommand.rawValue,
+            try ADBTVRemoteAction.back.shellInvocation().shellCommand.rawValue
+        ]
 
-        XCTAssertEqual(remote.session.commands, [
-            "input keyevent 19",
-            "input keyevent 23",
-            "input keyevent 4"
-        ])
+        XCTAssertEqual(remote.session.commands, expectedCommands)
     }
 
     func testRemoteTextBuildsShellEscapedInputTextCommand() throws {
@@ -82,28 +84,131 @@ final class ADBTVRemoteControlTests: XCTestCase {
     }
 
     func testSendTextRunsInputTextCommandAndReturnsOutput() async throws {
+        let shellCommand = try ADBTVRemoteText("hello tv").shellInvocation().shellCommand.rawValue
         var remote = ADBTVRemoteControl(session: FakeShellCommandRunningSession(
-            outputs: ["input text 'hello%stv'": "ok\n"]
+            outputs: [shellCommand: checkedRemoteOutput("ok\n")]
         ))
 
         let output = try await remote.sendText("hello tv")
 
         XCTAssertEqual(output.utf8String, "ok\n")
-        XCTAssertEqual(remote.session.commands, ["input text 'hello%stv'"])
+        XCTAssertEqual(remote.session.commands, [shellCommand])
+    }
+
+    func testRemoteInvocationCapturesAndStripsSuccessfulExitStatus() throws {
+        let invocation = try ADBTVRemoteAction.settings.shellInvocation()
+
+        XCTAssertEqual(
+            invocation.shellCommand.rawValue,
+            "input keyevent 176; __adbtv_remote_status=$?; "
+                + "printf '\\n__ADBTV_REMOTE_EXIT_STATUS__=%s\\n' \"$__adbtv_remote_status\""
+        )
+        XCTAssertEqual(
+            try invocation.validatedOutput(from: checkedRemoteOutput("device output\n")),
+            ADBShellOutput(bytes: Array("device output\n".utf8))
+        )
+    }
+
+    func testRemoteInvocationRejectsDeviceCommandFailure() throws {
+        let invocation = try ADBTVRemoteText("\u{4F60}\u{597D}").shellInvocation()
+        let output = checkedRemoteOutput(
+            "java.lang.NullPointerException: key character map rejected text\n",
+            exitCode: 1
+        )
+
+        XCTAssertThrowsError(try invocation.validatedOutput(from: output)) { error in
+            XCTAssertEqual(
+                error as? ADBTVRemoteShellInvocationError,
+                .commandFailed(
+                    exitCode: 1,
+                    output: "java.lang.NullPointerException: key character map rejected text\n"
+                )
+            )
+        }
+    }
+
+    func testSendTextPropagatesCheckedDeviceFailure() async throws {
+        let text = try ADBTVRemoteText("\u{4F60}\u{597D}")
+        let shellCommand = try text.shellInvocation().shellCommand.rawValue
+        var remote = ADBTVRemoteControl(session: FakeShellCommandRunningSession(
+            outputs: [shellCommand: checkedRemoteOutput("input text failed\n", exitCode: 1)]
+        ))
+
+        do {
+            _ = try await remote.sendText(text)
+            XCTFail("Expected the checked remote command to fail.")
+        } catch let error as ADBTVRemoteShellInvocationError {
+            XCTAssertEqual(
+                error,
+                .commandFailed(exitCode: 1, output: "input text failed\n")
+            )
+        }
+    }
+
+    func testRemoteInvocationRejectsMissingAndMalformedExitStatus() throws {
+        let invocation = try ADBTVRemoteAction.home.shellInvocation()
+
+        XCTAssertThrowsError(try invocation.validatedOutput(
+            from: ADBShellOutput(bytes: Array("input failed".utf8))
+        )) { error in
+            XCTAssertEqual(
+                error as? ADBTVRemoteShellInvocationError,
+                .missingExitStatus(output: "input failed")
+            )
+        }
+        XCTAssertThrowsError(try invocation.validatedOutput(
+            from: ADBShellOutput(bytes: Array("\n__ADBTV_REMOTE_EXIT_STATUS__=bad\n".utf8))
+        )) { error in
+            XCTAssertEqual(
+                error as? ADBTVRemoteShellInvocationError,
+                .invalidExitStatus("bad")
+            )
+        }
+    }
+
+    func testRemoteFailureDiagnosticOutputIsBounded() throws {
+        let invocation = try ADBTVRemoteAction.home.shellInvocation()
+        let oversizedOutput = String(
+            repeating: "x",
+            count: ADBTVRemoteShellInvocation.maximumDiagnosticByteCount + 10
+        )
+
+        XCTAssertThrowsError(try invocation.validatedOutput(
+            from: checkedRemoteOutput(oversizedOutput, exitCode: 2)
+        )) { error in
+            guard case let ADBTVRemoteShellInvocationError.commandFailed(exitCode, output) = error else {
+                return XCTFail("Expected commandFailed, got \(error).")
+            }
+            XCTAssertEqual(exitCode, 2)
+            XCTAssertEqual(
+                output,
+                String(repeating: "x", count: 4 * 1024) + " [truncated]"
+            )
+        }
     }
 }
 
 private struct FakeShellCommandRunningSession: ADBShellCommandRunningSession {
-    var outputs: [String: String]
+    var outputs: [String: ADBShellOutput]
     private(set) var commands: [String]
 
-    init(outputs: [String: String] = [:]) {
+    init(outputs: [String: ADBShellOutput] = [:]) {
         self.outputs = outputs
         self.commands = []
     }
 
     mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput {
         commands.append(command.rawValue)
-        return ADBShellOutput(bytes: Array(outputs[command.rawValue, default: ""].utf8))
+        return outputs[command.rawValue] ?? checkedRemoteOutput("")
     }
+}
+
+private func checkedRemoteOutput(
+    _ commandOutput: String,
+    exitCode: Int = 0
+) -> ADBShellOutput {
+    ADBShellOutput(bytes: Array(
+        (commandOutput
+            + "\n\(ADBTVRemoteShellInvocation.exitStatusMarker)\(exitCode)\n").utf8
+    ))
 }

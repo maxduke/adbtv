@@ -7,7 +7,7 @@ public struct ADBTVRemoteControl<Session: ADBShellCommandRunningSession>: Sendab
 
     @discardableResult
     public mutating func send(_ action: ADBTVRemoteAction) async throws -> ADBShellOutput {
-        try await session.runShellCommand(action.shellCommand())
+        try await run(action.shellInvocation())
     }
 
     public mutating func send(_ actions: [ADBTVRemoteAction]) async throws {
@@ -18,12 +18,19 @@ public struct ADBTVRemoteControl<Session: ADBShellCommandRunningSession>: Sendab
 
     @discardableResult
     public mutating func sendText(_ text: ADBTVRemoteText) async throws -> ADBShellOutput {
-        try await session.runShellCommand(text.shellCommand())
+        try await run(text.shellInvocation())
     }
 
     @discardableResult
     public mutating func sendText(_ text: String) async throws -> ADBShellOutput {
         try await sendText(try ADBTVRemoteText(text))
+    }
+
+    private mutating func run(
+        _ invocation: ADBTVRemoteShellInvocation
+    ) async throws -> ADBShellOutput {
+        let output = try await session.runShellCommand(invocation.shellCommand)
+        return try invocation.validatedOutput(from: output)
     }
 }
 
@@ -72,6 +79,10 @@ public enum ADBTVRemoteAction: CaseIterable, Equatable, Sendable {
 
     public func shellCommand() throws -> ADBShellCommand {
         try keyEvent.shellCommand()
+    }
+
+    public func shellInvocation() throws -> ADBTVRemoteShellInvocation {
+        try ADBTVRemoteShellInvocation(command: shellCommand())
     }
 }
 
@@ -128,6 +139,10 @@ public struct ADBTVRemoteText: Equatable, Sendable {
     public func shellCommand() throws -> ADBShellCommand {
         try ADBShellCommand("input text \(shellEscapedArgument)")
     }
+
+    public func shellInvocation() throws -> ADBTVRemoteShellInvocation {
+        try ADBTVRemoteShellInvocation(command: shellCommand())
+    }
 }
 
 public enum ADBTVRemoteTextError: Error, Equatable, Sendable {
@@ -135,4 +150,73 @@ public enum ADBTVRemoteTextError: Error, Equatable, Sendable {
     case containsNullByte
     case containsNewline
     case containsReservedSpaceEscape
+}
+
+public struct ADBTVRemoteShellInvocation: Equatable, Sendable {
+    static let exitStatusMarker = "__ADBTV_REMOTE_EXIT_STATUS__="
+    static let maximumDiagnosticByteCount = 4 * 1024
+
+    public var shellCommand: ADBShellCommand
+
+    public init(command: ADBShellCommand) throws {
+        shellCommand = try ADBShellCommand(
+            "\(command.rawValue); "
+                + "__adbtv_remote_status=$?; "
+                + "printf '\\n\(Self.exitStatusMarker)%s\\n' \"$__adbtv_remote_status\""
+        )
+    }
+
+    public func validatedOutput(from output: ADBShellOutput) throws -> ADBShellOutput {
+        let marker = Array(("\n" + Self.exitStatusMarker).utf8)
+        guard let markerIndex = lastIndex(of: marker, in: output.bytes) else {
+            throw ADBTVRemoteShellInvocationError.missingExitStatus(
+                output: diagnosticOutput(from: output.bytes)
+            )
+        }
+
+        let statusStart = markerIndex + marker.count
+        let statusBytes = output.bytes[statusStart...].prefix { byte in
+            byte != 10 && byte != 13
+        }
+        guard let exitCode = Int(String(decoding: statusBytes, as: UTF8.self)),
+              (0 ... 255).contains(exitCode) else {
+            throw ADBTVRemoteShellInvocationError.invalidExitStatus(
+                String(decoding: statusBytes, as: UTF8.self)
+            )
+        }
+
+        let commandOutput = Array(output.bytes[..<markerIndex])
+        guard exitCode == 0 else {
+            throw ADBTVRemoteShellInvocationError.commandFailed(
+                exitCode: exitCode,
+                output: diagnosticOutput(from: commandOutput)
+            )
+        }
+        return ADBShellOutput(bytes: commandOutput)
+    }
+
+    private func lastIndex(of marker: [UInt8], in bytes: [UInt8]) -> Int? {
+        guard !marker.isEmpty, bytes.count >= marker.count else {
+            return nil
+        }
+
+        for index in stride(from: bytes.count - marker.count, through: 0, by: -1) {
+            if bytes[index ..< index + marker.count].elementsEqual(marker) {
+                return index
+            }
+        }
+        return nil
+    }
+
+    private func diagnosticOutput(from bytes: [UInt8]) -> String {
+        let prefix = bytes.prefix(Self.maximumDiagnosticByteCount)
+        let value = String(decoding: prefix, as: UTF8.self)
+        return bytes.count > prefix.count ? value + " [truncated]" : value
+    }
+}
+
+public enum ADBTVRemoteShellInvocationError: Error, Equatable, Sendable {
+    case missingExitStatus(output: String)
+    case invalidExitStatus(String)
+    case commandFailed(exitCode: Int, output: String)
 }
