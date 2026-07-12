@@ -83,6 +83,13 @@ final class ADBTVAutomaticDiscoveryPolicyTests: XCTestCase {
         XCTAssertTrue(policy.shouldRetryAuthorizationFailureAfterActivation(status: failedStatus))
         XCTAssertFalse(policy.hasPendingAuthorizationRetry)
         XCTAssertFalse(policy.shouldRetryAuthorizationFailureAfterActivation(status: failedStatus))
+        XCTAssertTrue(policy.hasRetriedAuthorizationFailureSinceActivation)
+
+        policy.recordAuthorizationFailure()
+        XCTAssertFalse(policy.shouldRetryAuthorizationFailureAfterActivation(status: failedStatus))
+
+        policy.recordSceneLeftActiveState()
+        XCTAssertTrue(policy.shouldRetryAuthorizationFailureAfterActivation(status: failedStatus))
     }
 
     func testAuthorizationRetryIsDiscardedWhenDiscoveryStatusChanged() {
@@ -91,5 +98,20 @@ final class ADBTVAutomaticDiscoveryPolicyTests: XCTestCase {
 
         XCTAssertFalse(policy.shouldRetryAuthorizationFailureAfterActivation(status: .browsing))
         XCTAssertFalse(policy.hasPendingAuthorizationRetry)
+    }
+
+    func testReadyDiscoveryResetsAuthorizationRetryState() {
+        var policy = ADBTVAutomaticDiscoveryPolicy()
+        let failedStatus = ADBTVDiscoveryStatus.failed(
+            userMessage: "Discovery failed.",
+            diagnosticDetail: DiagnosticDetail(summary: "NoAuth")
+        )
+        policy.recordAuthorizationFailure()
+        XCTAssertTrue(policy.shouldRetryAuthorizationFailureAfterActivation(status: failedStatus))
+
+        policy.recordDiscoveryReady()
+        policy.recordAuthorizationFailure()
+
+        XCTAssertTrue(policy.shouldRetryAuthorizationFailureAfterActivation(status: failedStatus))
     }
 }

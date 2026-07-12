@@ -2,6 +2,7 @@ struct ADBTVAutomaticDiscoveryPolicy: Equatable, Sendable {
     private(set) var hasEvaluatedLaunch = false
     private(set) var isDiscoverySuspended = false
     private(set) var hasPendingAuthorizationRetry = false
+    private(set) var hasRetriedAuthorizationFailureSinceActivation = false
 
     mutating func shouldStartDiscovery(status: ADBTVDiscoveryStatus) -> Bool {
         guard !hasEvaluatedLaunch else {
@@ -40,15 +41,26 @@ struct ADBTVAutomaticDiscoveryPolicy: Equatable, Sendable {
         hasPendingAuthorizationRetry = true
     }
 
+    mutating func recordDiscoveryReady() {
+        hasPendingAuthorizationRetry = false
+        hasRetriedAuthorizationFailureSinceActivation = false
+    }
+
+    mutating func recordSceneLeftActiveState() {
+        hasRetriedAuthorizationFailureSinceActivation = false
+    }
+
     mutating func shouldRetryAuthorizationFailureAfterActivation(
         status: ADBTVDiscoveryStatus
     ) -> Bool {
-        guard hasPendingAuthorizationRetry else {
+        guard hasPendingAuthorizationRetry,
+              !hasRetriedAuthorizationFailureSinceActivation else {
             return false
         }
         hasPendingAuthorizationRetry = false
 
         if case .failed = status {
+            hasRetriedAuthorizationFailureSinceActivation = true
             return true
         }
         return false

@@ -21,6 +21,7 @@ public struct ADBTVRootView: View {
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
     @State private var pairingTask: Task<Void, Never>?
+    @State private var discoveryAuthorizationRetryTask: Task<Void, Never>?
     @State private var automaticDiscoveryPolicy = ADBTVAutomaticDiscoveryPolicy()
 #if os(iOS) && canImport(AVFoundation)
     @State private var isQRCodeScannerPresented = false
@@ -220,54 +221,40 @@ public struct ADBTVRootView: View {
         } message: { diagnosticDetail in
             Text(diagnosticDetail.formattedDescription)
         }
+#if os(iOS)
+        .sheet(isPresented: $isFileImporterPresented) {
+            ADBTVAPKDocumentPicker { result in
+                isFileImporterPresented = false
+                handlePackageSelection(result)
+            }
+        }
+#else
         .fileImporter(
             isPresented: $isFileImporterPresented,
-            // Some Files providers expose APKs only as generic data even when the
-            // app imports the Android package type. The install plan still rejects
-            // non-APK names and validates the archive before any device transfer.
-            allowedContentTypes: [.adbTVAPK, .data],
+            allowedContentTypes: [.item],
             allowsMultipleSelection: false
         ) { result in
-            switch result {
-            case .success(let urls):
-                guard let url = urls.first else {
-                    return
-                }
-                guard url.pathExtension.lowercased() == "apk" else {
-                    model.failInstall(
-                        userMessage: "Select an APK file.",
-                        diagnosticDetail: DiagnosticDetail(
-                            summary: "The selected file does not use the .apk extension.",
-                            context: [
-                                "fileName": url.lastPathComponent,
-                                "source": "fileImporter"
-                            ]
-                        )
-                    )
-                    return
-                }
-                model.selectPackage(fileURL: url, byteCount: url.adbTVFileByteCount)
+            switch result.map({ $0.first }) {
+            case .success(let url?):
+                handlePackageSelection(.success(url))
+            case .success(nil):
+                break
             case .failure(let error):
-                model.failInstall(
-                    userMessage: "Could not open the selected APK.",
-                    diagnosticDetail: DiagnosticDetail(
-                        summary: String(describing: error),
-                        context: ["source": "fileImporter"]
-                    )
-                )
+                handlePackageSelection(.failure(error))
             }
         }
-        .task {
-            if automaticDiscoveryPolicy.shouldStartDiscovery(status: model.discoveryStatus) {
-                startDiscovery()
+#endif
+        .task(id: scenePhase) {
+            await Task.yield()
+            guard !Task.isCancelled else {
+                return
             }
-        }
-        .onChange(of: scenePhase) { _, newPhase in
-            handleScenePhase(newPhase)
+            handleScenePhase(scenePhase)
         }
         .onDisappear {
             installTask?.cancel()
             remoteTask?.cancel()
+            discoveryAuthorizationRetryTask?.cancel()
             model.cancelActiveDeviceOperation()
             cancelPairing()
             stopDiscovery()
@@ -277,20 +264,50 @@ public struct ADBTVRootView: View {
     private func handleScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            if automaticDiscoveryPolicy.shouldResumeDiscovery(status: model.discoveryStatus)
+            if automaticDiscoveryPolicy.shouldStartDiscovery(status: model.discoveryStatus)
+                || automaticDiscoveryPolicy.shouldResumeDiscovery(status: model.discoveryStatus)
                 || automaticDiscoveryPolicy.shouldRetryAuthorizationFailureAfterActivation(
                     status: model.discoveryStatus
                 ) {
                 startDiscovery()
             }
         case .background:
+            automaticDiscoveryPolicy.recordSceneLeftActiveState()
             if automaticDiscoveryPolicy.shouldSuspendDiscovery(status: model.discoveryStatus) {
                 stopDiscovery()
             }
         case .inactive:
-            break
+            automaticDiscoveryPolicy.recordSceneLeftActiveState()
         @unknown default:
             break
+        }
+    }
+
+    private func handlePackageSelection(_ result: Result<URL, Error>) {
+        switch result {
+        case .success(let url):
+            guard url.pathExtension.lowercased() == "apk" else {
+                model.failInstall(
+                    userMessage: "Select an APK file.",
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: "The selected file does not use the .apk extension.",
+                        context: [
+                            "fileName": url.lastPathComponent,
+                            "source": "documentPicker"
+                        ]
+                    )
+                )
+                return
+            }
+            model.selectPackage(fileURL: url, byteCount: url.adbTVFileByteCount)
+        case .failure(let error):
+            model.failInstall(
+                userMessage: "Could not open the selected APK.",
+                diagnosticDetail: DiagnosticDetail(
+                    summary: String(describing: error),
+                    context: ["source": "documentPicker"]
+                )
+            )
         }
     }
 
@@ -354,6 +371,8 @@ public struct ADBTVRootView: View {
     }
 
     private func startDiscovery() {
+        discoveryAuthorizationRetryTask?.cancel()
+        discoveryAuthorizationRetryTask = nil
         model.startDiscovery()
 #if canImport(Network)
         let browser = ADBBonjourServiceBrowser()
@@ -376,6 +395,7 @@ public struct ADBTVRootView: View {
             }
             switch state {
             case .ready:
+                automaticDiscoveryPolicy.recordDiscoveryReady()
                 model.markDiscoveryReady()
             case .waitingForAuthorization(let failure):
                 model.waitForLocalNetworkAuthorization(
@@ -394,6 +414,7 @@ public struct ADBTVRootView: View {
             discoveryBrowser = nil
             if failure.reason == .noAuthorization || failure.reason == .localNetworkDenied {
                 automaticDiscoveryPolicy.recordAuthorizationFailure()
+                scheduleAuthorizationDiscoveryRetry()
             }
             model.failDiscovery(
                 userMessage: Self.discoveryUserMessage(for: failure),
@@ -412,6 +433,24 @@ public struct ADBTVRootView: View {
             )
         )
 #endif
+    }
+
+    private func scheduleAuthorizationDiscoveryRetry() {
+        discoveryAuthorizationRetryTask?.cancel()
+        discoveryAuthorizationRetryTask = Task {
+            do {
+                try await Task.sleep(for: .seconds(1))
+            } catch {
+                return
+            }
+            guard scenePhase == .active,
+                  automaticDiscoveryPolicy.shouldRetryAuthorizationFailureAfterActivation(
+                    status: model.discoveryStatus
+                  ) else {
+                return
+            }
+            startDiscovery()
+        }
     }
 
 #if canImport(Network)
@@ -498,6 +537,8 @@ public struct ADBTVRootView: View {
 #endif
 
     private func stopDiscovery() {
+        discoveryAuthorizationRetryTask?.cancel()
+        discoveryAuthorizationRetryTask = nil
 #if canImport(Network)
         discoveryBrowser?.cancel()
         discoveryBrowser = nil
@@ -1673,28 +1714,47 @@ private struct DeviceDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 DeviceHeader(device: device)
-                APKInstallPanel(
-                    installDraft: installDraft,
-                    installURLString: installURLString,
-                    canInstall: canInstall,
-                    deviceOperationInProgress: deviceOperationInProgress,
-                    chooseAPK: chooseAPK,
-                    install: install,
-                    cancelInstall: cancelInstall
-                )
-                RemoteActionsPanel(
-                    status: remoteStatus,
-                    text: remoteTextString,
-                    canSendText: canSendRemoteText,
-                    deviceOperationInProgress: deviceOperationInProgress,
-                    send: sendRemoteAction,
-                    sendText: sendRemoteText
-                )
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 32) {
+                        installPanel
+                            .frame(minWidth: 320, maxWidth: .infinity, alignment: .topLeading)
+                        remotePanel
+                            .frame(minWidth: 320, maxWidth: .infinity, alignment: .topLeading)
+                    }
+
+                    VStack(alignment: .leading, spacing: 24) {
+                        installPanel
+                        remotePanel
+                    }
+                }
             }
-            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: 920, alignment: .leading)
             .padding()
         }
         .navigationTitle(device.displayName)
+    }
+
+    private var installPanel: some View {
+        APKInstallPanel(
+            installDraft: installDraft,
+            installURLString: installURLString,
+            canInstall: canInstall,
+            deviceOperationInProgress: deviceOperationInProgress,
+            chooseAPK: chooseAPK,
+            install: install,
+            cancelInstall: cancelInstall
+        )
+    }
+
+    private var remotePanel: some View {
+        RemoteActionsPanel(
+            status: remoteStatus,
+            text: remoteTextString,
+            canSendText: canSendRemoteText,
+            deviceOperationInProgress: deviceOperationInProgress,
+            send: sendRemoteAction,
+            sendText: sendRemoteText
+        )
     }
 }
 
