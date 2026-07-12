@@ -26,8 +26,9 @@ jobs:
       - name: Select simulator
         id: simulator
         run: |
-          iphone_udid="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone .*Shutdown/{print $2; exit}')"
-          ipad_udid="$(xcrun simctl list devices available | awk -F '[()]' '/iPad .*Shutdown/{print $2; exit}')"
+          devices="$(xcrun simctl list devices available --json)"
+          iphone_udid="$(jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid // empty' <<<"$devices")"
+          ipad_udid="$(jq -r '[.devices[][] | select(.name | startswith("iPad"))][0].udid // empty' <<<"$devices")"
           test -n "$iphone_udid"
           test -n "$ipad_udid"
           echo "iphone_udid=$iphone_udid" >> "$GITHUB_OUTPUT"
