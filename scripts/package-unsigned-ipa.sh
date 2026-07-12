@@ -49,6 +49,8 @@ ALLOWS_HTTP="$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllow
 APP_ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$INFO_PLIST_PATH")"
 MARKETING_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST_PATH")"
 BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST_PATH")"
+APK_TYPE_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :UTImportedTypeDeclarations:0:UTTypeIdentifier' "$INFO_PLIST_PATH")"
+APK_TYPE_EXTENSION="$(/usr/libexec/PlistBuddy -c 'Print :UTImportedTypeDeclarations:0:UTTypeTagSpecification:public.filename-extension:0' "$INFO_PLIST_PATH")"
 if ! /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$INFO_PLIST_PATH" >/dev/null; then
   echo "Built app is missing its launch-screen configuration" >&2
   exit 1
@@ -59,10 +61,12 @@ if [[ "$PAIRING_SERVICE" != '_adb-tls-pairing._tcp' \
     || -z "$CAMERA_DESCRIPTION" \
     || "$ALLOWS_HTTP" != 'true' \
     || "$APP_ICON_NAME" != 'AppIcon' \
+    || "$APK_TYPE_IDENTIFIER" != 'com.android.package-archive' \
+    || "$APK_TYPE_EXTENSION" != 'apk' \
     || -z "$MARKETING_VERSION" \
     || -z "$BUILD_VERSION" \
     || ! -f "$APP_PATH/Assets.car" ]]; then
-  echo "Built app is missing required permissions, HTTP support, or app icon metadata" >&2
+  echo "Built app is missing required permissions, APK type, HTTP support, or app icon metadata" >&2
   exit 1
 fi
 if [[ -n "$EXPECTED_MARKETING_VERSION" \

@@ -222,12 +222,28 @@ public struct ADBTVRootView: View {
         }
         .fileImporter(
             isPresented: $isFileImporterPresented,
-            allowedContentTypes: [.adbTVAPK],
+            // Some Files providers expose APKs only as generic data even when the
+            // app imports the Android package type. The install plan still rejects
+            // non-APK names and validates the archive before any device transfer.
+            allowedContentTypes: [.adbTVAPK, .data],
             allowsMultipleSelection: false
         ) { result in
             switch result {
             case .success(let urls):
                 guard let url = urls.first else {
+                    return
+                }
+                guard url.pathExtension.lowercased() == "apk" else {
+                    model.failInstall(
+                        userMessage: "Select an APK file.",
+                        diagnosticDetail: DiagnosticDetail(
+                            summary: "The selected file does not use the .apk extension.",
+                            context: [
+                                "fileName": url.lastPathComponent,
+                                "source": "fileImporter"
+                            ]
+                        )
+                    )
                     return
                 }
                 model.selectPackage(fileURL: url, byteCount: url.adbTVFileByteCount)
@@ -261,7 +277,10 @@ public struct ADBTVRootView: View {
     private func handleScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            if automaticDiscoveryPolicy.shouldResumeDiscovery(status: model.discoveryStatus) {
+            if automaticDiscoveryPolicy.shouldResumeDiscovery(status: model.discoveryStatus)
+                || automaticDiscoveryPolicy.shouldRetryAuthorizationFailureAfterActivation(
+                    status: model.discoveryStatus
+                ) {
                 startDiscovery()
             }
         case .background:
@@ -351,6 +370,9 @@ public struct ADBTVRootView: View {
         }, failureHandler: { failure in
             browser.cancel()
             discoveryBrowser = nil
+            if failure.reason == .noAuthorization || failure.reason == .localNetworkDenied {
+                automaticDiscoveryPolicy.recordAuthorizationFailure()
+            }
             model.failDiscovery(
                 userMessage: Self.discoveryUserMessage(for: failure),
                 diagnosticDetail: DiagnosticDetail(
@@ -389,6 +411,13 @@ public struct ADBTVRootView: View {
             "operation": "bonjourDiscovery",
             "reason": failure.reason.rawValue
         ]
+#if os(iOS)
+        let declaredServices = Bundle.main.object(forInfoDictionaryKey: "NSBonjourServices") as? [String]
+        context["declaredBonjourServices"] = declaredServices?.joined(separator: ",") ?? "missing"
+        context["localNetworkUsageDescription"] = Bundle.main.object(
+            forInfoDictionaryKey: "NSLocalNetworkUsageDescription"
+        ) == nil ? "missing" : "present"
+#endif
         if let dnsErrorCode = failure.dnsErrorCode {
             context["dnsErrorCode"] = String(dnsErrorCode)
         }
@@ -1806,121 +1835,107 @@ private struct RemoteActionsPanel: View {
     var send: (ADBTVRemoteAction) -> Void
     var sendText: () -> Void
 
+    private let controlSize: CGFloat = 58
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Remote")
                 .font(.title2.bold())
 
-            Grid(horizontalSpacing: 8, verticalSpacing: 8) {
-                GridRow {
-                    Spacer()
-                    Button {
-                        send(.up)
-                    } label: {
-                        Label("Up", systemImage: "chevron.up")
-                            .labelStyle(.iconOnly)
+            HStack(alignment: .top, spacing: 24) {
+                Grid(horizontalSpacing: 6, verticalSpacing: 6) {
+                    GridRow {
+                        Color.clear.frame(width: controlSize, height: controlSize)
+                        remoteButton(.up, systemImage: "chevron.up")
+                        Color.clear.frame(width: controlSize, height: controlSize)
                     }
-                    Spacer()
-                }
-                GridRow {
-                    Button {
-                        send(.left)
-                    } label: {
-                        Label("Left", systemImage: "chevron.left")
-                            .labelStyle(.iconOnly)
+                    GridRow {
+                        remoteButton(.left, systemImage: "chevron.left")
+                        Button {
+                            send(.select)
+                        } label: {
+                            Text("OK")
+                                .font(.headline)
+                                .frame(width: controlSize, height: controlSize)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .clipShape(Circle())
+                        .accessibilityLabel("Select")
+                        remoteButton(.right, systemImage: "chevron.right")
                     }
-                    Button {
-                        send(.select)
-                    } label: {
-                        Text("OK")
-                            .frame(minWidth: 44)
-                    }
-                    Button {
-                        send(.right)
-                    } label: {
-                        Label("Right", systemImage: "chevron.right")
-                            .labelStyle(.iconOnly)
+                    GridRow {
+                        Color.clear.frame(width: controlSize, height: controlSize)
+                        remoteButton(.down, systemImage: "chevron.down")
+                        Color.clear.frame(width: controlSize, height: controlSize)
                     }
                 }
-                GridRow {
-                    Spacer()
-                    Button {
-                        send(.down)
-                    } label: {
-                        Label("Down", systemImage: "chevron.down")
-                            .labelStyle(.iconOnly)
-                    }
-                    Spacer()
+
+                VStack(spacing: 10) {
+                    remoteButton(.back, systemImage: "arrow.uturn.backward", title: "Back")
+                    remoteButton(.home, systemImage: "house.fill", title: "Home")
+                    remoteButton(.menu, systemImage: "line.3.horizontal", title: "Menu")
                 }
             }
-            .buttonStyle(.bordered)
             .disabled(status.isSending || deviceOperationInProgress)
 
-            HStack(spacing: 8) {
-                Button {
-                    send(.back)
-                } label: {
-                    Label("Back", systemImage: "arrow.uturn.backward")
-                }
-                Button {
-                    send(.home)
-                } label: {
-                    Label("Home", systemImage: "house")
-                }
-                Button {
-                    send(.settings)
-                } label: {
-                    Label("Settings", systemImage: "gearshape")
-                }
-                Button {
-                    send(.menu)
-                } label: {
-                    Label("Menu", systemImage: "line.3.horizontal")
-                }
+            Divider()
+
+            HStack(spacing: 12) {
+                remoteButton(.volumeDown, systemImage: "speaker.minus", title: "Volume Down")
+                remoteButton(.volumeUp, systemImage: "speaker.plus", title: "Volume Up")
+                Spacer(minLength: 8)
+                remoteButton(.settings, systemImage: "gearshape", title: "Settings")
+                remoteButton(.power, systemImage: "power", title: "Power")
             }
-            .buttonStyle(.bordered)
             .disabled(status.isSending || deviceOperationInProgress)
 
-            HStack(spacing: 8) {
-                Button {
-                    send(.volumeDown)
-                } label: {
-                    Label("Volume Down", systemImage: "speaker.minus")
-                        .labelStyle(.iconOnly)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    TextField("Text", text: text)
+                        .autocorrectionDisabled()
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(deviceOperationInProgress)
+                    Button {
+                        sendText()
+                    } label: {
+                        Label("Send Text", systemImage: "paperplane.fill")
+                            .labelStyle(.iconOnly)
+                            .frame(width: 24, height: 24)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canSendText)
+                    .accessibilityLabel("Send Text")
                 }
-                Button {
-                    send(.volumeUp)
-                } label: {
-                    Label("Volume Up", systemImage: "speaker.plus")
-                        .labelStyle(.iconOnly)
-                }
-                Button {
-                    send(.power)
-                } label: {
-                    Label("Power", systemImage: "power")
-                        .labelStyle(.iconOnly)
-                }
-            }
-            .buttonStyle(.bordered)
-            .disabled(status.isSending || deviceOperationInProgress)
 
-            HStack(spacing: 8) {
-                TextField("Text", text: text)
-                    .autocorrectionDisabled()
-                    .textFieldStyle(.roundedBorder)
-                    .disabled(deviceOperationInProgress)
-                Button {
-                    sendText()
-                } label: {
-                    Label("Send Text", systemImage: "paperplane")
-                        .labelStyle(.iconOnly)
+                if text.wrappedValue.unicodeScalars.contains(where: { !$0.isASCII }) {
+                    Label(
+                        "This TV may not support non-English text through Android's built-in ADB input.",
+                        systemImage: "character.cursor.ibeam"
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canSendText)
             }
 
             RemoteStatusView(status: status)
         }
+    }
+
+    private func remoteButton(
+        _ action: ADBTVRemoteAction,
+        systemImage: String,
+        title: String? = nil
+    ) -> some View {
+        Button {
+            send(action)
+        } label: {
+            Label(title ?? action.displayTitle, systemImage: systemImage)
+                .labelStyle(.iconOnly)
+                .frame(width: controlSize, height: controlSize)
+        }
+        .buttonStyle(.bordered)
+        .clipShape(Circle())
+        .accessibilityLabel(title ?? action.displayTitle)
     }
 }
 
@@ -2015,7 +2030,7 @@ private extension ADBTVRemoteAction {
 
 private extension UTType {
     static var adbTVAPK: UTType {
-        UTType(filenameExtension: "apk") ?? .data
+        UTType(importedAs: "com.android.package-archive", conformingTo: .data)
     }
 }
 

@@ -126,13 +126,13 @@ The ADB identity is a synchronizable, When Unlocked Keychain item. To reuse it a
 
 ## Troubleshooting
 
-If discovery reports `NoAuth` or `PolicyDenied`, open the app's iOS Settings page and enable Local Network access, then retry discovery. The packaged app declares both Android Wireless Debugging Bonjour service types; the IPA build now fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
+If discovery reports `NoAuth` or `PolicyDenied`, allow Local Network access in the iOS prompt. The app retries when it becomes active after the prompt or after returning from Settings. A direct IP connection made after approval does not revive a Bonjour browser that failed while the prompt was unresolved. The packaged app declares both Android Wireless Debugging Bonjour service types; the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
 
 For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
 
 The package currently contains `ADBClientCore` and `ADBTVApp`. GitHub Actions runs package tests, an unsigned iOS simulator build, and the manual unsigned IPA package workflow on macOS.
 
-Remote text uses Android's built-in `input text` command. Spaces and shell punctuation are escaped, and every command's exit status is verified. Non-ASCII input is attempted, but Android can only inject characters available through the TV's virtual key character map; unsupported text returns a User Error and Diagnostic Detail instead of a false success. A companion Android keyboard is not required.
+Remote text uses Android's built-in `input text` command. Spaces and shell punctuation are escaped, and every command's exit status is verified. The app warns before sending non-ASCII input because Android can only inject characters available through the TV's virtual key character map. Some TVs return success while dropping unsupported characters, so full device-independent Unicode input remains out of scope without a companion Android keyboard.
 
 ## License
 

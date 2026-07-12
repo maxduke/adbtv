@@ -25,6 +25,14 @@ final class ADBTVAppMetadataTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(propertyList["NSCameraUsageDescription"] as? String).isEmpty)
         XCTAssertFalse(try XCTUnwrap(propertyList["NSLocalNetworkUsageDescription"] as? String).isEmpty)
         XCTAssertNotNil(propertyList["UILaunchScreen"] as? [String: Any])
+
+        let importedTypes = try XCTUnwrap(propertyList["UTImportedTypeDeclarations"] as? [[String: Any]])
+        let apkType = try XCTUnwrap(importedTypes.first {
+            $0["UTTypeIdentifier"] as? String == "com.android.package-archive"
+        })
+        let tags = try XCTUnwrap(apkType["UTTypeTagSpecification"] as? [String: Any])
+        XCTAssertEqual(tags["public.filename-extension"] as? [String], ["apk"])
+        XCTAssertEqual(tags["public.mime-type"] as? String, "application/vnd.android.package-archive")
     }
 
     func testAppIconCatalogContainsOpaqueUniversalIcon() throws {

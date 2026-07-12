@@ -58,4 +58,27 @@ final class ADBTVAutomaticDiscoveryPolicyTests: XCTestCase {
         XCTAssertFalse(policy.isDiscoverySuspended)
         XCTAssertFalse(policy.shouldResumeDiscovery(status: .idle))
     }
+
+    func testAuthorizationFailureRetriesOnceAfterAppBecomesActive() {
+        var policy = ADBTVAutomaticDiscoveryPolicy()
+        let failedStatus = ADBTVDiscoveryStatus.failed(
+            userMessage: "Discovery is not authorized.",
+            diagnosticDetail: DiagnosticDetail(summary: "NoAuth")
+        )
+
+        policy.recordAuthorizationFailure()
+
+        XCTAssertTrue(policy.hasPendingAuthorizationRetry)
+        XCTAssertTrue(policy.shouldRetryAuthorizationFailureAfterActivation(status: failedStatus))
+        XCTAssertFalse(policy.hasPendingAuthorizationRetry)
+        XCTAssertFalse(policy.shouldRetryAuthorizationFailureAfterActivation(status: failedStatus))
+    }
+
+    func testAuthorizationRetryIsDiscardedWhenDiscoveryStatusChanged() {
+        var policy = ADBTVAutomaticDiscoveryPolicy()
+        policy.recordAuthorizationFailure()
+
+        XCTAssertFalse(policy.shouldRetryAuthorizationFailureAfterActivation(status: .browsing))
+        XCTAssertFalse(policy.hasPendingAuthorizationRetry)
+    }
 }
