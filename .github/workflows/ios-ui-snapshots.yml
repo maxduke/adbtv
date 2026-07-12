@@ -1,0 +1,67 @@
+name: iOS UI Snapshots
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ios-ui-snapshots.yml"
+      - "ADBTV.xcodeproj/**"
+      - "Apps/ADBTViOS/**"
+      - "Package.swift"
+      - "Sources/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshots:
+    name: Capture iPhone Layouts
+    runs-on: macos-15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Select simulator
+        id: simulator
+        run: |
+          udid="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone .*Shutdown/{print $2; exit}')"
+          test -n "$udid"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+
+      - name: Build preview app
+        run: |
+          xcodebuild \
+            -project ADBTV.xcodeproj \
+            -scheme ADBTV \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -derivedDataPath build/ui-snapshots/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Capture portrait and landscape
+        run: |
+          udid="${{ steps.simulator.outputs.udid }}"
+          app="build/ui-snapshots/DerivedData/Build/Products/Debug-iphonesimulator/ADBTV.app"
+          output="build/ui-snapshots/screenshots"
+          mkdir -p "$output"
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" "$app"
+
+          xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview
+          sleep 3
+          xcrun simctl io "$udid" screenshot "$output/iphone-portrait.png"
+
+          xcrun simctl terminate "$udid" com.maxduke.adbtv
+          xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-landscape
+          sleep 3
+          xcrun simctl io "$udid" screenshot "$output/iphone-landscape.png"
+
+      - name: Upload layout snapshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: ADBTV-ui-snapshots
+          path: build/ui-snapshots/screenshots/*.png
+          if-no-files-found: error
+          retention-days: 14

@@ -12,6 +12,7 @@ public struct ADBTVRootView: View {
 #endif
 
     private let deviceStore: ADBTVDeviceStore
+    private let automaticallyStartsDiscovery: Bool
 
     @State private var model: ADBTVAppModel
     @State private var isFileImporterPresented = false
@@ -31,17 +32,26 @@ public struct ADBTVRootView: View {
     @State private var discoveryBrowser: ADBBonjourServiceBrowser?
 #endif
 
-    public init(deviceStore: ADBTVDeviceStore = ADBTVDeviceStore()) {
+    public init(
+        deviceStore: ADBTVDeviceStore = ADBTVDeviceStore(),
+        automaticallyStartsDiscovery: Bool = true
+    ) {
         let loadResult = deviceStore.loadDevices()
         self.deviceStore = deviceStore
+        self.automaticallyStartsDiscovery = automaticallyStartsDiscovery
         self._model = State(initialValue: ADBTVAppModel(devices: loadResult.devices))
         self._devicePersistenceError = State(
             initialValue: Self.deviceLoadDiagnosticDetail(for: loadResult)
         )
     }
 
-    public init(model: ADBTVAppModel, deviceStore: ADBTVDeviceStore = ADBTVDeviceStore()) {
+    public init(
+        model: ADBTVAppModel,
+        deviceStore: ADBTVDeviceStore = ADBTVDeviceStore(),
+        automaticallyStartsDiscovery: Bool = true
+    ) {
         self.deviceStore = deviceStore
+        self.automaticallyStartsDiscovery = automaticallyStartsDiscovery
         self._model = State(initialValue: model)
     }
 
@@ -267,7 +277,8 @@ public struct ADBTVRootView: View {
     private func handleScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            if automaticDiscoveryPolicy.shouldStartDiscovery(status: model.discoveryStatus)
+            if (automaticallyStartsDiscovery
+                && automaticDiscoveryPolicy.shouldStartDiscovery(status: model.discoveryStatus))
                 || automaticDiscoveryPolicy.shouldResumeDiscovery(status: model.discoveryStatus)
                 || automaticDiscoveryPolicy.shouldRetryAuthorizationFailureAfterActivation(
                     status: model.discoveryStatus
