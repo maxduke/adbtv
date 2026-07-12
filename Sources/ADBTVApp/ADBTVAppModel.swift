@@ -313,14 +313,28 @@ public struct ADBTVAppModel: Equatable, Sendable {
         discoveredServices = []
     }
 
+    public mutating func waitForLocalNetworkAuthorization(
+        userMessage: String,
+        diagnosticDetail: DiagnosticDetail
+    ) {
+        discoveryStatus = .waitingForLocalNetworkAuthorization(
+            userMessage: userMessage,
+            diagnosticDetail: diagnosticDetail
+        )
+    }
+
+    public mutating func markDiscoveryReady() {
+        if case .waitingForLocalNetworkAuthorization = discoveryStatus {
+            discoveryStatus = .browsing
+        }
+    }
+
     @discardableResult
     public mutating func updateDiscoveredServices(
         _ services: [ADBDiscoveredService]
     ) -> ADBTVDeviceSummary? {
         discoveredServices = services.sortedForPresentation()
-        if !discoveryStatus.isBrowsing {
-            discoveryStatus = .browsing
-        }
+        discoveryStatus = .browsing
 
         return beginPendingDiscoveredPairingVerificationIfPossible()
     }
@@ -861,14 +875,19 @@ public enum ADBTVRemoteStatus: Equatable, Sendable {
 public enum ADBTVDiscoveryStatus: Equatable, Sendable {
     case idle
     case browsing
+    case waitingForLocalNetworkAuthorization(
+        userMessage: String,
+        diagnosticDetail: DiagnosticDetail
+    )
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 
     public var isBrowsing: Bool {
-        if case .browsing = self {
+        switch self {
+        case .browsing, .waitingForLocalNetworkAuthorization:
             return true
+        case .idle, .failed:
+            return false
         }
-
-        return false
     }
 }
 

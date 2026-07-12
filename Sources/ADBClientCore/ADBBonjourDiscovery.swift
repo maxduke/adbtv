@@ -146,6 +146,11 @@ public struct ADBBonjourDiscoveryFailure: Error, Equatable, Sendable {
     }
 }
 
+public enum ADBBonjourDiscoveryBrowserState: Equatable, Sendable {
+    case ready
+    case waitingForAuthorization(ADBBonjourDiscoveryFailure)
+}
+
 #if canImport(Network)
 import Dispatch
 @preconcurrency import Network
@@ -154,6 +159,7 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
     public static let localDomain = "local."
 
     public typealias UpdateHandler = @MainActor ([ADBDiscoveredService]) -> Void
+    public typealias StateHandler = @MainActor (ADBBonjourDiscoveryBrowserState) -> Void
     public typealias FailureHandler = @MainActor (ADBBonjourDiscoveryFailure) -> Void
 
     private let queue: DispatchQueue
@@ -173,6 +179,7 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
     public func start(
         serviceKinds: [ADBWirelessDebuggingServiceKind] = ADBWirelessDebuggingServiceKind.allCases,
         updateHandler: @escaping UpdateHandler,
+        stateHandler: @escaping StateHandler = { _ in },
         failureHandler: @escaping FailureHandler
     ) {
         cancel()
@@ -192,20 +199,23 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
                 )
             }
             browser.stateUpdateHandler = { state in
-                let error: NWError?
                 switch state {
                 case .failed(let failure):
-                    error = failure
-                case .waiting(let waitingError):
-                    error = waitingError.isBonjourAuthorizationFailure ? waitingError : nil
-                default:
-                    error = nil
-                }
-
-                if let error {
                     Task { @MainActor in
-                        failureHandler(ADBBonjourDiscoveryFailure(error))
+                        failureHandler(ADBBonjourDiscoveryFailure(failure))
                     }
+                case .waiting(let waitingError) where waitingError.isBonjourAuthorizationFailure:
+                    Task { @MainActor in
+                        stateHandler(.waitingForAuthorization(
+                            ADBBonjourDiscoveryFailure(waitingError)
+                        ))
+                    }
+                case .ready:
+                    Task { @MainActor in
+                        stateHandler(.ready)
+                    }
+                default:
+                    break
                 }
             }
             browser.start(queue: queue)

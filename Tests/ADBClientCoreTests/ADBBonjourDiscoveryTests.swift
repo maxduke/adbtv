@@ -26,6 +26,19 @@ final class ADBBonjourDiscoveryTests: XCTestCase {
         )
     }
 
+    func testBrowserStateCarriesRecoverableAuthorizationDetail() {
+        let failure = ADBBonjourDiscoveryFailure(
+            dnsErrorCode: -65_555,
+            diagnosticDescription: "NoAuth"
+        )
+
+        XCTAssertEqual(
+            ADBBonjourDiscoveryBrowserState.waitingForAuthorization(failure),
+            .waitingForAuthorization(failure)
+        )
+        XCTAssertEqual(ADBBonjourDiscoveryBrowserState.ready, .ready)
+    }
+
     func testWirelessDebuggingServiceKindsExposeBonjourTypes() {
 #if canImport(Network)
         XCTAssertEqual(ADBBonjourServiceBrowser.localDomain, "local.")

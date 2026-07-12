@@ -126,7 +126,7 @@ The ADB identity is a synchronizable, When Unlocked Keychain item. To reuse it a
 
 ## Troubleshooting
 
-If discovery reports `NoAuth` or `PolicyDenied`, allow Local Network access in the iOS prompt. The app retries when it becomes active after the prompt or after returning from Settings. A direct IP connection made after approval does not revive a Bonjour browser that failed while the prompt was unresolved. The packaged app declares both Android Wireless Debugging Bonjour service types; the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
+If discovery reports `NoAuth` or `PolicyDenied`, allow Local Network access in the iOS prompt. A browser waiting for that decision remains active and proceeds when iOS grants access; fatal authorization failures retry when the app becomes active after returning from Settings. The packaged app declares both Android Wireless Debugging Bonjour service types; the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
 
 For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
 

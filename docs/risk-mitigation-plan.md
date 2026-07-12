@@ -44,6 +44,7 @@ mDNS discovery may vary across Android TV versions, routers, VLANs, guest networ
 - Treat Device Discovery as a convenience, not the only path.
 - Implement Manual Connection in the same milestone as discovery.
 - Declare required Bonjour service types in the app metadata.
+- Keep a recoverable `NWBrowser.waiting` authorization state alive while the Local Network prompt is unresolved; only cancel and retry after a fatal browser failure.
 - Show permission-specific User Errors when local-network access is denied.
 - Bound connection attempts so unreachable manual endpoints always produce a User Error and Diagnostic Detail.
 - Bound QR pairing-service and post-pairing connect-service discovery, identifying the expected service or device GUID on timeout.

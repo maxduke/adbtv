@@ -34,6 +34,17 @@ final class ADBTVAutomaticDiscoveryPolicyTests: XCTestCase {
         XCTAssertFalse(policy.shouldResumeDiscovery(status: .idle))
     }
 
+    func testAuthorizationWaitingDiscoverySuspendsAndResumes() {
+        var policy = ADBTVAutomaticDiscoveryPolicy()
+        let status = ADBTVDiscoveryStatus.waitingForLocalNetworkAuthorization(
+            userMessage: "Allow Local Network access.",
+            diagnosticDetail: DiagnosticDetail(summary: "NoAuth")
+        )
+
+        XCTAssertTrue(policy.shouldSuspendDiscovery(status: status))
+        XCTAssertTrue(policy.shouldResumeDiscovery(status: .idle))
+    }
+
     func testIdleOrFailedDiscoveryDoesNotResume() {
         var idlePolicy = ADBTVAutomaticDiscoveryPolicy()
         XCTAssertFalse(idlePolicy.shouldSuspendDiscovery(status: .idle))

@@ -358,7 +358,10 @@ public struct ADBTVRootView: View {
 #if canImport(Network)
         let browser = ADBBonjourServiceBrowser()
         discoveryBrowser = browser
-        browser.start(updateHandler: { services in
+        browser.start(updateHandler: { [weak browser] services in
+            guard let browser, discoveryBrowser === browser else {
+                return
+            }
             if let device = model.updateDiscoveredServices(services) {
                 pairingTask?.cancel()
                 pairingTask = nil
@@ -367,7 +370,26 @@ public struct ADBTVRootView: View {
             if model.selectQRCodePairingServiceIfAvailable() {
                 startPairing()
             }
-        }, failureHandler: { failure in
+        }, stateHandler: { [weak browser] state in
+            guard let browser, discoveryBrowser === browser else {
+                return
+            }
+            switch state {
+            case .ready:
+                model.markDiscoveryReady()
+            case .waitingForAuthorization(let failure):
+                model.waitForLocalNetworkAuthorization(
+                    userMessage: Self.discoveryWaitingUserMessage(for: failure),
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: failure.diagnosticDescription,
+                        context: Self.discoveryDiagnosticContext(for: failure)
+                    )
+                )
+            }
+        }, failureHandler: { [weak browser] failure in
+            guard let browser, discoveryBrowser === browser else {
+                return
+            }
             browser.cancel()
             discoveryBrowser = nil
             if failure.reason == .noAuthorization || failure.reason == .localNetworkDenied {
@@ -401,6 +423,19 @@ public struct ADBTVRootView: View {
             return "Local Network access is off. Enable it in Settings to discover Android TV devices."
         case .other:
             return "Could not discover Android TV devices."
+        }
+    }
+
+    private static func discoveryWaitingUserMessage(
+        for failure: ADBBonjourDiscoveryFailure
+    ) -> String {
+        switch failure.reason {
+        case .noAuthorization:
+            return "Waiting for Local Network access. Allow it in the iOS prompt to discover TVs."
+        case .localNetworkDenied:
+            return "Local Network access is off. Enable it in Settings to discover Android TV devices."
+        case .other:
+            return "Waiting for the local network before discovering Android TV devices."
         }
     }
 
@@ -1520,6 +1555,15 @@ private struct DiscoveryStatusView: View {
                 Text(serviceCount == 0 ? "Searching local network" : "\(serviceCount) service\(serviceCount == 1 ? "" : "s") found")
                     .foregroundStyle(.secondary)
             }
+        case .waitingForLocalNetworkAuthorization(let userMessage, let diagnosticDetail):
+            VStack(alignment: .leading, spacing: 6) {
+                Label(userMessage, systemImage: "lock.shield")
+                    .foregroundStyle(.orange)
+#if os(iOS)
+                settingsButton
+#endif
+                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
+            }
         case .failed(let userMessage, let diagnosticDetail):
             VStack(alignment: .leading, spacing: 6) {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")
@@ -1527,17 +1571,23 @@ private struct DiscoveryStatusView: View {
 #if os(iOS)
                 if diagnosticDetail.context["reason"] == ADBBonjourDiscoveryFailure.Reason.noAuthorization.rawValue
                     || diagnosticDetail.context["reason"] == ADBBonjourDiscoveryFailure.Reason.localNetworkDenied.rawValue {
-                    Button {
-                        openURL(URL(string: UIApplication.openSettingsURLString)!)
-                    } label: {
-                        Label("Open Settings", systemImage: "gear")
-                    }
+                    settingsButton
                 }
 #endif
                 DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
             }
         }
     }
+
+#if os(iOS)
+    private var settingsButton: some View {
+        Button {
+            openURL(URL(string: UIApplication.openSettingsURLString)!)
+        } label: {
+            Label("Open Settings", systemImage: "gear")
+        }
+    }
+#endif
 }
 
 private struct DiscoveredServiceRow: View {

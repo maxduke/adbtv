@@ -28,6 +28,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Pairing Code
 
 - [ ] Launch a fresh app session and confirm discovery starts without tapping **Discover Devices**.
+- [ ] On a fresh install, leave the Local Network prompt unanswered briefly, confirm discovery shows a waiting state, then allow access and confirm discovery proceeds without tapping retry.
 - [ ] Stop discovery manually and confirm it stays stopped until **Discover Devices** is tapped.
 - [ ] While discovery is browsing, background and reopen ADB TV; confirm discovery resumes and services return.
 - [ ] Stop discovery manually, background and reopen ADB TV; confirm discovery remains stopped.

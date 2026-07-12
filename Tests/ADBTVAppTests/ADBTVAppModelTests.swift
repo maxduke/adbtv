@@ -551,6 +551,33 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertFalse(model.discoveryStatus.isBrowsing)
     }
 
+    func testDiscoveryWaitsForAuthorizationWithoutStoppingBrowserState() {
+        var model = ADBTVAppModel()
+        let detail = DiagnosticDetail(
+            summary: "NoAuth",
+            context: ["reason": "noAuthorization"]
+        )
+
+        model.startDiscovery()
+        model.waitForLocalNetworkAuthorization(
+            userMessage: "Allow Local Network access.",
+            diagnosticDetail: detail
+        )
+
+        XCTAssertEqual(
+            model.discoveryStatus,
+            .waitingForLocalNetworkAuthorization(
+                userMessage: "Allow Local Network access.",
+                diagnosticDetail: detail
+            )
+        )
+        XCTAssertTrue(model.discoveryStatus.isBrowsing)
+
+        model.markDiscoveryReady()
+
+        XCTAssertEqual(model.discoveryStatus, .browsing)
+    }
+
     func testDiscoveryFailureStoresUserAndDiagnosticDetails() {
         var model = ADBTVAppModel()
         let diagnosticDetail = DiagnosticDetail(
