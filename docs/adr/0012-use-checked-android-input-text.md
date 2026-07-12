@@ -1,5 +1,7 @@
 # Use checked Android input text without a companion IME
 
+Status: Superseded for non-ASCII input by ADR 0014. The checked built-in path remains in use for ASCII input.
+
 ## Context
 
 ADB TV needs remote text entry while preserving the no-helper architecture. Android's built-in `input text` command converts characters through the virtual keyboard's `KeyCharacterMap`. AOSP documents that this mapping can fail when the current key character map cannot generate a character, particularly for non-ASCII text.

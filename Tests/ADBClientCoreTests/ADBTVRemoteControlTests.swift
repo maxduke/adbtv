@@ -68,6 +68,20 @@ final class ADBTVRemoteControlTests: XCTestCase {
         XCTAssertEqual(command.rawValue, "input text 'O'\\''Reilly;%s$HOME'")
     }
 
+    func testUnicodeRemoteTextUsesBundledInputHelperProtocol() throws {
+        let text = try ADBTVRemoteText("你好 Android TV")
+        let command = try text.shellCommand().rawValue
+
+        XCTAssertTrue(text.requiresUnicodeInputHelper)
+        XCTAssertTrue(command.contains(ADBTVUnicodeInputHelper.inputMethodComponent))
+        XCTAssertTrue(command.contains(ADBTVUnicodeInputHelper.receiverComponent))
+        XCTAssertTrue(command.contains(ADBTVUnicodeInputHelper.commitTextAction))
+        XCTAssertTrue(command.contains("5L2g5aW9IEFuZHJvaWQgVFY="))
+        XCTAssertTrue(command.contains("settings get secure default_input_method"))
+        XCTAssertTrue(command.contains("ime set \"$previous_ime\""))
+        XCTAssertFalse(command.contains("input text"))
+    }
+
     func testRemoteTextRejectsInvalidInputs() {
         XCTAssertThrowsError(try ADBTVRemoteText("")) { error in
             XCTAssertEqual(error as? ADBTVRemoteTextError, .emptyText)

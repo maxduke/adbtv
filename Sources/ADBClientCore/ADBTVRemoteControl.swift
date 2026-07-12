@@ -1,3 +1,5 @@
+import Foundation
+
 public struct ADBTVRemoteControl<Session: ADBShellCommandRunningSession>: Sendable {
     public private(set) var session: Session
 
@@ -136,13 +138,52 @@ public struct ADBTVRemoteText: Equatable, Sendable {
         "'\(inputTextArgument.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
+    public var requiresUnicodeInputHelper: Bool {
+        rawValue.unicodeScalars.contains { !$0.isASCII }
+    }
+
     public func shellCommand() throws -> ADBShellCommand {
-        try ADBShellCommand("input text \(shellEscapedArgument)")
+        if requiresUnicodeInputHelper {
+            return try ADBShellCommand(unicodeInputHelperCommand)
+        }
+        return try ADBShellCommand("input text \(shellEscapedArgument)")
     }
 
     public func shellInvocation() throws -> ADBTVRemoteShellInvocation {
         try ADBTVRemoteShellInvocation(command: shellCommand())
     }
+
+    private var unicodeInputHelperCommand: String {
+        let encodedText = Data(rawValue.utf8).base64EncodedString()
+        let component = ADBTVUnicodeInputHelper.inputMethodComponent
+        let receiver = ADBTVUnicodeInputHelper.receiverComponent
+        let action = ADBTVUnicodeInputHelper.commitTextAction
+
+        return "previous_ime=\"$(settings get secure default_input_method)\" || exit 20; "
+            + "ime enable '\(component)' >/dev/null || exit 21; "
+            + "ime set '\(component)' >/dev/null || exit 22; "
+            + "sleep 1; "
+            + "broadcast_output=\"$(am broadcast --user current -a '\(action)' "
+            + "-n '\(receiver)' --es text_base64 '\(encodedText)' 2>&1)\"; "
+            + "broadcast_status=$?; restore_status=0; "
+            + "if [ -n \"$previous_ime\" ] && [ \"$previous_ime\" != null ]; then "
+            + "ime set \"$previous_ime\" >/dev/null || restore_status=$?; fi; "
+            + "printf '%s\\n' \"$broadcast_output\"; "
+            + "[ \"$broadcast_status\" -eq 0 ] || exit 23; "
+            + "[ \"$restore_status\" -eq 0 ] || exit 24; "
+            + "printf '%s' \"$broadcast_output\" "
+            + "| grep -q 'Broadcast completed: result=0' || exit 25"
+    }
+}
+
+public enum ADBTVUnicodeInputHelper: Sendable {
+    public static let packageName = "com.maxduke.adbtv.input"
+    public static let inputMethodComponent =
+        "com.maxduke.adbtv.input/.ADBTVInputMethodService"
+    public static let receiverComponent =
+        "com.maxduke.adbtv.input/.TextCommitReceiver"
+    public static let commitTextAction = "com.maxduke.adbtv.input.COMMIT_TEXT"
+    public static let bundledAPKFileName = "ADBTVInput.apk"
 }
 
 public enum ADBTVRemoteTextError: Error, Equatable, Sendable {

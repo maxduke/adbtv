@@ -133,6 +133,9 @@ public struct ADBTVRootView: View {
                     },
                     sendRemoteText: {
                         sendRemoteText(to: device)
+                    },
+                    installUnicodeInputHelper: {
+                        installUnicodeInputHelper(on: device)
                     }
                 )
             } else {
@@ -861,6 +864,28 @@ public struct ADBTVRootView: View {
         }
     }
 
+    private func installUnicodeInputHelper(on device: ADBTVDeviceSummary) {
+        guard let packageURL = Bundle.main.url(
+            forResource: "ADBTVInput",
+            withExtension: "apk"
+        ) else {
+            model.failInstall(
+                userMessage: "The Unicode Input Helper is missing from this app build.",
+                diagnosticDetail: DiagnosticDetail(
+                    summary: "The bundled ADBTVInput.apk resource was not found.",
+                    context: ["operation": "installUnicodeInputHelper"]
+                )
+            )
+            return
+        }
+
+        model.selectPackage(
+            fileURL: packageURL,
+            byteCount: packageURL.adbTVFileByteCount
+        )
+        startInstall(for: device)
+    }
+
     private func cancelInstall() {
         installTask?.cancel()
         installTask = nil
@@ -1185,9 +1210,19 @@ public struct ADBTVRootView: View {
     }
 
     private static func remoteTextUserMessage(for error: Error) -> String {
-        error is ADBTVOperationTimeoutError
-            ? "The TV did not respond in time."
-            : "Could not send text."
+        if error is ADBTVOperationTimeoutError {
+            return "The TV did not respond in time."
+        }
+        if let shellError = error as? ADBTVRemoteShellInvocationError,
+           case let .commandFailed(exitCode, _) = shellError {
+            if (21 ... 22).contains(exitCode) {
+                return "Install the Unicode Input Helper, then try sending the text again."
+            }
+            if (23 ... 25).contains(exitCode) {
+                return "Focus a text field on the TV, then try sending the Unicode text again."
+            }
+        }
+        return "Could not send text."
     }
 
     private static func operationDiagnosticContext(
@@ -1709,6 +1744,7 @@ private struct DeviceDetailView: View {
     var cancelInstall: () -> Void
     var sendRemoteAction: (ADBTVRemoteAction) -> Void
     var sendRemoteText: () -> Void
+    var installUnicodeInputHelper: () -> Void
 
     var body: some View {
         ScrollView {
@@ -1753,7 +1789,8 @@ private struct DeviceDetailView: View {
             canSendText: canSendRemoteText,
             deviceOperationInProgress: deviceOperationInProgress,
             send: sendRemoteAction,
-            sendText: sendRemoteText
+            sendText: sendRemoteText,
+            installUnicodeInputHelper: installUnicodeInputHelper
         )
     }
 }
@@ -1944,6 +1981,7 @@ private struct RemoteActionsPanel: View {
     var deviceOperationInProgress: Bool
     var send: (ADBTVRemoteAction) -> Void
     var sendText: () -> Void
+    var installUnicodeInputHelper: () -> Void
 
     private let controlSize: CGFloat = 58
 
@@ -2018,17 +2056,42 @@ private struct RemoteActionsPanel: View {
                 }
 
                 if text.wrappedValue.unicodeScalars.contains(where: { !$0.isASCII }) {
-                    Label(
-                        "This TV may not support non-English text through Android's built-in ADB input.",
-                        systemImage: "character.cursor.ibeam"
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            unicodeHelperLabel
+                            Spacer(minLength: 8)
+                            unicodeHelperButton
+                        }
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            unicodeHelperLabel
+                            unicodeHelperButton
+                        }
+                    }
                 }
             }
 
             RemoteStatusView(status: status)
         }
+    }
+
+    private var unicodeHelperLabel: some View {
+        Label(
+            "Chinese and other Unicode text uses the optional TV input helper.",
+            systemImage: "character.cursor.ibeam"
+        )
+        .font(.footnote)
+        .foregroundStyle(.secondary)
+    }
+
+    private var unicodeHelperButton: some View {
+        Button {
+            installUnicodeInputHelper()
+        } label: {
+            Label("Install Input Helper", systemImage: "keyboard")
+        }
+        .buttonStyle(.bordered)
+        .disabled(deviceOperationInProgress)
     }
 
     private func remoteButton(

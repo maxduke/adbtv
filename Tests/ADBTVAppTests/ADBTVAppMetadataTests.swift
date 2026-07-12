@@ -58,6 +58,20 @@ final class ADBTVAppMetadataTests: XCTestCase {
         XCTAssertEqual(iconData[25], 2, "The app icon must be RGB without an alpha channel.")
     }
 
+    func testBundledUnicodeInputHelperIsAnXcodeResource() throws {
+        let helperURL = packageRoot.appendingPathComponent(
+            "Apps/ADBTViOS/Resources/ADBTVInput.apk"
+        )
+        let helperData = try Data(contentsOf: helperURL)
+        XCTAssertEqual(Array(helperData.prefix(4)), [0x50, 0x4b, 0x03, 0x04])
+
+        let project = try String(
+            contentsOf: packageRoot.appendingPathComponent("ADBTV.xcodeproj/project.pbxproj"),
+            encoding: .utf8
+        )
+        XCTAssertTrue(project.contains("ADBTVInput.apk in Resources"))
+    }
+
     private var packageRoot: URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

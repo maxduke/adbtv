@@ -76,7 +76,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Send volume up and volume down.
 - [ ] Send power and verify the device-specific behavior is understandable.
 - [ ] Send text containing spaces and shell punctuation to a focused text field and confirm the exact text arrives.
-- [ ] Send non-ASCII text and confirm it arrives when the TV's virtual keyboard supports it, or produces a clear User Error plus exit-status Technical Details instead of reporting success.
+- [ ] Enter Chinese text, install the bundled ADB TV Input helper, focus a TV text field, and confirm the exact text arrives.
+- [ ] Confirm Unicode input restores the TV's previously selected input method after success and failure.
 - [ ] Trigger an Android-side `input` failure and confirm the remote status does not show **Sent**.
 - [ ] Disconnect the TV and confirm every failed action provides a User Error and technical detail.
 - [ ] Send an action to an unreachable TV and confirm it times out instead of remaining in progress.

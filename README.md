@@ -59,6 +59,7 @@ Implemented so far:
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - end-to-end loopback coverage for secure reconnect, an encrypted ADB shell command, and encrypted APK installation;
 - remote text input, menu, volume, and power controls in addition to D-pad navigation;
+- optional repository-owned Android IME installation and UTF-8 text commit for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - unsigned IPA packaging in GitHub Actions;
 - repository-owned app icon and accent-color assets with packaged-product validation;
@@ -130,9 +131,9 @@ If discovery reports `NoAuth` or `PolicyDenied`, allow Local Network access in t
 
 For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
 
-The package currently contains `ADBClientCore` and `ADBTVApp`. GitHub Actions runs package tests, an unsigned iOS simulator build, and the manual unsigned IPA package workflow on macOS.
+The repository contains `ADBClientCore`, `ADBTVApp`, and the source for the optional `ADBTVInput` Android IME. GitHub Actions runs Swift package tests, iOS simulator and unsigned IPA builds, plus Android helper unit tests and APK packaging.
 
-Remote text uses Android's built-in `input text` command. Spaces and shell punctuation are escaped, and every command's exit status is verified. The app warns before sending non-ASCII input because Android can only inject characters available through the TV's virtual key character map. Some TVs return success while dropping unsupported characters, so full device-independent Unicode input remains out of scope without a companion Android keyboard.
+ASCII remote text uses Android's built-in `input text` command with checked exit status. Chinese and other non-ASCII text uses the optional bundled ADB TV Input helper because Android's built-in command cannot generate characters absent from the TV's virtual key map. Enter Unicode text, install the helper from the Remote panel once, focus a TV text field, and send again. The app temporarily selects the helper for each send and restores the previous TV keyboard afterward.
 
 ## License
 

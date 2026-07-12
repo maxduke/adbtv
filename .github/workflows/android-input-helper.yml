@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "Android/ADBTVInput/**"
+      - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
+      - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
       - ".github/workflows/android-input-helper.yml"
   push:
     branches:
@@ -11,6 +13,8 @@ on:
       - protocol-spike
     paths:
       - "Android/ADBTVInput/**"
+      - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
+      - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
       - ".github/workflows/android-input-helper.yml"
   workflow_dispatch:
 
@@ -33,7 +37,7 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Install Android platform
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
@@ -46,6 +50,11 @@ jobs:
 
       - name: Build and test helper
         run: gradle -p Android/ADBTVInput testDebugUnitTest assembleDebug --no-daemon
+
+      - name: Verify bundled helper identity
+        run: |
+          test "$(apkanalyzer manifest application-id Apps/ADBTViOS/Resources/ADBTVInput.apk)" = "com.maxduke.adbtv.input"
+          test "$(apkanalyzer manifest version-code Apps/ADBTViOS/Resources/ADBTVInput.apk)" = "1"
 
       - name: Upload helper APK
         uses: actions/upload-artifact@v7
