@@ -2073,10 +2073,7 @@ private struct RemoteActionsPanel: View {
     var installUnicodeInputHelper: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Remote")
-                .font(.title2.bold())
-
+        VStack(alignment: .leading, spacing: 16) {
             VStack(spacing: 20) {
                 HStack {
                     roundButton(.power, systemImage: "power", foregroundStyle: .red)
