@@ -1758,25 +1758,27 @@ private struct DeviceDetailView: View {
     var installUnicodeInputHelper: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                DeviceHeader(device: device)
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 32) {
-                        installPanel
-                            .frame(minWidth: 320, maxWidth: .infinity, alignment: .topLeading)
-                        remotePanel
-                            .frame(minWidth: 320, maxWidth: .infinity, alignment: .topLeading)
-                    }
-
-                    VStack(alignment: .leading, spacing: 24) {
-                        installPanel
-                        remotePanel
+        GeometryReader { geometry in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    DeviceHeader(device: device)
+                    if geometry.size.width >= 700 {
+                        HStack(alignment: .top, spacing: 32) {
+                            installPanel
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                            remotePanel
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 24) {
+                            installPanel
+                            remotePanel
+                        }
                     }
                 }
+                .frame(maxWidth: 920, alignment: .leading)
+                .padding()
             }
-            .frame(maxWidth: 920, alignment: .leading)
-            .padding()
         }
         .navigationTitle(device.displayName)
     }
