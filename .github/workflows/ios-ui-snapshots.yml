@@ -57,6 +57,14 @@ jobs:
           xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-landscape
           sleep 3
           xcrun simctl io "$udid" screenshot "$output/iphone-landscape.png"
+          sips --rotate 90 "$output/iphone-landscape.png" >/dev/null
+
+          portrait_width="$(sips -g pixelWidth "$output/iphone-portrait.png" | awk '/pixelWidth/{print $2}')"
+          portrait_height="$(sips -g pixelHeight "$output/iphone-portrait.png" | awk '/pixelHeight/{print $2}')"
+          landscape_width="$(sips -g pixelWidth "$output/iphone-landscape.png" | awk '/pixelWidth/{print $2}')"
+          landscape_height="$(sips -g pixelHeight "$output/iphone-landscape.png" | awk '/pixelHeight/{print $2}')"
+          test "$portrait_height" -gt "$portrait_width"
+          test "$landscape_width" -gt "$landscape_height"
 
       - name: Upload layout snapshots
         uses: actions/upload-artifact@v7

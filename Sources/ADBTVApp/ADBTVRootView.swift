@@ -1810,9 +1810,7 @@ private struct DeviceHeader: View {
     var device: ADBTVDeviceSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(device.displayName)
-                .font(.largeTitle.bold())
+        VStack(alignment: .leading, spacing: 4) {
             if let model = device.model {
                 Text(model)
                     .foregroundStyle(.secondary)
