@@ -15,8 +15,9 @@ permissions:
 
 jobs:
   snapshots:
-    name: Capture iPhone Layouts
+    name: Capture Universal Layouts
     runs-on: macos-15
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -25,46 +26,71 @@ jobs:
       - name: Select simulator
         id: simulator
         run: |
-          udid="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone .*Shutdown/{print $2; exit}')"
-          test -n "$udid"
-          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+          iphone_udid="$(xcrun simctl list devices available | awk -F '[()]' '/iPhone .*Shutdown/{print $2; exit}')"
+          ipad_udid="$(xcrun simctl list devices available | awk -F '[()]' '/iPad .*Shutdown/{print $2; exit}')"
+          test -n "$iphone_udid"
+          test -n "$ipad_udid"
+          echo "iphone_udid=$iphone_udid" >> "$GITHUB_OUTPUT"
+          echo "ipad_udid=$ipad_udid" >> "$GITHUB_OUTPUT"
 
       - name: Build preview app
         run: |
           xcodebuild \
             -project ADBTV.xcodeproj \
             -scheme ADBTV \
-            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}" \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.iphone_udid }}" \
             -derivedDataPath build/ui-snapshots/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Capture portrait and landscape
+      - name: Capture universal layouts
         run: |
-          udid="${{ steps.simulator.outputs.udid }}"
           app="build/ui-snapshots/DerivedData/Build/Products/Debug-iphonesimulator/ADBTV.app"
           output="build/ui-snapshots/screenshots"
           mkdir -p "$output"
-          xcrun simctl boot "$udid"
-          xcrun simctl bootstatus "$udid" -b
-          xcrun simctl install "$udid" "$app"
 
-          xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview
-          sleep 3
-          xcrun simctl io "$udid" screenshot "$output/iphone-portrait.png"
+          capture_device() {
+            udid="$1"
+            device_name="$2"
+            xcrun simctl boot "$udid"
+            xcrun simctl bootstatus "$udid" -b
+            xcrun simctl install "$udid" "$app"
 
-          xcrun simctl terminate "$udid" com.maxduke.adbtv
-          xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-landscape
-          sleep 3
-          xcrun simctl io "$udid" screenshot "$output/iphone-landscape.png"
-          sips --rotate 90 "$output/iphone-landscape.png" >/dev/null
+            for appearance in light dark; do
+              xcrun simctl ui "$udid" appearance "$appearance"
 
-          portrait_width="$(sips -g pixelWidth "$output/iphone-portrait.png" | awk '/pixelWidth/{print $2}')"
-          portrait_height="$(sips -g pixelHeight "$output/iphone-portrait.png" | awk '/pixelHeight/{print $2}')"
-          landscape_width="$(sips -g pixelWidth "$output/iphone-landscape.png" | awk '/pixelWidth/{print $2}')"
-          landscape_height="$(sips -g pixelHeight "$output/iphone-landscape.png" | awk '/pixelHeight/{print $2}')"
-          test "$portrait_height" -gt "$portrait_width"
-          test "$landscape_width" -gt "$landscape_height"
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-portrait.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
+
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-landscape
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-landscape.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
+              sips --rotate 90 \
+                "$output/$device_name-$appearance-landscape.png" >/dev/null
+            done
+
+            xcrun simctl shutdown "$udid"
+          }
+
+          capture_device "${{ steps.simulator.outputs.iphone_udid }}" iphone
+          capture_device "${{ steps.simulator.outputs.ipad_udid }}" ipad
+
+          for screenshot in "$output"/*-portrait.png; do
+            width="$(sips -g pixelWidth "$screenshot" | awk '/pixelWidth/{print $2}')"
+            height="$(sips -g pixelHeight "$screenshot" | awk '/pixelHeight/{print $2}')"
+            test "$height" -gt "$width"
+          done
+
+          for screenshot in "$output"/*-landscape.png; do
+            width="$(sips -g pixelWidth "$screenshot" | awk '/pixelWidth/{print $2}')"
+            height="$(sips -g pixelHeight "$screenshot" | awk '/pixelHeight/{print $2}')"
+            test "$width" -gt "$height"
+          done
 
       - name: Upload layout snapshots
         uses: actions/upload-artifact@v7
