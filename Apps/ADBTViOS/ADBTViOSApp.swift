@@ -34,7 +34,7 @@ private struct ADBTVPreviewRoot: View {
             if isLandscape {
                 rootView
                     .frame(width: geometry.size.height, height: geometry.size.width)
-                    .rotationEffect(.degrees(90))
+                    .rotationEffect(.degrees(-90))
                     .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
             } else {
                 rootView
