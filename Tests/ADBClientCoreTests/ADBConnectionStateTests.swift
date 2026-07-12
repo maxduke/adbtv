@@ -224,6 +224,27 @@ final class ADBConnectionStateTests: XCTestCase {
         XCTAssertNil(state.stream(localID: 1))
     }
 
+    func testReceiveDuplicateCloseForRemovedStreamIsIgnored() throws {
+        var state = connectedState()
+        _ = try state.open(service: "shell:getprop")
+        _ = try state.receive(ADBPacket(command: .okay, arg0: 42, arg1: 1))
+        _ = try state.receive(ADBPacket(command: .close, arg0: 42, arg1: 1))
+
+        let result = try state.receive(ADBPacket(command: .close, arg0: 42, arg1: 1))
+
+        XCTAssertEqual(result, ADBConnectionReceiveResult())
+    }
+
+    func testReceiveCloseWithZeroRemoteIDRejectsPendingOpen() throws {
+        var state = connectedState()
+        _ = try state.open(service: "sync:")
+
+        let result = try state.receive(ADBPacket(command: .close, arg0: 0, arg1: 1))
+
+        XCTAssertEqual(result.events, [.streamClosed(localID: 1, remoteID: 0)])
+        XCTAssertNil(state.stream(localID: 1))
+    }
+
     func testCloseCreatesClosePacketAndRemovesStream() throws {
         var state = connectedState()
         _ = try state.open(service: "shell:getprop")

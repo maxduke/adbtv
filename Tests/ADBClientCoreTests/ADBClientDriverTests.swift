@@ -121,6 +121,24 @@ final class ADBClientDriverTests: XCTestCase {
         ])
     }
 
+    func testStaleCloseDoesNotInterruptNextStreamOpening() throws {
+        var driver = ADBClientDriver(client: ADBClient(connection: connectedState()))
+        _ = try driver.startShellCommand(try ADBShellCommand("mkdir -p /data/local/tmp/adbtv"))
+        _ = try driver.receiveBytes(try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded())
+        _ = try driver.receiveBytes(try ADBPacket(command: .close, arg0: 42, arg1: 1).encoded())
+        _ = try driver.startService("sync:")
+
+        let bytes = try ADBPacket(command: .close, arg0: 42, arg1: 1).encoded()
+            + ADBPacket(command: .okay, arg0: 43, arg1: 2).encoded()
+        let output = try driver.receiveBytes(bytes)
+
+        XCTAssertEqual(output.actions.count, 2)
+        XCTAssertEqual(output.actions[0], ADBClientAction())
+        XCTAssertEqual(output.actions[1].events, [
+            .streamReady(localID: 2, remoteID: 43)
+        ])
+    }
+
     private func connectedState() -> ADBConnectionState {
         var state = ADBConnectionState()
         _ = try? state.receive(

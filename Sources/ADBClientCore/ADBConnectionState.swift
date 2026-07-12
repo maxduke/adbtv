@@ -150,6 +150,19 @@ public struct ADBConnectionState: Sendable {
         case .close:
             let remoteID = packet.arg0
             let localID = packet.arg1
+
+            // CLSE can cross in flight after either peer has already removed the stream.
+            guard let stream = streamsByLocalID[localID] else {
+                return ADBConnectionReceiveResult()
+            }
+
+            if remoteID == 0, stream.state == .awaitingOkay {
+                streamsByLocalID[localID] = nil
+                return ADBConnectionReceiveResult(
+                    events: [.streamClosed(localID: localID, remoteID: remoteID)]
+                )
+            }
+
             _ = try streamForIncomingPacket(localID: localID, remoteID: remoteID, requireOpen: true)
             streamsByLocalID[localID] = nil
 
