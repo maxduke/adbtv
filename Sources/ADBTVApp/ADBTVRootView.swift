@@ -1962,6 +1962,7 @@ private struct APKInstallPanel: View {
             Label("Install", systemImage: "square.and.arrow.down")
         }
         .buttonStyle(.borderedProminent)
+        .foregroundStyle(Color.white)
         .disabled(!canInstall || installDraft.status.isRunning || deviceOperationInProgress)
     }
 
@@ -2127,6 +2128,7 @@ private struct RemoteActionsPanel: View {
                             .frame(width: 24, height: 24)
                     }
                     .buttonStyle(.borderedProminent)
+                    .foregroundStyle(Color.white)
                     .disabled(!canSendText)
                     .accessibilityLabel("Send Text")
                 }
@@ -2173,10 +2175,10 @@ private struct RemoteActionsPanel: View {
                     Text("OK")
                         .font(.title2.bold())
                         .frame(width: 92, height: 92)
-                        .foregroundStyle(Color.white)
                         .background(Color.accentColor, in: Circle())
                 }
                 .buttonStyle(.plain)
+                .foregroundStyle(Color.white)
                 .accessibilityLabel("Select")
             }
         }
