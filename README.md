@@ -10,7 +10,9 @@ The initial feature set is implemented and awaiting physical-device release vali
 - `ADBTVApp`: SwiftUI app shell for saved devices, APK install sources, install state, and Android TV remote actions.
 - `ADBTV.xcodeproj`: iOS app target that hosts the SwiftUI shell.
 
-GitHub Actions currently runs Swift package tests, an iOS simulator build, and an unsigned IPA packaging workflow.
+GitHub Actions runs Swift package tests, an iOS simulator build, unsigned IPA packaging,
+Android input-helper tests and packaging, and deterministic iPhone/iPad layout snapshots
+in light and dark appearance.
 
 Current direction:
 
