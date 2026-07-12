@@ -22,7 +22,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Sign and install the IPA using the tester's normal sideloading workflow.
 - [ ] Confirm the ADB TV icon appears correctly on the Home Screen, in Settings, and in the app switcher.
 - [ ] Cold-launch in light and dark appearance and confirm the launch screen transitions without a contrasting flash.
-- [ ] Launch on iPhone and iPad layouts without clipped or overlapping controls.
+- [ ] Launch on portrait iPhone and iPad layouts without clipped or overlapping controls.
 - [ ] Confirm camera and local-network permission text identifies why access is needed.
 
 ## Pairing Code
@@ -47,7 +47,6 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 - [ ] Scan a valid QR code while its pairing advertisement is unavailable and confirm the pairing-service wait times out.
 - [ ] Scan a valid Android Wireless Debugging QR code in portrait orientation.
-- [ ] Scan in landscape orientation and verify the camera framing remains usable.
 - [ ] Deny camera access and confirm the app shows complete copyable technical detail, opens iOS Settings, and retains Pairing Code fallback.
 - [ ] Scan an unrelated QR code and confirm it is ignored.
 - [ ] Complete pairing after scanning, verify the matching connect service, and save the device only after the ADB model probe succeeds.

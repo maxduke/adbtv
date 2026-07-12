@@ -11,8 +11,8 @@ The initial feature set is implemented and awaiting physical-device release vali
 - `ADBTV.xcodeproj`: iOS app target that hosts the SwiftUI shell.
 
 GitHub Actions runs Swift package tests, an iOS simulator build, unsigned IPA packaging,
-Android input-helper tests and packaging, and deterministic iPhone/iPad layout snapshots
-in light and dark appearance.
+Android input-helper tests and packaging, and deterministic portrait iPhone/iPad layout
+snapshots in light and dark appearance.
 
 Current direction:
 

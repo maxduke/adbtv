@@ -26,6 +26,15 @@ final class ADBTVAppMetadataTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(propertyList["NSCameraUsageDescription"] as? String).isEmpty)
         XCTAssertFalse(try XCTUnwrap(propertyList["NSLocalNetworkUsageDescription"] as? String).isEmpty)
         XCTAssertNotNil(propertyList["UILaunchScreen"] as? [String: Any])
+        XCTAssertEqual(propertyList["UIRequiresFullScreen"] as? Bool, true)
+        XCTAssertEqual(
+            propertyList["UISupportedInterfaceOrientations"] as? [String],
+            ["UIInterfaceOrientationPortrait"]
+        )
+        XCTAssertEqual(
+            propertyList["UISupportedInterfaceOrientations~ipad"] as? [String],
+            ["UIInterfaceOrientationPortrait", "UIInterfaceOrientationPortraitUpsideDown"]
+        )
 
         let importedTypes = try XCTUnwrap(propertyList["UTImportedTypeDeclarations"] as? [[String: Any]])
         let apkType = try XCTUnwrap(importedTypes.first {

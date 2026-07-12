@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   snapshots:
-    name: Capture Universal Layouts
+    name: Capture Portrait Layouts
     runs-on: macos-15
     timeout-minutes: 20
 
@@ -44,7 +44,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
-      - name: Capture universal layouts
+      - name: Capture portrait layouts
         run: |
           app="build/ui-snapshots/DerivedData/Build/Products/Debug-iphonesimulator/ADBTV.app"
           output="build/ui-snapshots/screenshots"
@@ -63,16 +63,14 @@ jobs:
               xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview
               sleep 2
               xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-portrait.png"
+                "$output/$device_name-$appearance-remote-portrait.png"
               xcrun simctl terminate "$udid" com.maxduke.adbtv
 
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-landscape
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-install
               sleep 2
               xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-landscape.png"
+                "$output/$device_name-$appearance-install-portrait.png"
               xcrun simctl terminate "$udid" com.maxduke.adbtv
-              sips --rotate 90 \
-                "$output/$device_name-$appearance-landscape.png" >/dev/null
             done
 
             xcrun simctl shutdown "$udid"
@@ -85,12 +83,6 @@ jobs:
             width="$(sips -g pixelWidth "$screenshot" | awk '/pixelWidth/{print $2}')"
             height="$(sips -g pixelHeight "$screenshot" | awk '/pixelHeight/{print $2}')"
             test "$height" -gt "$width"
-          done
-
-          for screenshot in "$output"/*-landscape.png; do
-            width="$(sips -g pixelWidth "$screenshot" | awk '/pixelWidth/{print $2}')"
-            height="$(sips -g pixelHeight "$screenshot" | awk '/pixelHeight/{print $2}')"
-            test "$width" -gt "$height"
           done
 
       - name: Upload layout snapshots

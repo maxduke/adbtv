@@ -534,8 +534,8 @@ public extension ADBTVAppModel {
         ],
         installDraft: ADBTVInstallDraft(
             selectedPackage: ADBTVInstallPackageDraft(
-                fileURL: URL(fileURLWithPath: "/tmp/example.apk"),
-                byteCount: 42
+                fileURL: URL(fileURLWithPath: "/tmp/3.8.4-1-complete-armeabi-v7a.apk"),
+                byteCount: 78_334_696
             ),
             status: .ready
         )

@@ -1757,30 +1757,37 @@ private struct DeviceDetailView: View {
     var sendRemoteText: () -> Void
     var installUnicodeInputHelper: () -> Void
 
+    @State private var selectedTool = ProcessInfo.processInfo.arguments.contains("--ui-install")
+        ? DeviceTool.install
+        : DeviceTool.remote
+
     var body: some View {
-        GeometryReader { geometry in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    DeviceHeader(device: device)
-                    if geometry.size.width >= 700 {
-                        HStack(alignment: .top, spacing: 32) {
-                            installPanel
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                            remotePanel
-                                .frame(maxWidth: .infinity, alignment: .topLeading)
-                        }
-                    } else {
-                        VStack(alignment: .leading, spacing: 24) {
-                            installPanel
-                            remotePanel
-                        }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                DeviceHeader(device: device)
+
+                Picker("Device Tool", selection: $selectedTool) {
+                    ForEach(DeviceTool.allCases) { tool in
+                        Label(tool.title, systemImage: tool.systemImage)
+                            .tag(tool)
                     }
                 }
-                .frame(maxWidth: 920, alignment: .leading)
-                .padding()
+                .pickerStyle(.segmented)
+
+                switch selectedTool {
+                case .remote:
+                    remotePanel
+                case .install:
+                    installPanel
+                }
             }
+            .frame(maxWidth: 620, alignment: .leading)
+            .padding()
         }
         .navigationTitle(device.displayName)
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
     }
 
     private var installPanel: some View {
@@ -1808,18 +1815,51 @@ private struct DeviceDetailView: View {
     }
 }
 
+private enum DeviceTool: String, CaseIterable, Identifiable {
+    case remote
+    case install
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .remote:
+            return "Remote"
+        case .install:
+            return "Install"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .remote:
+            return "gamecontroller"
+        case .install:
+            return "square.and.arrow.down"
+        }
+    }
+}
+
 private struct DeviceHeader: View {
     var device: ADBTVDeviceSummary
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let model = device.model {
-                Text(model)
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                if let model = device.model {
+                    Text(model)
+                        .font(.headline)
+                }
+                Text(device.connectionDescription)
+                    .font(.footnote.monospaced())
                     .foregroundStyle(.secondary)
             }
-            Text(device.connectionDescription)
-                .font(.callout.monospaced())
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "tv")
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
     }
 }
@@ -1835,33 +1875,26 @@ private struct APKInstallPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("APK Install")
+            Text("Install APK")
                 .font(.title2.bold())
 
-            HStack(spacing: 12) {
-                Button {
-                    chooseAPK()
-                } label: {
-                    Label("Choose APK", systemImage: "doc.badge.plus")
-                }
-                .buttonStyle(.bordered)
-                .disabled(installDraft.status.isRunning || deviceOperationInProgress)
-
-                Button {
-                    install()
-                } label: {
-                    Label("Install", systemImage: "square.and.arrow.down")
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!canInstall || installDraft.status.isRunning || deviceOperationInProgress)
-
-                if installDraft.status.isRunning {
-                    Button(role: .cancel) {
-                        cancelInstall()
-                    } label: {
-                        Label("Cancel", systemImage: "xmark.circle")
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    chooseButton
+                    installButton
+                    if installDraft.status.isRunning {
+                        cancelButton
                     }
-                    .buttonStyle(.bordered)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 12) {
+                        chooseButton
+                        installButton
+                    }
+                    if installDraft.status.isRunning {
+                        cancelButton
+                    }
                 }
             }
 
@@ -1877,15 +1910,27 @@ private struct APKInstallPanel: View {
             }
 
             if let package = installDraft.selectedPackage {
-                LabeledContent("Package", value: package.fileName)
+                LabeledContent("Package") {
+                    Text(package.fileName)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
                 if let byteCount = package.byteCount {
-                    LabeledContent("Size", value: "\(byteCount) bytes")
+                    LabeledContent("Size", value: Self.formattedByteCount(byteCount))
                 }
                 if let fileURL = package.fileURL {
-                    LabeledContent("Source", value: fileURL.lastPathComponent)
+                    LabeledContent("Source") {
+                        Text(fileURL.lastPathComponent)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
                 }
             } else if let url = installDraft.validatedURL {
-                LabeledContent("Source", value: url.absoluteString)
+                LabeledContent("Source") {
+                    Text(url.absoluteString)
+                        .lineLimit(2)
+                        .truncationMode(.middle)
+                }
             }
 
             if installDraft.usesInsecureHTTP {
@@ -1898,6 +1943,39 @@ private struct APKInstallPanel: View {
 
             InstallStatusView(status: installDraft.status)
         }
+    }
+
+    private var chooseButton: some View {
+        Button {
+            chooseAPK()
+        } label: {
+            Label("Choose APK", systemImage: "doc.badge.plus")
+        }
+        .buttonStyle(.bordered)
+        .disabled(installDraft.status.isRunning || deviceOperationInProgress)
+    }
+
+    private var installButton: some View {
+        Button {
+            install()
+        } label: {
+            Label("Install", systemImage: "square.and.arrow.down")
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(!canInstall || installDraft.status.isRunning || deviceOperationInProgress)
+    }
+
+    private var cancelButton: some View {
+        Button(role: .cancel) {
+            cancelInstall()
+        } label: {
+            Label("Cancel", systemImage: "xmark.circle")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private static func formattedByteCount(_ byteCount: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .file)
     }
 }
 
@@ -1994,63 +2072,53 @@ private struct RemoteActionsPanel: View {
     var sendText: () -> Void
     var installUnicodeInputHelper: () -> Void
 
-    private let controlSize: CGFloat = 58
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 20) {
             Text("Remote")
                 .font(.title2.bold())
 
-            HStack(alignment: .top, spacing: 24) {
-                Grid(horizontalSpacing: 6, verticalSpacing: 6) {
-                    GridRow {
-                        Color.clear.frame(width: controlSize, height: controlSize)
-                        remoteButton(.up, systemImage: "chevron.up")
-                        Color.clear.frame(width: controlSize, height: controlSize)
-                    }
-                    GridRow {
-                        remoteButton(.left, systemImage: "chevron.left")
-                        Button {
-                            send(.select)
-                        } label: {
-                            Text("OK")
-                                .font(.headline)
-                                .frame(width: controlSize, height: controlSize)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .clipShape(Circle())
-                        .accessibilityLabel("Select")
-                        remoteButton(.right, systemImage: "chevron.right")
-                    }
-                    GridRow {
-                        Color.clear.frame(width: controlSize, height: controlSize)
-                        remoteButton(.down, systemImage: "chevron.down")
-                        Color.clear.frame(width: controlSize, height: controlSize)
-                    }
+            VStack(spacing: 20) {
+                HStack {
+                    roundButton(.power, systemImage: "power", foregroundStyle: .red)
+                    Spacer()
+                    roundButton(.menu, systemImage: "list.bullet")
+                    Spacer()
+                    roundButton(.home, systemImage: "house.fill")
                 }
 
-                VStack(spacing: 10) {
-                    remoteButton(.back, systemImage: "arrow.uturn.backward", title: "Back")
-                    remoteButton(.home, systemImage: "house.fill", title: "Home")
-                    remoteButton(.menu, systemImage: "line.3.horizontal", title: "Menu")
+                directionalPad
+
+                Button {
+                    send(.back)
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.title2.weight(.semibold))
+                        .frame(width: 176, height: 50)
+                        .background(controlBackground, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+
+                HStack {
+                    roundButton(.volumeDown, systemImage: "speaker.minus.fill")
+                    Spacer()
+                    roundButton(.settings, systemImage: "gearshape.fill")
+                    Spacer()
+                    roundButton(.volumeUp, systemImage: "speaker.plus.fill")
                 }
             }
+            .padding(20)
+            .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
             .disabled(status.isSending || deviceOperationInProgress)
 
             Divider()
 
-            HStack(spacing: 12) {
-                remoteButton(.volumeDown, systemImage: "speaker.minus", title: "Volume Down")
-                remoteButton(.volumeUp, systemImage: "speaker.plus", title: "Volume Up")
-                Spacer(minLength: 8)
-                remoteButton(.settings, systemImage: "gearshape", title: "Settings")
-                remoteButton(.power, systemImage: "power", title: "Power")
-            }
-            .disabled(status.isSending || deviceOperationInProgress)
-
             VStack(alignment: .leading, spacing: 8) {
+                Text("Text Input")
+                    .font(.headline)
+
                 HStack(spacing: 8) {
-                    TextField("Text", text: text)
+                    TextField("Type text to send", text: text)
                         .autocorrectionDisabled()
                         .textFieldStyle(.roundedBorder)
                         .disabled(deviceOperationInProgress)
@@ -2086,6 +2154,78 @@ private struct RemoteActionsPanel: View {
         }
     }
 
+    private var directionalPad: some View {
+        GeometryReader { geometry in
+            let size = geometry.size.width
+            ZStack {
+                Circle()
+                    .fill(Color.secondary.opacity(0.10))
+
+                directionButton(.up, systemImage: "chevron.up")
+                    .position(x: size / 2, y: size * 0.18)
+                directionButton(.left, systemImage: "chevron.left")
+                    .position(x: size * 0.18, y: size / 2)
+                directionButton(.right, systemImage: "chevron.right")
+                    .position(x: size * 0.82, y: size / 2)
+                directionButton(.down, systemImage: "chevron.down")
+                    .position(x: size / 2, y: size * 0.82)
+
+                Button {
+                    send(.select)
+                } label: {
+                    Text("OK")
+                        .font(.title2.bold())
+                        .frame(width: 92, height: 92)
+                        .foregroundStyle(Color.white)
+                        .background(Color.accentColor, in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Select")
+            }
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: 320)
+        .frame(maxWidth: .infinity)
+    }
+
+    private var controlBackground: Color {
+        Color.secondary.opacity(0.14)
+    }
+
+    private func directionButton(
+        _ action: ADBTVRemoteAction,
+        systemImage: String
+    ) -> some View {
+        Button {
+            send(action)
+        } label: {
+            Image(systemName: systemImage)
+                .font(.title2.weight(.bold))
+                .frame(width: 64, height: 64)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(action.displayTitle)
+    }
+
+    private func roundButton(
+        _ action: ADBTVRemoteAction,
+        systemImage: String,
+        foregroundStyle: Color = .primary
+    ) -> some View {
+        Button {
+            send(action)
+        } label: {
+            Image(systemName: systemImage)
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(foregroundStyle)
+                .frame(width: 54, height: 54)
+                .background(controlBackground, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(action.displayTitle)
+    }
+
     private var unicodeHelperLabel: some View {
         Label(
             "Chinese and other Unicode text uses the optional TV input helper.",
@@ -2105,22 +2245,6 @@ private struct RemoteActionsPanel: View {
         .disabled(deviceOperationInProgress)
     }
 
-    private func remoteButton(
-        _ action: ADBTVRemoteAction,
-        systemImage: String,
-        title: String? = nil
-    ) -> some View {
-        Button {
-            send(action)
-        } label: {
-            Label(title ?? action.displayTitle, systemImage: systemImage)
-                .labelStyle(.iconOnly)
-                .frame(width: controlSize, height: controlSize)
-        }
-        .buttonStyle(.bordered)
-        .clipShape(Circle())
-        .accessibilityLabel(title ?? action.displayTitle)
-    }
 }
 
 private struct RemoteStatusView: View {
@@ -2174,9 +2298,13 @@ private struct DiagnosticDisclosure: View {
 
     var body: some View {
         DisclosureGroup("Technical Details") {
-            Text(diagnosticDetail.formattedDescription)
-                .font(.footnote.monospaced())
-                .textSelection(.enabled)
+            ScrollView([.horizontal, .vertical]) {
+                Text(diagnosticDetail.formattedDescription)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 220)
         }
     }
 }
