@@ -1,8 +1,5 @@
 import ADBTVApp
 import SwiftUI
-#if DEBUG
-import UIKit
-#endif
 
 @main
 struct ADBTViOSApp: App {
@@ -17,9 +14,7 @@ struct ADBTViOSApp: App {
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--ui-preview") {
             ADBTVPreviewRoot(
-                orientation: ProcessInfo.processInfo.arguments.contains("--ui-landscape")
-                    ? .landscapeLeft
-                    : .portrait
+                isLandscape: ProcessInfo.processInfo.arguments.contains("--ui-landscape")
             )
         } else {
             ADBTVRootView()
@@ -32,23 +27,26 @@ struct ADBTViOSApp: App {
 
 #if DEBUG
 private struct ADBTVPreviewRoot: View {
-    var orientation: UIInterfaceOrientationMask
+    var isLandscape: Bool
 
     var body: some View {
+        GeometryReader { geometry in
+            if isLandscape {
+                rootView
+                    .frame(width: geometry.size.height, height: geometry.size.width)
+                    .rotationEffect(.degrees(90))
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+            } else {
+                rootView
+            }
+        }
+    }
+
+    private var rootView: some View {
         ADBTVRootView(
             model: .preview,
             automaticallyStartsDiscovery: false
         )
-        .task {
-            guard let windowScene = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .first else {
-                return
-            }
-            try? await windowScene.requestGeometryUpdate(
-                .iOS(interfaceOrientations: orientation)
-            )
-        }
     }
 }
 #endif
