@@ -1,3 +1,4 @@
+import ADBClientCore
 import Foundation
 import XCTest
 
@@ -64,6 +65,7 @@ final class ADBTVAppMetadataTests: XCTestCase {
         )
         let helperData = try Data(contentsOf: helperURL)
         XCTAssertEqual(Array(helperData.prefix(4)), [0x50, 0x4b, 0x03, 0x04])
+        XCTAssertNoThrow(try ADBAPKValidator().validate(contents: Array(helperData)))
 
         let project = try String(
             contentsOf: packageRoot.appendingPathComponent("ADBTV.xcodeproj/project.pbxproj"),
