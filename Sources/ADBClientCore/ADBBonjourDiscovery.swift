@@ -164,11 +164,13 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
 
     private let queue: DispatchQueue
     private var browsers: [NWBrowser]
+    private var startedBrowserIndices: Set<Int>
     private var snapshot: ADBBonjourDiscoverySnapshot
 
     public init(queue: DispatchQueue = DispatchQueue(label: "ADBBonjourServiceBrowser")) {
         self.queue = queue
         self.browsers = []
+        self.startedBrowserIndices = []
         self.snapshot = ADBBonjourDiscoverySnapshot(services: [])
     }
 
@@ -177,7 +179,7 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
     }
 
     public func start(
-        serviceKinds: [ADBWirelessDebuggingServiceKind] = ADBWirelessDebuggingServiceKind.allCases,
+        serviceKinds: [ADBWirelessDebuggingServiceKind] = [.connect, .pairing],
         updateHandler: @escaping UpdateHandler,
         stateHandler: @escaping StateHandler = { _ in },
         failureHandler: @escaping FailureHandler
@@ -185,7 +187,7 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
         cancel()
 
         let parameters = NWParameters.tcp
-        browsers = serviceKinds.map { serviceKind in
+        browsers = serviceKinds.enumerated().map { index, serviceKind in
             let descriptor = NWBrowser.Descriptor.bonjour(
                 type: serviceKind.bonjourType,
                 domain: Self.browseDomain
@@ -198,7 +200,7 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
                     updateHandler: updateHandler
                 )
             }
-            browser.stateUpdateHandler = { state in
+            browser.stateUpdateHandler = { [weak self] state in
                 switch state {
                 case .failed(let failure):
                     Task { @MainActor in
@@ -211,6 +213,7 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
                         ))
                     }
                 case .ready:
+                    self?.startBrowserIfNeeded(at: index + 1)
                     Task { @MainActor in
                         stateHandler(.ready)
                     }
@@ -218,9 +221,9 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
                     break
                 }
             }
-            browser.start(queue: queue)
             return browser
         }
+        startBrowserIfNeeded(at: 0)
     }
 
     public func cancel() {
@@ -228,7 +231,16 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
             browser.cancel()
         }
         browsers = []
+        startedBrowserIndices = []
         snapshot = ADBBonjourDiscoverySnapshot(services: [])
+    }
+
+    private func startBrowserIfNeeded(at index: Int) {
+        guard browsers.indices.contains(index), startedBrowserIndices.insert(index).inserted else {
+            return
+        }
+        // Serialize startup so iOS resolves one local-network authorization request at a time.
+        browsers[index].start(queue: queue)
     }
 
     private func record(
