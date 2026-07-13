@@ -2,6 +2,8 @@
 
 Use this checklist for every candidate build. Automated loopback tests cover protocol framing, mutual TLS, encrypted shell streams, and encrypted APK installation, but they do not replace an iPhone and Android TV test.
 
+The default unsigned IPA is intended for self-signing and uses manual host and port entry. Automatic Bonjour discovery and QR pairing are applicable only when the build is signed with Apple's approved Multicast Networking entitlement and a matching provisioning profile. Mark those entitlement-only checks as not applicable for self-signed candidates.
+
 ## Test Record
 
 - Commit:
@@ -27,15 +29,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Pairing Code
 
-- [ ] Launch a fresh app session and confirm discovery starts without tapping **Discover Devices**.
-- [ ] On a fresh install, leave the Local Network prompt unanswered for at least five seconds, confirm discovery remains in a waiting/retrying state rather than terminal failure, then allow access and confirm discovery proceeds without tapping retry.
-- [ ] Stop discovery manually and confirm it stays stopped until **Discover Devices** is tapped.
-- [ ] While discovery is browsing, background and reopen ADB TV; confirm discovery resumes and services return.
-- [ ] Stop discovery manually, background and reopen ADB TV; confirm discovery remains stopped.
-- [ ] Discover an active `_adb-tls-pairing._tcp` service automatically.
-- [ ] Pair using the six-digit code shown by Android Wireless Debugging.
-- [ ] Match the paired device to its `_adb-tls-connect._tcp` service automatically.
-- [ ] Suppress or isolate the connect advertisement after pairing and confirm the wait ends with a pairing-succeeded discovery timeout.
+- [ ] In a self-signed build, confirm automatic discovery reports its signing-capability limitation without retrying or opening Settings.
+- [ ] Open **Add Device**, choose **Pair with Code**, and pair using the TV's host, pairing port, six-digit code, and connection port.
 - [ ] Confirm **Verifying the TV connection** appears before the paired device is saved.
 - [ ] Confirm verification reads the real TV model and saves the Managed Device once without creating a duplicate entry.
 - [ ] Make the connection endpoint unreachable after pairing and confirm verification fails with technical detail without saving the device.
@@ -43,7 +38,16 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Enter an incorrect or expired code and confirm a clear User Error plus technical detail.
 - [ ] Pair using manual host, pairing port, and connection port fallback.
 
-## QR Pairing
+### Entitlement-Enabled Discovery
+
+- [ ] Launch a fresh app session and confirm discovery starts without tapping **Discover Devices**.
+- [ ] On a fresh install, leave the Local Network prompt unanswered, then allow access and confirm discovery proceeds without tapping retry.
+- [ ] Stop discovery manually and confirm it stays stopped until **Discover Devices** is tapped.
+- [ ] While discovery is browsing, background and reopen ADB TV; confirm discovery resumes and services return.
+- [ ] Discover active `_adb-tls-pairing._tcp` and `_adb-tls-connect._tcp` services automatically.
+- [ ] Suppress the connect advertisement after pairing and confirm the wait ends with a pairing-succeeded discovery timeout.
+
+## QR Pairing (Entitlement-Enabled Builds Only)
 
 - [ ] Scan a valid QR code while its pairing advertisement is unavailable and confirm the pairing-service wait times out.
 - [ ] Scan a valid Android Wireless Debugging QR code in portrait orientation.
@@ -60,8 +64,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] If a Device Library warning appears, confirm valid entries remain visible and the copyable Technical Details report recovered and rejected record counts.
 - [ ] Install a build signed by the same team and bundle identifier on a second iOS device using the same Apple Account and confirm the synchronized identity reconnects without pairing again.
 - [ ] If cross-device reconnect does not work, record iCloud Keychain state, signing team, bundle identifier, elapsed sync time, and Diagnostic Detail.
-- [ ] Restart Wireless Debugging so its port changes, then reconnect through the saved Bonjour service.
-- [ ] Restart the Android TV and reconnect after discovery returns.
+- [ ] For an entitlement-enabled build, restart Wireless Debugging so its port changes, then reconnect through the saved Bonjour service.
+- [ ] For an entitlement-enabled build, restart the Android TV and reconnect after discovery returns.
 - [ ] Add at least two Managed Devices and switch between them without mixing endpoints.
 - [ ] Start a long APK download or install on the first device and confirm device selection, deletion, pairing, and remote controls stay unavailable until it completes or is cancelled.
 - [ ] While that operation is active, attempt to select or remove its target and confirm progress remains attached to the original device; after completion or cancellation, confirm switching works normally.
@@ -109,8 +113,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Permission And Network Failures
 
-- [ ] Deny local-network permission and confirm discovery failure is actionable.
-- [ ] Confirm `PolicyDenied` opens iOS Settings, while `NoAuth` explains the signing-capability limitation and directs the user to **Add Manually**.
+- [ ] In a self-signed build, confirm `NoAuth` explains the signing-capability limitation and directs the user to **Add Manually**.
+- [ ] In an entitlement-enabled build, deny Local Network access and confirm `PolicyDenied` opens iOS Settings.
 - [ ] Add a valid endpoint manually while discovery is unavailable.
 - [ ] Add an unreachable endpoint manually and confirm **Connect & Save** returns a timeout with `timedOperation` and `timeoutSeconds` details.
 - [ ] Test devices on an isolated guest network or VLAN and confirm timeout detail identifies the endpoint.
@@ -119,6 +123,6 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Release Decision
 
 - [ ] All required checks pass on at least one physical iPhone and one Android TV device.
-- [ ] Pairing, discovery, and reconnect pass on a second Android TV version or device.
+- [ ] Manual pairing and reconnect pass on a second Android TV version or device; automatic discovery is required only for an entitlement-enabled release.
 - [ ] GitHub Actions SwiftPM tests, simulator build, and unsigned IPA packaging are green for the tested commit.
 - [ ] Every failure found above is fixed, documented as a known limitation, or explicitly accepted before the draft PR is marked ready.
