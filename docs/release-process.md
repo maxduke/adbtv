@@ -17,9 +17,13 @@ Before tagging a release:
 From an up-to-date `main` checkout, create and push an annotated semantic-version tag whose value matches `MARKETING_VERSION`:
 
 ```sh
-git tag -a v0.1.0 -m "ADB TV 0.1.0"
-git push origin v0.1.0
+VERSION=0.1.1
+git tag -a "v$VERSION" -m "ADB TV $VERSION"
+git push origin "v$VERSION"
 ```
+
+Treat a pushed release tag as immutable. If a candidate is superseded, increment the
+version and create a new tag instead of moving or replacing the existing tag.
 
 The **iOS Draft Release** workflow:
 
