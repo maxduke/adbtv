@@ -88,7 +88,13 @@ final class ADBTVRemoteControlTests: XCTestCase {
         XCTAssertTrue(command.contains(ADBTVUnicodeInputHelper.commitTextAction))
         XCTAssertTrue(command.contains("5L2g5aW9IEFuZHJvaWQgVFY="))
         XCTAssertTrue(command.contains("settings get secure default_input_method"))
+        XCTAssertTrue(command.contains("trap 'restore_previous_ime >/dev/null 2>&1' EXIT"))
+        XCTAssertTrue(command.contains("trap 'exit 26' HUP INT TERM"))
+        XCTAssertTrue(command.contains("while [ \"$attempt\" -lt 8 ]"))
+        XCTAssertTrue(command.contains("sleep 0.25"))
+        XCTAssertTrue(command.contains("--include-stopped-packages --receiver-foreground"))
         XCTAssertTrue(command.contains("ime set \"$previous_ime\""))
+        XCTAssertTrue(command.contains("trap - EXIT HUP INT TERM"))
         XCTAssertFalse(command.contains("input text"))
     }
 

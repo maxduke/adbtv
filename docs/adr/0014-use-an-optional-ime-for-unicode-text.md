@@ -10,7 +10,7 @@ Keep Android's checked `input text` command for ASCII. Route non-ASCII text thro
 
 Build the helper from reviewed Java source with the official Android Gradle plugin and bundle the resulting APK in the iOS app. The helper has no network permission, launcher, persistent data, or third-party runtime library. Its explicit text receiver requires `android.permission.DUMP`, limiting calls to privileged system or ADB shell processes.
 
-The iOS app offers an explicit helper installation command. For each Unicode send, it records the current input method, temporarily enables and selects ADB TV Input, commits a base64-encoded UTF-8 payload to the focused input connection, and restores the previous input method. Every step remains covered by checked shell exit status and technical diagnostics.
+The iOS app offers an explicit helper installation command. For each Unicode send, it records the current input method, temporarily enables and selects ADB TV Input, and makes bounded commit attempts while the TV binds the new input method. It restores the previous input method explicitly after the attempt and through an exit/signal trap if the shell is interrupted. Every step remains covered by checked shell exit status and technical diagnostics.
 
 ## Consequences
 

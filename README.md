@@ -62,7 +62,7 @@ Implemented so far:
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - end-to-end loopback coverage for secure reconnect, an encrypted ADB shell command, and encrypted APK installation;
 - remote text input, menu, volume, and power controls in addition to D-pad navigation;
-- optional repository-owned Android IME installation and UTF-8 text commit for Chinese and other Unicode input;
+- optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - unsigned IPA packaging in GitHub Actions;
 - repository-owned app icon and accent-color assets with packaged-product validation;

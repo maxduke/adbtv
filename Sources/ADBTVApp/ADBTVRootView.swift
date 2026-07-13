@@ -1319,7 +1319,10 @@ public struct ADBTVRootView: View {
             if (21 ... 22).contains(exitCode) {
                 return "Install the Unicode Input Helper, then try sending the text again."
             }
-            if (23 ... 25).contains(exitCode) {
+            if exitCode == 24 {
+                return "Could not restore the previous TV keyboard. Select it in the TV settings."
+            }
+            if exitCode == 23 || exitCode == 25 {
                 return "Focus a text field on the TV, then try sending the Unicode text again."
             }
         }
