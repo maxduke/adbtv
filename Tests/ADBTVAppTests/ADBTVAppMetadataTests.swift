@@ -1,6 +1,7 @@
 import ADBClientCore
 import Foundation
 import XCTest
+@testable import ADBTVApp
 
 final class ADBTVAppMetadataTests: XCTestCase {
     func testInfoPlistDeclaresRequiredNetworkAndCameraConfiguration() throws {
