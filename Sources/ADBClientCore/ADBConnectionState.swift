@@ -1,6 +1,6 @@
 public struct ADBConnectionState: Sendable {
     public static let defaultProtocolVersion: UInt32 = 0x0100_0000
-    public static let defaultMaxData: UInt32 = 4096
+    public static let defaultMaxData: UInt32 = 1024 * 1024
     public static let secureTLSVersion: UInt32 = 1
 
     public private(set) var phase: ADBConnectionPhase

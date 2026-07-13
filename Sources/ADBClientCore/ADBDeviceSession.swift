@@ -64,20 +64,20 @@ public struct ADBDeviceSession: Sendable {
         var responseDecoder = ADBSyncResponseDecoder()
         var bufferedResponse: ADBSyncResponse?
 
-        for (frame, event) in zip(encoding.frames, encoding.events) {
-            for chunk in try frame.encoded().chunks(maxByteCount: maxPayloadByteCount) {
-                _ = try await transportSession.writeStream(localID: localID, payload: chunk)
-                let outputs = try await waitForStreamWritable(localID: localID)
-                for output in outputs where bufferedResponse == nil {
-                    bufferedResponse = try syncResponse(
-                        in: output,
-                        localID: localID,
-                        decoder: &responseDecoder
-                    )
-                }
+        for batch in try encoding.writeBatches(maxByteCount: maxPayloadByteCount) {
+            _ = try await transportSession.writeStream(localID: localID, payload: batch.payload)
+            let outputs = try await waitForStreamWritable(localID: localID)
+            for output in outputs where bufferedResponse == nil {
+                bufferedResponse = try syncResponse(
+                    in: output,
+                    localID: localID,
+                    decoder: &responseDecoder
+                )
             }
-            events.append(event)
-            await eventHandler(event)
+            for event in batch.completedEvents {
+                events.append(event)
+                await eventHandler(event)
+            }
         }
 
         let response: ADBSyncResponse
@@ -90,7 +90,7 @@ public struct ADBDeviceSession: Sendable {
         events.append(responseEvent)
         await eventHandler(responseEvent)
 
-        try await finishSyncStream(localID: localID)
+        try await finishSyncStreamIfOpen(localID: localID)
         return events
     }
 
@@ -173,9 +173,24 @@ public struct ADBDeviceSession: Sendable {
         }
     }
 
-    private mutating func finishSyncStream(localID: UInt32) async throws {
+    private mutating func finishSyncStreamIfOpen(localID: UInt32) async throws {
+        guard transportSession.driver.client.connection.stream(localID: localID) != nil else {
+            return
+        }
+
         _ = try await transportSession.writeStream(localID: localID, payload: try ADBSyncFrame.quit().encoded())
-        _ = try await waitForStreamWritable(localID: localID)
+        do {
+            _ = try await waitForStreamWritable(localID: localID)
+        } catch let error as ADBDeviceSessionError {
+            guard case .streamClosedBeforeWritable = error else {
+                throw error
+            }
+            return
+        }
+
+        guard transportSession.driver.client.connection.stream(localID: localID) != nil else {
+            return
+        }
         _ = try await transportSession.closeStream(localID: localID)
     }
 
@@ -192,6 +207,57 @@ public struct ADBDeviceSession: Sendable {
         }
 
         return nil
+    }
+}
+
+private struct ADBSyncWriteBatch: Sendable {
+    var payload: [UInt8]
+    var completedEvents: [ADBSyncPushEvent]
+}
+
+private extension ADBSyncPushEncoding {
+    func writeBatches(maxByteCount: Int) throws -> [ADBSyncWriteBatch] {
+        guard maxByteCount > 0 else {
+            return []
+        }
+
+        var batches: [ADBSyncWriteBatch] = []
+        var payload: [UInt8] = []
+        var completedEvents: [ADBSyncPushEvent] = []
+
+        for (frame, event) in zip(frames, events) {
+            let encodedFrame = try frame.encoded()
+            var offset = 0
+
+            while offset < encodedFrame.count {
+                let availableByteCount = maxByteCount - payload.count
+                let copiedByteCount = min(availableByteCount, encodedFrame.count - offset)
+                payload.append(contentsOf: encodedFrame[offset ..< offset + copiedByteCount])
+                offset += copiedByteCount
+
+                if offset == encodedFrame.count {
+                    completedEvents.append(event)
+                }
+
+                if payload.count == maxByteCount {
+                    batches.append(ADBSyncWriteBatch(
+                        payload: payload,
+                        completedEvents: completedEvents
+                    ))
+                    payload = []
+                    completedEvents = []
+                }
+            }
+        }
+
+        if !payload.isEmpty {
+            batches.append(ADBSyncWriteBatch(
+                payload: payload,
+                completedEvents: completedEvents
+            ))
+        }
+
+        return batches
     }
 }
 

@@ -226,6 +226,33 @@ final class ADBAPKInstallerTests: XCTestCase {
         }
     }
 
+    func testTransferCommandFailureRunsCleanupExactlyOnce() async throws {
+        let contents = makeTestAPK()
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "app.apk",
+            byteCount: Int64(contents.count)
+        )
+        let cleanupCommand = try plan.cleanupShellInvocation().shellCommand.rawValue
+        var session = RecordingAPKInstallSession(pushError: .pushFailed)
+
+        do {
+            _ = try await ADBAPKInstaller().install(contents: contents, plan: plan, using: &session)
+            XCTFail("Expected transfer command failure to throw.")
+        } catch let error as ADBAPKInstallExecutionError {
+            guard case let .transferCommandFailed(events, underlyingError, cleanupError) = error else {
+                return XCTFail("Expected transferCommandFailed, got \(error).")
+            }
+            XCTAssertEqual(Array(events.suffix(2)), [
+                .phaseStarted(.cleanup),
+                .phaseFinished(.cleanup)
+            ])
+            XCTAssertTrue(underlyingError.contains("pushFailed"))
+            XCTAssertNil(cleanupError)
+        }
+
+        XCTAssertEqual(session.commands.filter { $0 == cleanupCommand }.count, 1)
+    }
+
     func testInstallRejectsPackageByteCountMismatchBeforeCommands() async throws {
         let plan = try ADBAPKInstallPlan.singleAPK(fileName: "app.apk", byteCount: 4)
         var session = RecordingAPKInstallSession()
@@ -264,16 +291,19 @@ final class ADBAPKInstallerTests: XCTestCase {
 private struct RecordingAPKInstallSession: ADBAPKInstallRunningSession {
     var shellOutputs: [String: ADBShellOutput]
     var pushedEvents: [ADBSyncPushEvent]
+    var pushError: RecordingAPKInstallSessionError?
     private(set) var commands: [String]
     private(set) var pushedContents: [[UInt8]]
     private(set) var pushedPlans: [ADBSyncPushPlan]
 
     init(
         shellOutputs: [String: ADBShellOutput] = [:],
-        pushedEvents: [ADBSyncPushEvent] = []
+        pushedEvents: [ADBSyncPushEvent] = [],
+        pushError: RecordingAPKInstallSessionError? = nil
     ) {
         self.shellOutputs = shellOutputs
         self.pushedEvents = pushedEvents
+        self.pushError = pushError
         self.commands = []
         self.pushedContents = []
         self.pushedPlans = []
@@ -297,11 +327,18 @@ private struct RecordingAPKInstallSession: ADBAPKInstallRunningSession {
     ) async throws -> [ADBSyncPushEvent] {
         pushedContents.append(contents)
         pushedPlans.append(plan)
+        if let pushError {
+            throw pushError
+        }
         for event in pushedEvents {
             await eventHandler(event)
         }
         return pushedEvents
     }
+}
+
+private enum RecordingAPKInstallSessionError: Error {
+    case pushFailed
 }
 
 private func checkedShellOutput(

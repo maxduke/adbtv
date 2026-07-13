@@ -20,7 +20,7 @@ final class ADBAPKInstallPlanTests: XCTestCase {
         ])
         XCTAssertEqual(
             try plan.prepareRemoteDirectoryShellCommand().rawValue,
-            "mkdir -p '/data/local/tmp/adbtv'"
+            "mkdir -p '/data/local/tmp/adbtv' && rm -f '/data/local/tmp/adbtv/Example_App.apk'"
         )
         XCTAssertEqual(
             try plan.installShellCommand().rawValue,

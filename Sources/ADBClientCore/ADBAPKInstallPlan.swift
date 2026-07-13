@@ -31,7 +31,9 @@ public struct ADBAPKInstallPlan: Equatable, Sendable {
     }
 
     public func prepareRemoteDirectoryShellCommand() throws -> ADBShellCommand {
-        try ADBShellCommand("mkdir -p \(remoteAPKPath.parentDirectory.shellEscaped)")
+        try ADBShellCommand(
+            "mkdir -p \(remoteAPKPath.parentDirectory.shellEscaped) && rm -f \(remoteAPKPath.shellEscaped)"
+        )
     }
 
     public func prepareRemoteDirectoryShellInvocation() throws -> ADBCheckedShellInvocation {

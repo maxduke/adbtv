@@ -133,9 +133,7 @@ final class ADBDeviceSessionTests: XCTestCase {
         let encoding = try plan.encode(contents: contents)
         let syncBytes = try encoding.encodedBytes()
         let maxData: UInt32 = 12
-        let syncWriteChunkCount = try encoding.frames.reduce(into: 0) { count, frame in
-            count += try frame.encoded().chunks(maxByteCount: Int(maxData)).count
-        }
+        let syncWriteChunkCount = syncBytes.chunks(maxByteCount: Int(maxData)).count
         let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
             writeChunkCount: syncWriteChunkCount,
             responsePayload: ADBSyncFrame(id: .okay, value: 0).encoded(),
@@ -185,9 +183,8 @@ final class ADBDeviceSessionTests: XCTestCase {
         let encoding = try plan.encode(contents: [])
         let maxData: UInt32 = 16
         let failMessage = Array("permission denied".utf8)
-        let syncWriteChunkCount = try encoding.frames.reduce(into: 0) { count, frame in
-            count += try frame.encoded().chunks(maxByteCount: Int(maxData)).count
-        }
+        let syncWriteChunkCount = try encoding.encodedBytes()
+            .chunks(maxByteCount: Int(maxData)).count
         let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
             writeChunkCount: syncWriteChunkCount,
             responsePayload: ADBSyncFrame(id: .fail, value: UInt32(failMessage.count), payload: failMessage).encoded()
@@ -200,6 +197,62 @@ final class ADBDeviceSessionTests: XCTestCase {
         let events = try await session.pushFile(contents: [], plan: plan)
 
         XCTAssertEqual(events.last, .failed(message: "permission denied"))
+    }
+
+    func testPushFileAcceptsRemoteCloseAfterSuccessfulSyncResponse() async throws {
+        let remotePath = try ADBRemotePath("/data/local/tmp/adbtv/app.apk")
+        let contents: [UInt8] = [1, 2, 3]
+        let plan = try ADBSyncPushPlan(remotePath: remotePath, totalByteCount: contents.count)
+        let syncWriteChunkCount = try plan.encode(contents: contents).encodedBytes()
+            .chunks(maxByteCount: 1024).count
+        let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
+            writeChunkCount: syncWriteChunkCount,
+            responsePayload: ADBSyncFrame(id: .okay, value: 0).encoded(),
+            coalesceResponseWithFinalWriteAcknowledgement: true,
+            closeAfterResponse: true
+        ))
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: 1024))),
+            transport: transport
+        )
+
+        let events = try await session.pushFile(contents: contents, plan: plan)
+        let sentChunks = await transport.sentChunks()
+        let sentPackets = try sentChunks.map { try $0.decodedPacket() }
+        let quitPayload = try ADBSyncFrame.quit().encoded()
+
+        XCTAssertEqual(events.last, .completed)
+        XCTAssertEqual(sentPackets.filter { $0.command == .write }.count, syncWriteChunkCount)
+        XCTAssertFalse(sentPackets.contains { packet in
+            packet.command == .write && packet.payload == quitPayload
+        })
+    }
+
+    func testPushFilePacksSyncFramesUpToPeerMaxData() async throws {
+        let remotePath = try ADBRemotePath("/data/local/tmp/adbtv/app.apk")
+        let contents = Array(repeating: UInt8(7), count: 128 * 1024)
+        let plan = try ADBSyncPushPlan(remotePath: remotePath, totalByteCount: contents.count)
+        let encoding = try plan.encode(contents: contents)
+        let syncBytes = try encoding.encodedBytes()
+        let maxData: UInt32 = 1024 * 1024
+        let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
+            writeChunkCount: 1,
+            responsePayload: ADBSyncFrame(id: .okay, value: 0).encoded(),
+            coalesceResponseWithFinalWriteAcknowledgement: true
+        ))
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: maxData))),
+            transport: transport
+        )
+
+        _ = try await session.pushFile(contents: contents, plan: plan)
+        let sentChunks = await transport.sentChunks()
+        let sentPackets = try sentChunks.map { try $0.decodedPacket() }
+        let writePackets = sentPackets.filter { $0.command == .write }
+
+        XCTAssertEqual(writePackets.count, 2, "Expected one packed transfer write plus QUIT.")
+        XCTAssertEqual(writePackets[0].payload, syncBytes)
+        XCTAssertEqual(writePackets[1].payload, try ADBSyncFrame.quit().encoded())
     }
 
     func testTransportSessionOutputExtractsConnectedDeviceAndFinishedShellOutput() throws {
@@ -243,7 +296,8 @@ final class ADBDeviceSessionTests: XCTestCase {
     private func syncPushInboundChunks(
         writeChunkCount: Int,
         responsePayload: [UInt8],
-        coalesceResponseWithFinalWriteAcknowledgement: Bool = false
+        coalesceResponseWithFinalWriteAcknowledgement: Bool = false,
+        closeAfterResponse: Bool = false
     ) throws -> [[UInt8]] {
         var chunks = [
             try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
@@ -257,6 +311,13 @@ final class ADBDeviceSessionTests: XCTestCase {
                     arg1: 1,
                     payload: responsePayload
                 ).encoded())
+                if closeAfterResponse {
+                    acknowledgement.append(contentsOf: try ADBPacket(
+                        command: .close,
+                        arg0: 42,
+                        arg1: 1
+                    ).encoded())
+                }
             }
             chunks.append(acknowledgement)
         }
@@ -265,9 +326,11 @@ final class ADBDeviceSessionTests: XCTestCase {
                 try ADBPacket(command: .write, arg0: 42, arg1: 1, payload: responsePayload).encoded()
             )
         }
-        chunks.append(
-            try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
-        )
+        if !closeAfterResponse {
+            chunks.append(
+                try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded()
+            )
+        }
         return chunks
     }
 }
