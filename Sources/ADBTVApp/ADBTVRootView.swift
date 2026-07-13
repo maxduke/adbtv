@@ -86,7 +86,8 @@ public struct ADBTVRootView: View {
                     DiscoveryContent(
                         status: model.discoveryStatus,
                         services: model.discoveredServices,
-                        canPair: model.activeDeviceOperation == nil,
+                        canPair: model.activeDeviceOperation == nil
+                            && !deviceConnectionState.isConnecting,
                         toggleDiscovery: toggleDiscovery,
                         pairService: prepareDiscoveredPairing
                     )
@@ -119,7 +120,10 @@ public struct ADBTVRootView: View {
                     } label: {
                         Label("Add Device", systemImage: "plus")
                     }
-                    .disabled(model.activeDeviceOperation != nil)
+                    .disabled(
+                        model.activeDeviceOperation != nil
+                            || deviceConnectionState.isConnecting
+                    )
                 }
             }
         } detail: {
