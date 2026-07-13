@@ -2084,7 +2084,7 @@ private struct RemoteActionsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            VStack(spacing: 20) {
+            VStack(spacing: 16) {
                 HStack {
                     roundButton(.power, systemImage: "power", foregroundStyle: .red)
                     Spacer()
@@ -2100,7 +2100,7 @@ private struct RemoteActionsPanel: View {
                 } label: {
                     Image(systemName: "arrow.uturn.backward")
                         .font(.title2.weight(.semibold))
-                        .frame(width: 176, height: 50)
+                        .frame(width: 152, height: 44)
                         .background(controlBackground, in: Capsule())
                 }
                 .buttonStyle(.plain)
@@ -2114,7 +2114,7 @@ private struct RemoteActionsPanel: View {
                     roundButton(.volumeUp, systemImage: "speaker.plus.fill")
                 }
             }
-            .padding(20)
+            .padding(16)
             .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
             .disabled(status.isSending || deviceOperationInProgress)
 
@@ -2190,8 +2190,8 @@ private struct RemoteActionsPanel: View {
                     send(.select)
                 } label: {
                     Text("OK")
-                        .font(.title2.bold())
-                        .frame(width: 92, height: 92)
+                        .font(.title3.bold())
+                        .frame(width: 76, height: 76)
                         .background(Color.accentColor, in: Circle())
                 }
                 .buttonStyle(.plain)
@@ -2200,7 +2200,7 @@ private struct RemoteActionsPanel: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .frame(maxWidth: 320)
+        .frame(maxWidth: 248)
         .frame(maxWidth: .infinity)
     }
 
@@ -2274,7 +2274,7 @@ private struct RemoteActionsPanel: View {
         } label: {
             Image(systemName: systemImage)
                 .font(.title2.weight(.bold))
-                .frame(width: 64, height: 64)
+                .frame(width: 52, height: 52)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -2292,7 +2292,7 @@ private struct RemoteActionsPanel: View {
             Image(systemName: systemImage)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(foregroundStyle)
-                .frame(width: 54, height: 54)
+                .frame(width: 50, height: 50)
                 .background(controlBackground, in: Circle())
         }
         .buttonStyle(.plain)
