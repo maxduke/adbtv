@@ -24,9 +24,7 @@ public struct ADBTVRootView: View {
     @State private var pairingTask: Task<Void, Never>?
     @State private var deviceConnectionTask: Task<Void, Never>?
     @State private var deviceConnectionState = ADBTVSavedDeviceConnectionState.idle
-    @State private var discoveryAuthorizationRetryTask: Task<Void, Never>?
     @State private var automaticDiscoveryPolicy = ADBTVAutomaticDiscoveryPolicy()
-    @State private var discoveryAuthorizationRetryPolicy = ADBTVBonjourAuthorizationRetryPolicy()
 #if os(iOS) && canImport(AVFoundation)
     @State private var isQRCodeScannerPresented = false
     @State private var qrScannerError: DiagnosticDetail?
@@ -287,7 +285,6 @@ public struct ADBTVRootView: View {
             installTask?.cancel()
             remoteTask?.cancel()
             deviceConnectionTask?.cancel()
-            discoveryAuthorizationRetryTask?.cancel()
             model.cancelActiveDeviceOperation()
             cancelPairing()
             stopDiscovery()
@@ -467,12 +464,7 @@ public struct ADBTVRootView: View {
         }
     }
 
-    private func startDiscovery(resetAuthorizationRetries: Bool = true) {
-        if resetAuthorizationRetries {
-            discoveryAuthorizationRetryPolicy.reset()
-        }
-        discoveryAuthorizationRetryTask?.cancel()
-        discoveryAuthorizationRetryTask = nil
+    private func startDiscovery() {
         model.startDiscovery()
 #if canImport(Network)
         let browser = ADBBonjourServiceBrowser()
@@ -496,7 +488,6 @@ public struct ADBTVRootView: View {
             switch state {
             case .ready:
                 automaticDiscoveryPolicy.recordDiscoveryReady()
-                discoveryAuthorizationRetryPolicy.reset()
                 model.markDiscoveryReady()
             case .waitingForAuthorization(let failure):
                 model.waitForLocalNetworkAuthorization(
@@ -513,35 +504,14 @@ public struct ADBTVRootView: View {
             }
             browser.cancel()
             discoveryBrowser = nil
-            if failure.reason == .noAuthorization {
-                automaticDiscoveryPolicy.recordAuthorizationFailure()
-                if let delay = discoveryAuthorizationRetryPolicy.nextDelayInSeconds() {
-                    model.waitForLocalNetworkAuthorization(
-                        userMessage: Self.discoveryWaitingUserMessage(for: failure),
-                        diagnosticDetail: DiagnosticDetail(
-                            summary: failure.diagnosticDescription,
-                            context: Self.discoveryDiagnosticContext(
-                                for: failure,
-                                authorizationRetryAttempt: discoveryAuthorizationRetryPolicy.attempt
-                            )
-                        )
-                    )
-                    scheduleAuthorizationDiscoveryRetry(after: delay)
-                    return
-                }
-            } else if failure.reason == .localNetworkDenied {
+            if failure.reason == .localNetworkDenied {
                 automaticDiscoveryPolicy.recordAuthorizationFailure()
             }
             model.failDiscovery(
                 userMessage: Self.discoveryUserMessage(for: failure),
                 diagnosticDetail: DiagnosticDetail(
                     summary: failure.diagnosticDescription,
-                    context: Self.discoveryDiagnosticContext(
-                        for: failure,
-                        authorizationRetryAttempt: failure.reason == .noAuthorization
-                            ? discoveryAuthorizationRetryPolicy.attempt
-                            : nil
-                    )
+                    context: Self.discoveryDiagnosticContext(for: failure)
                 )
             )
         })
@@ -556,28 +526,11 @@ public struct ADBTVRootView: View {
 #endif
     }
 
-    private func scheduleAuthorizationDiscoveryRetry(after delayInSeconds: Int) {
-        discoveryAuthorizationRetryTask?.cancel()
-        discoveryAuthorizationRetryTask = Task {
-            do {
-                try await Task.sleep(for: .seconds(delayInSeconds))
-            } catch {
-                return
-            }
-            guard scenePhase == .active,
-                  model.discoveryStatus.isBrowsing else {
-                return
-            }
-            discoveryAuthorizationRetryTask = nil
-            startDiscovery(resetAuthorizationRetries: false)
-        }
-    }
-
 #if canImport(Network)
     private static func discoveryUserMessage(for failure: ADBBonjourDiscoveryFailure) -> String {
         switch failure.reason {
-        case .noAuthorization:
-            return "Bonjour discovery is not authorized. Check Local Network access in Settings, then retry."
+        case .bonjourCapabilityDenied:
+            return "Automatic discovery is unavailable in this signed build. Add the TV manually."
         case .localNetworkDenied:
             return "Local Network access is off. Enable it in Settings to discover Android TV devices."
         case .other:
@@ -589,8 +542,8 @@ public struct ADBTVRootView: View {
         for failure: ADBBonjourDiscoveryFailure
     ) -> String {
         switch failure.reason {
-        case .noAuthorization:
-            return "Waiting for Local Network access. Allow it in the iOS prompt to discover TVs."
+        case .bonjourCapabilityDenied:
+            return "Automatic discovery requires an Apple-approved Multicast Networking entitlement."
         case .localNetworkDenied:
             return "Local Network access is off. Enable it in Settings to discover Android TV devices."
         case .other:
@@ -599,8 +552,7 @@ public struct ADBTVRootView: View {
     }
 
     private static func discoveryDiagnosticContext(
-        for failure: ADBBonjourDiscoveryFailure,
-        authorizationRetryAttempt: Int? = nil
+        for failure: ADBBonjourDiscoveryFailure
     ) -> [String: String] {
         var context = [
             "operation": "bonjourDiscovery",
@@ -609,9 +561,6 @@ public struct ADBTVRootView: View {
         ]
         if let bundleIdentifier = Bundle.main.bundleIdentifier {
             context["bundleIdentifier"] = bundleIdentifier
-        }
-        if let authorizationRetryAttempt {
-            context["authorizationRetryAttempt"] = String(authorizationRetryAttempt)
         }
 #if os(iOS)
         let declaredServices = Bundle.main.object(forInfoDictionaryKey: "NSBonjourServices") as? [String]
@@ -665,8 +614,6 @@ public struct ADBTVRootView: View {
 #endif
 
     private func stopDiscovery() {
-        discoveryAuthorizationRetryTask?.cancel()
-        discoveryAuthorizationRetryTask = nil
 #if canImport(Network)
         discoveryBrowser?.cancel()
         discoveryBrowser = nil
@@ -1915,8 +1862,7 @@ private struct DiscoveryStatusView: View {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
 #if os(iOS)
-                if diagnosticDetail.context["reason"] == ADBBonjourDiscoveryFailure.Reason.noAuthorization.rawValue
-                    || diagnosticDetail.context["reason"] == ADBBonjourDiscoveryFailure.Reason.localNetworkDenied.rawValue {
+                if diagnosticDetail.context["reason"] == ADBBonjourDiscoveryFailure.Reason.localNetworkDenied.rawValue {
                     settingsButton
                 }
 #endif

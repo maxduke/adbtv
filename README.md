@@ -50,7 +50,7 @@ Implemented so far:
 - user-facing operation status plus technical diagnostic details;
 - bounded connection, pairing, remote-action, and APK-install operations with timeout diagnostics;
 - bounded QR pairing and post-pairing discovery so missing Bonjour advertisements cannot leave the pairing sheet stuck;
-- automatic, manually restartable Bonjour discovery with a bounded authorization backoff window for the first iOS Local Network prompt;
+- automatic, manually restartable Bonjour discovery for builds signed with Apple's Multicast Networking entitlement;
 - AOSP-compatible TLS 1.3, TLS exporter, SPAKE2, and encrypted peer-info pairing stack;
 - self-signed TLS identity generation from the synchronized ADB RSA key;
 - manual Pairing Code app flow with separate pairing and connection ports, cancellation, diagnostics, and saved-device handoff;
@@ -128,11 +128,13 @@ To run from Xcode on an iPhone or iPad:
 3. Change `com.maxduke.adbtv` to a bundle identifier available to that team if necessary.
 4. Build and run on the connected device.
 
+The unsigned IPA supports manual IP and port entry without special Apple capabilities. Automatic discovery browses Android's non-IANA `_adb-tls-pairing._tcp` and `_adb-tls-connect._tcp` Bonjour service types. On iOS, that browse can return `NoAuth` unless the app is signed with Apple's restricted [Multicast Networking entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.networking.multicast). An approved developer account can add the capability under **Signing & Capabilities** and sign with a provisioning profile that authorizes it. Do not add the entitlement when self-signing: an entitlement absent from the provisioning profile makes the signature invalid.
+
 The ADB identity is a synchronizable, When Unlocked Keychain item. To reuse it across iOS devices, sign each build with the same team and bundle identifier, enable iCloud Keychain for the same Apple Account, and allow time for Keychain synchronization. Changing the team or bundle identifier creates a different Keychain access namespace and therefore a different ADB identity. Pairing still works without Keychain sync, but each isolated identity must be authorized separately by the Android TV.
 
 ## Troubleshooting
 
-If discovery reports `NoAuth` or `PolicyDenied`, allow Local Network access in the iOS prompt. A browser waiting for that decision remains active, and an immediate `NoAuth` failure retries with bounded backoff because iOS can initially reject the operation before the prompt is answered. Fatal authorization failures retry when the app becomes active after returning from Settings. The packaged app declares both Android Wireless Debugging Bonjour service types; the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`. Apple documents a local-network privacy state bug in iOS 18 that was fixed in iOS 18.6; update older iOS 18 devices before diagnosing persistent authorization failures.
+`PolicyDenied` means Local Network access is disabled; enable it in iOS Settings and retry. `NoAuth` is a distinct Bonjour capability denial. For the default self-signed IPA, use **Add Manually** because granting Local Network access does not add the restricted Multicast Networking entitlement. The packaged app still declares both Android Wireless Debugging Bonjour service types, and the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
 
 For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
 

@@ -110,7 +110,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Permission And Network Failures
 
 - [ ] Deny local-network permission and confirm discovery failure is actionable.
-- [ ] Confirm the discovery error opens iOS Settings and distinguishes `PolicyDenied` from `NoAuth` in Technical Details.
+- [ ] Confirm `PolicyDenied` opens iOS Settings, while `NoAuth` explains the signing-capability limitation and directs the user to **Add Manually**.
 - [ ] Add a valid endpoint manually while discovery is unavailable.
 - [ ] Add an unreachable endpoint manually and confirm **Connect & Save** returns a timeout with `timedOperation` and `timeoutSeconds` details.
 - [ ] Test devices on an isolated guest network or VLAN and confirm timeout detail identifies the endpoint.

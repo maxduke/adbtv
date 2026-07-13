@@ -44,8 +44,9 @@ mDNS discovery may vary across Android TV versions, routers, VLANs, guest networ
 - Treat Device Discovery as a convenience, not the only path.
 - Implement Manual Connection in the same milestone as discovery.
 - Declare required Bonjour service types in the app metadata.
-- Keep a recoverable `NWBrowser.waiting` authorization state alive while the Local Network prompt is unresolved; only cancel and retry after a fatal browser failure.
-- Treat immediate `NoAuth` failures as potentially pre-decision while the first system prompt is active, retrying across a bounded 30-second backoff window before presenting terminal failure.
+- Keep a recoverable `NWBrowser.waiting` state alive for `PolicyDenied` so discovery can recover after Local Network access changes.
+- Treat `NoAuth` as a Bonjour capability denial, not a Local Network privacy denial, and direct self-signed users to Manual Connection.
+- Keep the restricted Multicast Networking entitlement out of default builds. Maintainers who receive Apple approval may enable it only with a matching provisioning profile.
 - Show permission-specific User Errors when local-network access is denied.
 - Bound connection attempts so unreachable manual endpoints always produce a User Error and Diagnostic Detail.
 - Bound QR pairing-service and post-pairing connect-service discovery, identifying the expected service or device GUID on timeout.
@@ -55,7 +56,7 @@ mDNS discovery may vary across Android TV versions, routers, VLANs, guest networ
 - Test discovery against at least two Android TV devices or Android TV versions before calling it stable.
 
 **Fallback**:
-If discovery is unreliable, keep it as best-effort and make Manual Connection prominent.
+For self-signed builds or networks that block mDNS, keep discovery best-effort and make Manual Connection prominent.
 
 ## Risk 4: APK Installation Scope
 

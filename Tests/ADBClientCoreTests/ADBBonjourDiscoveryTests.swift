@@ -8,7 +8,7 @@ final class ADBBonjourDiscoveryTests: XCTestCase {
                 dnsErrorCode: -65_555,
                 diagnosticDescription: "NoAuth"
             ).reason,
-            .noAuthorization
+            .bonjourCapabilityDenied
         )
         XCTAssertEqual(
             ADBBonjourDiscoveryFailure(
@@ -28,8 +28,8 @@ final class ADBBonjourDiscoveryTests: XCTestCase {
 
     func testBrowserStateCarriesRecoverableAuthorizationDetail() {
         let failure = ADBBonjourDiscoveryFailure(
-            dnsErrorCode: -65_555,
-            diagnosticDescription: "NoAuth"
+            dnsErrorCode: -65_570,
+            diagnosticDescription: "PolicyDenied"
         )
 
         XCTAssertEqual(

@@ -591,8 +591,8 @@ final class ADBTVAppModelTests: XCTestCase {
     func testDiscoveryWaitsForAuthorizationWithoutStoppingBrowserState() {
         var model = ADBTVAppModel()
         let detail = DiagnosticDetail(
-            summary: "NoAuth",
-            context: ["reason": "noAuthorization"]
+            summary: "PolicyDenied",
+            context: ["reason": "localNetworkDenied"]
         )
 
         model.startDiscovery()

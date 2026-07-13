@@ -109,7 +109,7 @@ public extension Array where Element == ADBDiscoveredService {
 
 public struct ADBBonjourDiscoveryFailure: Error, Equatable, Sendable {
     public enum Reason: String, Equatable, Sendable {
-        case noAuthorization
+        case bonjourCapabilityDenied
         case localNetworkDenied
         case other
     }
@@ -132,7 +132,7 @@ public struct ADBBonjourDiscoveryFailure: Error, Equatable, Sendable {
         let reason: Reason
         switch dnsErrorCode {
         case -65_555:
-            reason = .noAuthorization
+            reason = .bonjourCapabilityDenied
         case -65_570:
             reason = .localNetworkDenied
         default:
@@ -207,10 +207,13 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
                         failureHandler(ADBBonjourDiscoveryFailure(failure))
                     }
                 case .waiting(let waitingError) where waitingError.isBonjourAuthorizationFailure:
+                    let failure = ADBBonjourDiscoveryFailure(waitingError)
                     Task { @MainActor in
-                        stateHandler(.waitingForAuthorization(
-                            ADBBonjourDiscoveryFailure(waitingError)
-                        ))
+                        if failure.reason == .localNetworkDenied {
+                            stateHandler(.waitingForAuthorization(failure))
+                        } else {
+                            failureHandler(failure)
+                        }
                     }
                 case .ready:
                     self?.startBrowserIfNeeded(at: index + 1)

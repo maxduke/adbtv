@@ -19,7 +19,7 @@ final class ADBTVAutomaticDiscoveryPolicyTests: XCTestCase {
         var failedPolicy = ADBTVAutomaticDiscoveryPolicy()
         XCTAssertFalse(failedPolicy.shouldStartDiscovery(status: .failed(
             userMessage: "Discovery failed.",
-            diagnosticDetail: DiagnosticDetail(summary: "NoAuth")
+            diagnosticDetail: DiagnosticDetail(summary: "PolicyDenied")
         )))
         XCTAssertFalse(failedPolicy.shouldStartDiscovery(status: .idle))
     }
@@ -38,7 +38,7 @@ final class ADBTVAutomaticDiscoveryPolicyTests: XCTestCase {
         var policy = ADBTVAutomaticDiscoveryPolicy()
         let status = ADBTVDiscoveryStatus.waitingForLocalNetworkAuthorization(
             userMessage: "Allow Local Network access.",
-            diagnosticDetail: DiagnosticDetail(summary: "NoAuth")
+            diagnosticDetail: DiagnosticDetail(summary: "PolicyDenied")
         )
 
         XCTAssertTrue(policy.shouldSuspendDiscovery(status: status))
@@ -74,7 +74,7 @@ final class ADBTVAutomaticDiscoveryPolicyTests: XCTestCase {
         var policy = ADBTVAutomaticDiscoveryPolicy()
         let failedStatus = ADBTVDiscoveryStatus.failed(
             userMessage: "Discovery is not authorized.",
-            diagnosticDetail: DiagnosticDetail(summary: "NoAuth")
+            diagnosticDetail: DiagnosticDetail(summary: "PolicyDenied")
         )
 
         policy.recordAuthorizationFailure()
@@ -104,7 +104,7 @@ final class ADBTVAutomaticDiscoveryPolicyTests: XCTestCase {
         var policy = ADBTVAutomaticDiscoveryPolicy()
         let failedStatus = ADBTVDiscoveryStatus.failed(
             userMessage: "Discovery failed.",
-            diagnosticDetail: DiagnosticDetail(summary: "NoAuth")
+            diagnosticDetail: DiagnosticDetail(summary: "PolicyDenied")
         )
         policy.recordAuthorizationFailure()
         XCTAssertTrue(policy.shouldRetryAuthorizationFailureAfterActivation(status: failedStatus))
