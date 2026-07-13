@@ -1,0 +1,74 @@
+name: Android Input Helper
+
+on:
+  pull_request:
+    paths:
+      - "Android/ADBTVInput/**"
+      - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
+      - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
+      - ".github/workflows/android-input-helper.yml"
+  push:
+    branches:
+      - main
+      - protocol-spike
+    paths:
+      - "Android/ADBTVInput/**"
+      - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
+      - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
+      - ".github/workflows/android-input-helper.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build And Test Input Helper
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android platform
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          gradle-version: "9.1.0"
+          cache-provider: basic
+
+      - name: Build and test helper
+        run: gradle -p Android/ADBTVInput testDebugUnitTest assembleDebug --no-daemon
+
+      - name: Verify helper identities
+        run: |
+          for apk in \
+            Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
+            Apps/ADBTViOS/Resources/ADBTVInput.apk; do
+            test "$(apkanalyzer manifest application-id "$apk")" = "com.maxduke.adbtv.input"
+            test "$(apkanalyzer manifest version-code "$apk")" = "1"
+          done
+
+      - name: Verify bundled helper payload
+        run: |
+          scripts/verify-bundled-input-helper.sh \
+            Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
+            Apps/ADBTViOS/Resources/ADBTVInput.apk
+
+      - name: Upload helper APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: ADBTVInput-debug
+          path: Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

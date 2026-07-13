@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:allowBackup="false"
+        android:hasCode="true"
+        android:label="ADB TV Input"
+        android:supportsRtl="true">
+        <service
+            android:name=".ADBTVInputMethodService"
+            android:exported="true"
+            android:label="ADB TV Input"
+            android:permission="android.permission.BIND_INPUT_METHOD">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/input_method" />
+        </service>
+
+        <receiver
+            android:name=".TextCommitReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP">
+            <intent-filter>
+                <action android:name="com.maxduke.adbtv.input.COMMIT_TEXT" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

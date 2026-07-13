@@ -1,0 +1,100 @@
+name: iOS UI Snapshots
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ios-ui-snapshots.yml"
+      - "ADBTV.xcodeproj/**"
+      - "Apps/ADBTViOS/**"
+      - "Package.swift"
+      - "Sources/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  snapshots:
+    name: Capture Portrait Layouts
+    runs-on: macos-15
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Select simulator
+        id: simulator
+        run: |
+          devices="$(xcrun simctl list devices available --json)"
+          iphone_udid="$(jq -r '[.devices[][] | select(.name | startswith("iPhone"))][0].udid // empty' <<<"$devices")"
+          ipad_udid="$(jq -r '[.devices[][] | select(.name | startswith("iPad"))][0].udid // empty' <<<"$devices")"
+          test -n "$iphone_udid"
+          test -n "$ipad_udid"
+          echo "iphone_udid=$iphone_udid" >> "$GITHUB_OUTPUT"
+          echo "ipad_udid=$ipad_udid" >> "$GITHUB_OUTPUT"
+
+      - name: Build preview app
+        run: |
+          xcodebuild \
+            -project ADBTV.xcodeproj \
+            -scheme ADBTV \
+            -destination "platform=iOS Simulator,id=${{ steps.simulator.outputs.iphone_udid }}" \
+            -derivedDataPath build/ui-snapshots/DerivedData \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Capture portrait layouts
+        run: |
+          app="build/ui-snapshots/DerivedData/Build/Products/Debug-iphonesimulator/ADBTV.app"
+          output="build/ui-snapshots/screenshots"
+          mkdir -p "$output"
+
+          capture_device() {
+            udid="$1"
+            device_name="$2"
+            xcrun simctl boot "$udid"
+            xcrun simctl bootstatus "$udid" -b
+            xcrun simctl install "$udid" "$app"
+
+            for appearance in light dark; do
+              xcrun simctl ui "$udid" appearance "$appearance"
+
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-remote-portrait.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
+
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-media-expanded
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-remote-media-expanded-portrait.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
+
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-install
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-install-portrait.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
+            done
+
+            xcrun simctl shutdown "$udid"
+          }
+
+          capture_device "${{ steps.simulator.outputs.iphone_udid }}" iphone
+          capture_device "${{ steps.simulator.outputs.ipad_udid }}" ipad
+
+          for screenshot in "$output"/*-portrait.png; do
+            width="$(sips -g pixelWidth "$screenshot" | awk '/pixelWidth/{print $2}')"
+            height="$(sips -g pixelHeight "$screenshot" | awk '/pixelHeight/{print $2}')"
+            test "$height" -gt "$width"
+          done
+
+      - name: Upload layout snapshots
+        uses: actions/upload-artifact@v7
+        with:
+          name: ADBTV-ui-snapshots
+          path: build/ui-snapshots/screenshots/*.png
+          if-no-files-found: error
+          retention-days: 14
