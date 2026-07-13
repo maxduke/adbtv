@@ -28,7 +28,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Pairing Code
 
 - [ ] Launch a fresh app session and confirm discovery starts without tapping **Discover Devices**.
-- [ ] On a fresh install, leave the Local Network prompt unanswered briefly, confirm discovery shows a waiting state, then allow access and confirm discovery proceeds without tapping retry.
+- [ ] On a fresh install, leave the Local Network prompt unanswered for at least five seconds, confirm discovery remains in a waiting/retrying state rather than terminal failure, then allow access and confirm discovery proceeds without tapping retry.
 - [ ] Stop discovery manually and confirm it stays stopped until **Discover Devices** is tapped.
 - [ ] While discovery is browsing, background and reopen ADB TV; confirm discovery resumes and services return.
 - [ ] Stop discovery manually, background and reopen ADB TV; confirm discovery remains stopped.
@@ -54,6 +54,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Reconnect And Device Library
 
 - [ ] Force-quit and relaunch the app, then reconnect without pairing again.
+- [ ] Confirm relaunch shows no saved-device tool page until a Managed Device passes checked reconnect and model verification.
+- [ ] Select an unreachable saved device, confirm a bounded connection error replaces the tools, and confirm **Retry Connection** works after restoring the TV.
 - [ ] Upgrade over an earlier candidate build with multiple saved devices and confirm every valid Device Library entry remains available.
 - [ ] If a Device Library warning appears, confirm valid entries remain visible and the copyable Technical Details report recovered and rejected record counts.
 - [ ] Install a build signed by the same team and bundle identifier on a second iOS device using the same Apple Account and confirm the synchronized identity reconnects without pairing again.
@@ -75,6 +77,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Send volume up, volume down, and mute.
 - [ ] Send power and verify the device-specific behavior is understandable.
 - [ ] Send previous, rewind, play/pause, fast-forward, next, and stop media actions.
+- [ ] Collapse and expand **Media Controls** and confirm its state does not shift or overlap adjacent controls.
 - [ ] Send Enter, Delete, and Tab to a focused control or text field.
 - [ ] Send text containing spaces and shell punctuation to a focused text field and confirm the exact text arrives.
 - [ ] Enter Chinese text, install the bundled ADB TV Input helper, focus a TV text field, and confirm the exact text arrives.
@@ -82,6 +85,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Trigger an Android-side `input` failure and confirm the remote status does not show **Sent**.
 - [ ] Disconnect the TV and confirm every failed action provides a User Error and technical detail.
 - [ ] Send an action to an unreachable TV and confirm it times out instead of remaining in progress.
+- [ ] Cancel an in-flight action to an unreachable TV and confirm the interface becomes usable immediately.
 
 ## APK Installation
 

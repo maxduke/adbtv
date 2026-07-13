@@ -45,10 +45,12 @@ mDNS discovery may vary across Android TV versions, routers, VLANs, guest networ
 - Implement Manual Connection in the same milestone as discovery.
 - Declare required Bonjour service types in the app metadata.
 - Keep a recoverable `NWBrowser.waiting` authorization state alive while the Local Network prompt is unresolved; only cancel and retry after a fatal browser failure.
+- Treat immediate `NoAuth` failures as potentially pre-decision while the first system prompt is active, retrying across a bounded 30-second backoff window before presenting terminal failure.
 - Show permission-specific User Errors when local-network access is denied.
 - Bound connection attempts so unreachable manual endpoints always produce a User Error and Diagnostic Detail.
 - Bound QR pairing-service and post-pairing connect-service discovery, identifying the expected service or device GUID on timeout.
 - Require an authenticated reconnect and ADB device-model probe before persisting any manual-code, discovered, or QR pairing result.
+- Require the same bounded reconnect and model probe before exposing tools for a saved Managed Device.
 - Reject stale verification callbacks so a cancelled or superseded pairing cannot save or fail a newer attempt.
 - Test discovery against at least two Android TV devices or Android TV versions before calling it stable.
 

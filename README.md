@@ -30,6 +30,7 @@ Current direction:
 Implemented so far:
 
 - manual device connection verification and persistence with clear success or failure details;
+- checked saved-device reconnect before Remote or Install tools are shown, with a bounded retry surface for unreachable TVs;
 - resilient Device Library loading that preserves legacy records, recovers valid entries from partial corruption, and reports rejected data without rewriting it;
 - APK source selection from the iOS Files picker;
 - APK source entry from a direct HTTP or HTTPS URL;
@@ -49,7 +50,7 @@ Implemented so far:
 - user-facing operation status plus technical diagnostic details;
 - bounded connection, pairing, remote-action, and APK-install operations with timeout diagnostics;
 - bounded QR pairing and post-pairing discovery so missing Bonjour advertisements cannot leave the pairing sheet stuck;
-- automatic, manually restartable Bonjour discovery of ADB pairing and connect services;
+- automatic, manually restartable Bonjour discovery with a bounded authorization backoff window for the first iOS Local Network prompt;
 - AOSP-compatible TLS 1.3, TLS exporter, SPAKE2, and encrypted peer-info pairing stack;
 - self-signed TLS identity generation from the synchronized ADB RSA key;
 - manual Pairing Code app flow with separate pairing and connection ports, cancellation, diagnostics, and saved-device handoff;
@@ -62,6 +63,7 @@ Implemented so far:
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - end-to-end loopback coverage for secure reconnect, an encrypted ADB shell command, and encrypted APK installation;
 - remote text input, menu, volume, and power controls in addition to D-pad navigation;
+- cancellable remote reconnect/action progress with an eight-second failure bound;
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - unsigned IPA packaging in GitHub Actions;
@@ -130,7 +132,7 @@ The ADB identity is a synchronizable, When Unlocked Keychain item. To reuse it a
 
 ## Troubleshooting
 
-If discovery reports `NoAuth` or `PolicyDenied`, allow Local Network access in the iOS prompt. A browser waiting for that decision remains active and proceeds when iOS grants access; fatal authorization failures retry when the app becomes active after returning from Settings. The packaged app declares both Android Wireless Debugging Bonjour service types; the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
+If discovery reports `NoAuth` or `PolicyDenied`, allow Local Network access in the iOS prompt. A browser waiting for that decision remains active, and an immediate `NoAuth` failure retries with bounded backoff because iOS can initially reject the operation before the prompt is answered. Fatal authorization failures retry when the app becomes active after returning from Settings. The packaged app declares both Android Wireless Debugging Bonjour service types; the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`. Apple documents a local-network privacy state bug in iOS 18 that was fixed in iOS 18.6; update older iOS 18 devices before diagnosing persistent authorization failures.
 
 For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
 

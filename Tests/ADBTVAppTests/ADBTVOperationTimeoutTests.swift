@@ -2,6 +2,11 @@ import XCTest
 @testable import ADBTVApp
 
 final class ADBTVOperationTimeoutTests: XCTestCase {
+    func testInteractiveDeviceTimeoutsAreShortAndBounded() {
+        XCTAssertEqual(ADBTVOperationTimeoutPolicy.savedDeviceVerification.seconds, 10)
+        XCTAssertEqual(ADBTVOperationTimeoutPolicy.remoteAction.seconds, 8)
+    }
+
     func testRunReturnsCompletedOperationResult() async throws {
         let timeout = ADBTVOperationTimeout(seconds: 60)
 

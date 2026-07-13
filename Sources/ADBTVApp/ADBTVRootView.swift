@@ -22,8 +22,11 @@ public struct ADBTVRootView: View {
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
     @State private var pairingTask: Task<Void, Never>?
+    @State private var deviceConnectionTask: Task<Void, Never>?
+    @State private var deviceConnectionState = ADBTVSavedDeviceConnectionState.idle
     @State private var discoveryAuthorizationRetryTask: Task<Void, Never>?
     @State private var automaticDiscoveryPolicy = ADBTVAutomaticDiscoveryPolicy()
+    @State private var discoveryAuthorizationRetryPolicy = ADBTVBonjourAuthorizationRetryPolicy()
 #if os(iOS) && canImport(AVFoundation)
     @State private var isQRCodeScannerPresented = false
     @State private var qrScannerError: DiagnosticDetail?
@@ -37,9 +40,11 @@ public struct ADBTVRootView: View {
         automaticallyStartsDiscovery: Bool = true
     ) {
         let loadResult = deviceStore.loadDevices()
+        var initialModel = ADBTVAppModel(devices: loadResult.devices)
+        _ = initialModel.selectDevice(id: nil)
         self.deviceStore = deviceStore
         self.automaticallyStartsDiscovery = automaticallyStartsDiscovery
-        self._model = State(initialValue: ADBTVAppModel(devices: loadResult.devices))
+        self._model = State(initialValue: initialModel)
         self._devicePersistenceError = State(
             initialValue: Self.deviceLoadDiagnosticDetail(for: loadResult)
         )
@@ -58,8 +63,8 @@ public struct ADBTVRootView: View {
     public var body: some View {
         NavigationSplitView {
             List(selection: Binding(
-                get: { model.selectedDeviceID },
-                set: { _ = model.selectDevice(id: $0) }
+                get: { deviceConnectionState.device?.id ?? model.selectedDeviceID },
+                set: { selectSavedDevice(id: $0) }
             )) {
                 Section("Devices") {
                     if model.devices.isEmpty {
@@ -68,7 +73,10 @@ public struct ADBTVRootView: View {
                         ForEach(model.devices) { device in
                             DeviceRow(device: device)
                                 .tag(device.id)
-                                .deleteDisabled(model.activeDeviceOperation != nil)
+                                .deleteDisabled(
+                                    model.activeDeviceOperation != nil
+                                        || deviceConnectionState.isConnecting
+                                )
                         }
                         .onDelete(perform: deleteDevices)
                     }
@@ -115,7 +123,13 @@ public struct ADBTVRootView: View {
                 }
             }
         } detail: {
-            if let device = model.selectedDevice {
+            if let connectionDevice = deviceConnectionState.device {
+                SavedDeviceConnectionView(
+                    device: connectionDevice,
+                    state: deviceConnectionState,
+                    retry: { selectSavedDevice(id: connectionDevice.id) }
+                )
+            } else if let device = model.selectedDevice {
                 DeviceDetailView(
                     device: device,
                     installDraft: model.installDraft,
@@ -144,6 +158,7 @@ public struct ADBTVRootView: View {
                     sendRemoteText: {
                         sendRemoteText(to: device)
                     },
+                    cancelRemoteOperation: cancelRemoteOperation,
                     installUnicodeInputHelper: {
                         installUnicodeInputHelper(on: device)
                     }
@@ -267,6 +282,7 @@ public struct ADBTVRootView: View {
         .onDisappear {
             installTask?.cancel()
             remoteTask?.cancel()
+            deviceConnectionTask?.cancel()
             discoveryAuthorizationRetryTask?.cancel()
             model.cancelActiveDeviceOperation()
             cancelPairing()
@@ -330,8 +346,71 @@ public struct ADBTVRootView: View {
         saveDevices()
     }
 
+    private func selectSavedDevice(id: ADBTVDeviceSummary.ID?) {
+        guard model.activeDeviceOperation == nil else {
+            return
+        }
+
+        deviceConnectionTask?.cancel()
+        deviceConnectionTask = nil
+
+        guard let id,
+              let device = model.devices.first(where: { $0.id == id }) else {
+            deviceConnectionState = .idle
+            _ = model.selectDevice(id: nil)
+            return
+        }
+
+        if model.selectedDeviceID == id, deviceConnectionState == .idle {
+            return
+        }
+
+        _ = model.selectDevice(id: nil)
+        deviceConnectionState = .connecting(device)
+        deviceConnectionTask = Task {
+            do {
+                let verifiedDevice = try await Self.verifySavedDevice(device)
+                guard !Task.isCancelled,
+                      deviceConnectionState.device?.id == device.id else {
+                    return
+                }
+                deviceConnectionTask = nil
+                deviceConnectionState = .idle
+                model.addDevice(verifiedDevice)
+                saveDevices()
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled,
+                      deviceConnectionState.device?.id == device.id else {
+                    return
+                }
+                deviceConnectionTask = nil
+                deviceConnectionState = .failed(
+                    device: device,
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: String(describing: error),
+                        context: Self.operationDiagnosticContext(
+                            error: error,
+                            base: [
+                                "device": device.connectionDescription,
+                                "operation": "verifySavedDevice"
+                            ]
+                        )
+                    )
+                )
+            }
+        }
+    }
+
     private func deleteDevices(at offsets: IndexSet) {
         let ids = Set(offsets.map { model.devices[$0].id })
+        if let connectionDeviceID = deviceConnectionState.device?.id,
+           ids.contains(connectionDeviceID) {
+            deviceConnectionTask?.cancel()
+            deviceConnectionTask = nil
+            deviceConnectionState = .idle
+        }
         model.removeDevices(ids: ids)
         saveDevices()
     }
@@ -384,7 +463,10 @@ public struct ADBTVRootView: View {
         }
     }
 
-    private func startDiscovery() {
+    private func startDiscovery(resetAuthorizationRetries: Bool = true) {
+        if resetAuthorizationRetries {
+            discoveryAuthorizationRetryPolicy.reset()
+        }
         discoveryAuthorizationRetryTask?.cancel()
         discoveryAuthorizationRetryTask = nil
         model.startDiscovery()
@@ -410,6 +492,7 @@ public struct ADBTVRootView: View {
             switch state {
             case .ready:
                 automaticDiscoveryPolicy.recordDiscoveryReady()
+                discoveryAuthorizationRetryPolicy.reset()
                 model.markDiscoveryReady()
             case .waitingForAuthorization(let failure):
                 model.waitForLocalNetworkAuthorization(
@@ -426,15 +509,35 @@ public struct ADBTVRootView: View {
             }
             browser.cancel()
             discoveryBrowser = nil
-            if failure.reason == .noAuthorization || failure.reason == .localNetworkDenied {
+            if failure.reason == .noAuthorization {
                 automaticDiscoveryPolicy.recordAuthorizationFailure()
-                scheduleAuthorizationDiscoveryRetry()
+                if let delay = discoveryAuthorizationRetryPolicy.nextDelayInSeconds() {
+                    model.waitForLocalNetworkAuthorization(
+                        userMessage: Self.discoveryWaitingUserMessage(for: failure),
+                        diagnosticDetail: DiagnosticDetail(
+                            summary: failure.diagnosticDescription,
+                            context: Self.discoveryDiagnosticContext(
+                                for: failure,
+                                authorizationRetryAttempt: discoveryAuthorizationRetryPolicy.attempt
+                            )
+                        )
+                    )
+                    scheduleAuthorizationDiscoveryRetry(after: delay)
+                    return
+                }
+            } else if failure.reason == .localNetworkDenied {
+                automaticDiscoveryPolicy.recordAuthorizationFailure()
             }
             model.failDiscovery(
                 userMessage: Self.discoveryUserMessage(for: failure),
                 diagnosticDetail: DiagnosticDetail(
                     summary: failure.diagnosticDescription,
-                    context: Self.discoveryDiagnosticContext(for: failure)
+                    context: Self.discoveryDiagnosticContext(
+                        for: failure,
+                        authorizationRetryAttempt: failure.reason == .noAuthorization
+                            ? discoveryAuthorizationRetryPolicy.attempt
+                            : nil
+                    )
                 )
             )
         })
@@ -449,21 +552,20 @@ public struct ADBTVRootView: View {
 #endif
     }
 
-    private func scheduleAuthorizationDiscoveryRetry() {
+    private func scheduleAuthorizationDiscoveryRetry(after delayInSeconds: Int) {
         discoveryAuthorizationRetryTask?.cancel()
         discoveryAuthorizationRetryTask = Task {
             do {
-                try await Task.sleep(for: .seconds(1))
+                try await Task.sleep(for: .seconds(delayInSeconds))
             } catch {
                 return
             }
             guard scenePhase == .active,
-                  automaticDiscoveryPolicy.shouldRetryAuthorizationFailureAfterActivation(
-                    status: model.discoveryStatus
-                  ) else {
+                  model.discoveryStatus.isBrowsing else {
                 return
             }
-            startDiscovery()
+            discoveryAuthorizationRetryTask = nil
+            startDiscovery(resetAuthorizationRetries: false)
         }
     }
 
@@ -493,12 +595,20 @@ public struct ADBTVRootView: View {
     }
 
     private static func discoveryDiagnosticContext(
-        for failure: ADBBonjourDiscoveryFailure
+        for failure: ADBBonjourDiscoveryFailure,
+        authorizationRetryAttempt: Int? = nil
     ) -> [String: String] {
         var context = [
             "operation": "bonjourDiscovery",
-            "reason": failure.reason.rawValue
+            "reason": failure.reason.rawValue,
+            "operatingSystemVersion": ProcessInfo.processInfo.operatingSystemVersionString
         ]
+        if let bundleIdentifier = Bundle.main.bundleIdentifier {
+            context["bundleIdentifier"] = bundleIdentifier
+        }
+        if let authorizationRetryAttempt {
+            context["authorizationRetryAttempt"] = String(authorizationRetryAttempt)
+        }
 #if os(iOS)
         let declaredServices = Bundle.main.object(forInfoDictionaryKey: "NSBonjourServices") as? [String]
         context["declaredBonjourServices"] = declaredServices?.joined(separator: ",") ?? "missing"
@@ -1154,6 +1264,20 @@ public struct ADBTVRootView: View {
         }
     }
 
+    private func cancelRemoteOperation() {
+        guard let activeDeviceOperation = model.activeDeviceOperation else {
+            return
+        }
+        switch activeDeviceOperation {
+        case .remoteAction, .remoteText:
+            remoteTask?.cancel()
+            remoteTask = nil
+            model.cancelActiveDeviceOperation()
+        case .install:
+            return
+        }
+    }
+
     private static func sendRemoteAction(
         _ action: ADBTVRemoteAction,
         to device: ADBTVDeviceSummary,
@@ -1215,6 +1339,16 @@ public struct ADBTVRootView: View {
         )
     }
 
+    private static func verifySavedDevice(
+        _ device: ADBTVDeviceSummary
+    ) async throws -> ADBTVDeviceSummary {
+        try await verifyDevice(
+            device,
+            timeout: ADBTVOperationTimeoutPolicy.savedDeviceVerification,
+            operation: .savedDeviceVerification
+        )
+    }
+
     private static func verifyPairedDevice(
         _ device: ADBTVDeviceSummary
     ) async throws -> ADBTVDeviceSummary {
@@ -1247,6 +1381,12 @@ public struct ADBTVRootView: View {
     }
 #else
     private static func verifyManualDevice(
+        _ device: ADBTVDeviceSummary
+    ) async throws -> ADBTVDeviceSummary {
+        throw ADBTVManualDeviceError.unsupportedPlatform
+    }
+
+    private static func verifySavedDevice(
         _ device: ADBTVDeviceSummary
     ) async throws -> ADBTVDeviceSummary {
         throw ADBTVManualDeviceError.unsupportedPlatform
@@ -1859,6 +1999,74 @@ private struct DeviceRow: View {
     }
 }
 
+private enum ADBTVSavedDeviceConnectionState: Equatable {
+    case idle
+    case connecting(ADBTVDeviceSummary)
+    case failed(device: ADBTVDeviceSummary, diagnosticDetail: DiagnosticDetail)
+
+    var device: ADBTVDeviceSummary? {
+        switch self {
+        case .idle:
+            return nil
+        case .connecting(let device), .failed(let device, _):
+            return device
+        }
+    }
+
+    var isConnecting: Bool {
+        if case .connecting = self {
+            return true
+        }
+        return false
+    }
+}
+
+private struct SavedDeviceConnectionView: View {
+    var device: ADBTVDeviceSummary
+    var state: ADBTVSavedDeviceConnectionState
+    var retry: () -> Void
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                DeviceHeader(device: device)
+
+                switch state {
+                case .idle:
+                    EmptyView()
+                case .connecting:
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Connecting and verifying")
+                            .foregroundStyle(.secondary)
+                    }
+                case .failed(_, let diagnosticDetail):
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label(
+                            "Could not connect to this TV.",
+                            systemImage: "exclamationmark.triangle.fill"
+                        )
+                        .foregroundStyle(.red)
+
+                        Button(action: retry) {
+                            Label("Retry Connection", systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.borderedProminent)
+
+                        DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
+                    }
+                }
+            }
+            .frame(maxWidth: 620, alignment: .leading)
+            .padding()
+        }
+        .navigationTitle(device.displayName)
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
+    }
+}
+
 private struct DeviceDetailView: View {
     var device: ADBTVDeviceSummary
     var installDraft: ADBTVInstallDraft
@@ -1873,6 +2081,7 @@ private struct DeviceDetailView: View {
     var cancelInstall: () -> Void
     var sendRemoteAction: (ADBTVRemoteAction) -> Void
     var sendRemoteText: () -> Void
+    var cancelRemoteOperation: () -> Void
     var installUnicodeInputHelper: () -> Void
 
     @State private var selectedTool = ProcessInfo.processInfo.arguments.contains("--ui-install")
@@ -1929,6 +2138,7 @@ private struct DeviceDetailView: View {
             unicodeHelperInstallStatus: unicodeHelperInstallStatus,
             send: sendRemoteAction,
             sendText: sendRemoteText,
+            cancelRemoteOperation: cancelRemoteOperation,
             installUnicodeInputHelper: installUnicodeInputHelper
         )
     }
@@ -2210,7 +2420,10 @@ private struct RemoteActionsPanel: View {
     var unicodeHelperInstallStatus: ADBTVInstallStatus?
     var send: (ADBTVRemoteAction) -> Void
     var sendText: () -> Void
+    var cancelRemoteOperation: () -> Void
     var installUnicodeInputHelper: () -> Void
+
+    @State private var isMediaControlsExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -2252,7 +2465,13 @@ private struct RemoteActionsPanel: View {
 
             Divider()
 
-            mediaControls
+            DisclosureGroup(isExpanded: $isMediaControlsExpanded) {
+                mediaControls
+                    .padding(.top, 12)
+            } label: {
+                Label("Media Controls", systemImage: "play.rectangle")
+                    .font(.headline)
+            }
 
             Divider()
 
@@ -2298,7 +2517,10 @@ private struct RemoteActionsPanel: View {
                 }
             }
 
-            RemoteStatusView(status: status)
+            RemoteStatusView(
+                status: status,
+                cancel: cancelRemoteOperation
+            )
         }
     }
 
@@ -2342,9 +2564,6 @@ private struct RemoteActionsPanel: View {
 
     private var mediaControls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Media Controls")
-                .font(.headline)
-
             HStack(spacing: 0) {
                 mediaButton(.mediaPrevious, systemImage: "backward.end.fill", title: "Prev")
                 Spacer(minLength: 4)
@@ -2454,17 +2673,16 @@ private struct RemoteActionsPanel: View {
 
 private struct RemoteStatusView: View {
     var status: ADBTVRemoteStatus
+    var cancel: () -> Void
 
     var body: some View {
         switch status {
         case .idle:
             EmptyView()
         case .sending(let action):
-            Label("Sending \(action.displayTitle)", systemImage: "arrow.triangle.2.circlepath")
-                .foregroundStyle(.secondary)
+            sendingStatus("Sending \(action.displayTitle)")
         case .sendingText:
-            Label("Sending text", systemImage: "arrow.triangle.2.circlepath")
-                .foregroundStyle(.secondary)
+            sendingStatus("Sending text")
         case .sent(let action):
             Label("Sent \(action.displayTitle)", systemImage: "checkmark.circle")
                 .foregroundStyle(.secondary)
@@ -2481,6 +2699,19 @@ private struct RemoteStatusView: View {
                 userMessage: userMessage,
                 diagnosticDetail: diagnosticDetail
             )
+        }
+    }
+
+    private func sendingStatus(_ title: String) -> some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text(title)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 8)
+            Button(role: .cancel, action: cancel) {
+                Label("Cancel", systemImage: "xmark.circle")
+            }
+            .buttonStyle(.bordered)
         }
     }
 }
