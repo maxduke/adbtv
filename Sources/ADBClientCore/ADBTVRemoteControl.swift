@@ -48,6 +48,7 @@ public enum ADBTVRemoteAction: CaseIterable, Equatable, Sendable {
     case menu
     case volumeUp
     case volumeDown
+    case volumeMute
     case power
     case mediaPrevious
     case mediaRewind
@@ -83,6 +84,8 @@ public enum ADBTVRemoteAction: CaseIterable, Equatable, Sendable {
             return .volumeUp
         case .volumeDown:
             return .volumeDown
+        case .volumeMute:
+            return .volumeMute
         case .power:
             return .power
         case .mediaPrevious:
@@ -136,6 +139,7 @@ public enum ADBTVRemoteKeyEvent: Int, Equatable, Sendable {
     case mediaPrevious = 88
     case mediaRewind = 89
     case mediaFastForward = 90
+    case volumeMute = 164
     case settings = 176
 
     public func shellCommand() throws -> ADBShellCommand {

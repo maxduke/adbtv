@@ -2109,6 +2109,8 @@ private struct RemoteActionsPanel: View {
                 HStack {
                     roundButton(.volumeDown, systemImage: "speaker.minus.fill")
                     Spacer()
+                    roundButton(.volumeMute, systemImage: "speaker.slash.fill")
+                    Spacer()
                     roundButton(.settings, systemImage: "gearshape.fill")
                     Spacer()
                     roundButton(.volumeUp, systemImage: "speaker.plus.fill")
@@ -2407,6 +2409,8 @@ private extension ADBTVRemoteAction {
             return "Volume Up"
         case .volumeDown:
             return "Volume Down"
+        case .volumeMute:
+            return "Mute"
         case .power:
             return "Power"
         case .mediaPrevious:

@@ -72,8 +72,10 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 - [ ] Send D-pad up, down, left, and right.
 - [ ] Send select, back, home, menu, and settings.
-- [ ] Send volume up and volume down.
+- [ ] Send volume up, volume down, and mute.
 - [ ] Send power and verify the device-specific behavior is understandable.
+- [ ] Send previous, rewind, play/pause, fast-forward, next, and stop media actions.
+- [ ] Send Enter, Delete, and Tab to a focused control or text field.
 - [ ] Send text containing spaces and shell punctuation to a focused text field and confirm the exact text arrives.
 - [ ] Enter Chinese text, install the bundled ADB TV Input helper, focus a TV text field, and confirm the exact text arrives.
 - [ ] Confirm Unicode input restores the TV's previously selected input method after success and failure.

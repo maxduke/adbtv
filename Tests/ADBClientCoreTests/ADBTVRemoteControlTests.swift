@@ -14,6 +14,7 @@ final class ADBTVRemoteControlTests: XCTestCase {
         XCTAssertEqual(ADBTVRemoteAction.menu.keyEvent, .menu)
         XCTAssertEqual(ADBTVRemoteAction.volumeUp.keyEvent, .volumeUp)
         XCTAssertEqual(ADBTVRemoteAction.volumeDown.keyEvent, .volumeDown)
+        XCTAssertEqual(ADBTVRemoteAction.volumeMute.keyEvent, .volumeMute)
         XCTAssertEqual(ADBTVRemoteAction.power.keyEvent, .power)
         XCTAssertEqual(ADBTVRemoteAction.mediaPrevious.keyEvent, .mediaPrevious)
         XCTAssertEqual(ADBTVRemoteAction.mediaRewind.keyEvent, .mediaRewind)
