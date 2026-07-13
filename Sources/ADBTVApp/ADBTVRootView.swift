@@ -1808,10 +1808,18 @@ private struct DeviceDetailView: View {
             text: remoteTextString,
             canSendText: canSendRemoteText,
             deviceOperationInProgress: deviceOperationInProgress,
+            unicodeHelperInstallStatus: unicodeHelperInstallStatus,
             send: sendRemoteAction,
             sendText: sendRemoteText,
             installUnicodeInputHelper: installUnicodeInputHelper
         )
+    }
+
+    private var unicodeHelperInstallStatus: ADBTVInstallStatus? {
+        guard installDraft.selectedPackage?.fileName == ADBTVUnicodeInputHelper.bundledAPKFileName else {
+            return nil
+        }
+        return installDraft.status
     }
 }
 
@@ -2069,6 +2077,7 @@ private struct RemoteActionsPanel: View {
     var text: Binding<String>
     var canSendText: Bool
     var deviceOperationInProgress: Bool
+    var unicodeHelperInstallStatus: ADBTVInstallStatus?
     var send: (ADBTVRemoteAction) -> Void
     var sendText: () -> Void
     var installUnicodeInputHelper: () -> Void
@@ -2149,6 +2158,10 @@ private struct RemoteActionsPanel: View {
                             unicodeHelperLabel
                             unicodeHelperButton
                         }
+                    }
+
+                    if let unicodeHelperInstallStatus {
+                        InstallStatusView(status: unicodeHelperInstallStatus)
                     }
                 }
             }
