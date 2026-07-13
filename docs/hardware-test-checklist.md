@@ -29,7 +29,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Pairing Code
 
-- [ ] In a self-signed build, confirm automatic discovery reports its signing-capability limitation without retrying or opening Settings.
+- [ ] In a self-signed build, confirm Discovery and QR Pairing are hidden while **Pair with Code** and **Add Manually** remain available.
 - [ ] Open **Add Device**, choose **Pair with Code**, and pair using the TV's host, pairing port, six-digit code, and connection port.
 - [ ] Confirm **Verifying the TV connection** appears before the paired device is saved.
 - [ ] Confirm verification reads the real TV model and saves the Managed Device once without creating a duplicate entry.
@@ -113,7 +113,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Permission And Network Failures
 
-- [ ] In a self-signed build, confirm `NoAuth` explains the signing-capability limitation and directs the user to **Add Manually**.
+- [ ] In a self-signed build, confirm launch does not start Bonjour or present a Local Network prompt solely for discovery.
 - [ ] In an entitlement-enabled build, deny Local Network access and confirm `PolicyDenied` opens iOS Settings.
 - [ ] Add a valid endpoint manually while discovery is unavailable.
 - [ ] Add an unreachable endpoint manually and confirm **Connect & Save** returns a timeout with `timedOperation` and `timeoutSeconds` details.

@@ -47,6 +47,7 @@ mDNS discovery may vary across Android TV versions, routers, VLANs, guest networ
 - Keep a recoverable `NWBrowser.waiting` state alive for `PolicyDenied` so discovery can recover after Local Network access changes.
 - Treat `NoAuth` as a Bonjour capability denial, not a Local Network privacy denial, and direct self-signed users to Manual Connection.
 - Keep the restricted Multicast Networking entitlement out of default builds. Maintainers who receive Apple approval may enable it only with a matching provisioning profile.
+- Read the running task's effective multicast entitlement and expose or start Bonjour-dependent Discovery and QR Pairing only when iOS granted that capability.
 - Show permission-specific User Errors when local-network access is denied.
 - Bound connection attempts so unreachable manual endpoints always produce a User Error and Diagnostic Detail.
 - Bound QR pairing-service and post-pairing connect-service discovery, identifying the expected service or device GUID on timeout.
