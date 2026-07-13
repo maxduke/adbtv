@@ -1532,6 +1532,9 @@ private struct ADBTVAboutView: View {
                 }
             }
             .navigationTitle("About ADB TV")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button {
@@ -1575,6 +1578,9 @@ private struct ADBTVOpenSourceNoticesView: View {
                 .padding()
         }
         .navigationTitle("Open Source Licenses")
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
     }
 }
 
