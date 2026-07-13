@@ -100,7 +100,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Attempt a package advertised above 512 MiB and confirm it is rejected before buffering or connecting to the TV.
 - [ ] Select a renamed non-APK file and confirm validation fails before transfer.
 - [ ] Test an invalid signature or incompatible APK and confirm Package Manager detail is shown.
-- [ ] Confirm the temporary remote APK is removed after success and failure.
+- [ ] Confirm each attempt uses a distinct UUID-named temporary APK and that its exact path is removed after success and failure.
 - [ ] Confirm no persistent install-history screen or record is created.
 
 ## Permission And Network Failures

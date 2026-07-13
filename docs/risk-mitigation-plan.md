@@ -68,6 +68,7 @@ APK Installation can expand quickly: single APK, split APKs, install sessions, p
 - Report ordered byte progress for URL download and ADB transfer, with indeterminate download progress when the server does not advertise a length.
 - Limit both URL and Files packages to 512 MiB before retaining them in memory.
 - Generate ADB sync frames lazily and cap transport batches at 1 MiB so transfer framing does not duplicate the full package in memory.
+- Give each install attempt a UUID-named remote staging path and verify that exact path is absent after checked cleanup.
 - On cancellation or timeout after package preparation, close the active transport and use a bounded fresh connection to remove the exact staged path before releasing operation ownership.
 - Download and structurally validate the package before opening the ADB connection.
 - Reject non-success HTTP responses and clearly non-package text, JSON, or XML content types before device work.
@@ -103,12 +104,12 @@ Some Android TV remote inputs may vary by device, OS version, or app focus. Powe
 - Record per-action failures with Diagnostic Detail.
 - Append and parse a shell exit-status marker for every remote action so device-side `input` failures cannot appear successful.
 - Bound captured failure output before placing it in Diagnostic Detail.
-- Treat non-ASCII text as device-dependent because Android maps `input text` through the TV's virtual key character map; do not require a companion IME in the initial version.
+- Keep checked Android `input text` for ASCII and route non-ASCII text through the optional repository-owned IME, restoring the TV's previous input method after each attempt.
 - Bind every install and remote operation to its originating Managed Device until completion or cancellation.
 - Permit only one active device operation so selection changes and stale callbacks cannot present a result under another TV.
 
 **Fallback**:
-If an action is device-specific, expose it only when supported or label it as best-effort.
+If an action is device-specific, expose it only when supported or label it as best-effort. If the optional IME cannot be installed or selected, retain all structured key controls and report actionable Unicode-input diagnostics.
 
 ## Risk 7: GitHub Actions Cannot Fully Validate Device Behavior
 
