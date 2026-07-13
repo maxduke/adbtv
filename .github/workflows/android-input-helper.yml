@@ -51,10 +51,20 @@ jobs:
       - name: Build and test helper
         run: gradle -p Android/ADBTVInput testDebugUnitTest assembleDebug --no-daemon
 
-      - name: Verify bundled helper identity
+      - name: Verify helper identities
         run: |
-          test "$(apkanalyzer manifest application-id Apps/ADBTViOS/Resources/ADBTVInput.apk)" = "com.maxduke.adbtv.input"
-          test "$(apkanalyzer manifest version-code Apps/ADBTViOS/Resources/ADBTVInput.apk)" = "1"
+          for apk in \
+            Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
+            Apps/ADBTViOS/Resources/ADBTVInput.apk; do
+            test "$(apkanalyzer manifest application-id "$apk")" = "com.maxduke.adbtv.input"
+            test "$(apkanalyzer manifest version-code "$apk")" = "1"
+          done
+
+      - name: Verify bundled helper payload
+        run: |
+          scripts/verify-bundled-input-helper.sh \
+            Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
+            Apps/ADBTViOS/Resources/ADBTVInput.apk
 
       - name: Upload helper APK
         uses: actions/upload-artifact@v7

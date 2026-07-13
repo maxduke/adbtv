@@ -13,3 +13,5 @@ gradle -p Android/ADBTVInput testDebugUnitTest assembleDebug --no-daemon
 ```
 
 Debug signing is sufficient because the helper is sideloaded over the user's authenticated ADB connection and is not distributed through an Android app store. If the helper protocol changes incompatibly, use a new package name so an older debug-signed helper cannot be mistaken for the new protocol.
+
+CI compares every non-signature ZIP entry in the source-built APK with the APK bundled by the iOS target. This permits different debug signing keys while preventing reviewed helper source and shipped helper code or resources from drifting apart.
