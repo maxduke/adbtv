@@ -18,6 +18,7 @@ public struct ADBTVRootView: View {
     @State private var isFileImporterPresented = false
     @State private var isAddDevicePresented = false
     @State private var isPairDevicePresented = false
+    @State private var isAboutPresented: Bool
     @State private var devicePersistenceError: DiagnosticDetail?
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
@@ -36,7 +37,8 @@ public struct ADBTVRootView: View {
     public init(
         deviceStore: ADBTVDeviceStore = ADBTVDeviceStore(),
         automaticallyStartsDiscovery: Bool? = nil,
-        bonjourDiscoveryAvailable: Bool? = nil
+        bonjourDiscoveryAvailable: Bool? = nil,
+        initiallyPresentsAbout: Bool = false
     ) {
         let loadResult = deviceStore.loadDevices()
         var initialModel = ADBTVAppModel(devices: loadResult.devices)
@@ -49,6 +51,7 @@ public struct ADBTVRootView: View {
             )
         } ?? .current(automaticallyStartsDiscovery: automaticallyStartsDiscovery)
         self._model = State(initialValue: initialModel)
+        self._isAboutPresented = State(initialValue: initiallyPresentsAbout)
         self._devicePersistenceError = State(
             initialValue: Self.deviceLoadDiagnosticDetail(for: loadResult)
         )
@@ -58,7 +61,8 @@ public struct ADBTVRootView: View {
         model: ADBTVAppModel,
         deviceStore: ADBTVDeviceStore = ADBTVDeviceStore(),
         automaticallyStartsDiscovery: Bool? = nil,
-        bonjourDiscoveryAvailable: Bool? = nil
+        bonjourDiscoveryAvailable: Bool? = nil,
+        initiallyPresentsAbout: Bool = false
     ) {
         self.deviceStore = deviceStore
         self.bonjourCapability = bonjourDiscoveryAvailable.map {
@@ -68,6 +72,7 @@ public struct ADBTVRootView: View {
             )
         } ?? .current(automaticallyStartsDiscovery: automaticallyStartsDiscovery)
         self._model = State(initialValue: model)
+        self._isAboutPresented = State(initialValue: initiallyPresentsAbout)
     }
 
     public var body: some View {
@@ -107,7 +112,15 @@ public struct ADBTVRootView: View {
             }
             .navigationTitle("ADB TV")
             .toolbar {
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .primaryAction) {
+                    Button {
+                        isAboutPresented = true
+                    } label: {
+                        Label("About", systemImage: "info.circle")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help("About")
+
                     Menu {
                         Button {
                             model.prepareManualPairing()
@@ -198,6 +211,9 @@ public struct ADBTVRootView: View {
                 startPairing: startPairing,
                 cancelPairing: cancelPairing
             )
+        }
+        .sheet(isPresented: $isAboutPresented) {
+            ADBTVAboutView()
         }
 #if os(iOS) && canImport(AVFoundation)
         .sheet(isPresented: $isQRCodeScannerPresented) {
@@ -1495,6 +1511,77 @@ private enum RemoteCompletion: Sendable {
     case textSuccess
     case failure(action: ADBTVRemoteAction, userMessage: String, diagnosticDetail: DiagnosticDetail)
     case textFailure(userMessage: String, diagnosticDetail: DiagnosticDetail)
+}
+
+private struct ADBTVAboutView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    LabeledContent("Version", value: versionDescription)
+                }
+
+                Section("Legal") {
+                    NavigationLink {
+                        ADBTVOpenSourceNoticesView()
+                    } label: {
+                        Label("Open Source Licenses", systemImage: "doc.text")
+                    }
+                }
+            }
+            .navigationTitle("About ADB TV")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Label("Close", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help("Close")
+                }
+            }
+        }
+    }
+
+    private var versionDescription: String {
+        let version = Bundle.main.object(
+            forInfoDictionaryKey: "CFBundleShortVersionString"
+        ) as? String
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+
+        switch (version, build) {
+        case let (version?, build?):
+            return "\(version) (\(build))"
+        case let (version?, nil):
+            return version
+        case let (nil, build?):
+            return build
+        case (nil, nil):
+            return "Unknown"
+        }
+    }
+}
+
+private struct ADBTVOpenSourceNoticesView: View {
+    var body: some View {
+        ScrollView {
+            Text(ADBTVOpenSourceNotices.text)
+                .font(.footnote.monospaced())
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+        }
+        .navigationTitle("Open Source Licenses")
+#if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
+    }
 }
 
 private struct PairDeviceView: View {

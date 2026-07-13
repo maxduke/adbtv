@@ -37,7 +37,10 @@ let package = Package(
         ),
         .target(
             name: "ADBTVApp",
-            dependencies: ["ADBClientCore"]
+            dependencies: ["ADBClientCore"],
+            resources: [
+                .copy("Resources/OpenSourceNotices.txt")
+            ]
         ),
         .testTarget(
             name: "ADBClientCoreTests",
