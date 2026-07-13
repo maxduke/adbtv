@@ -41,6 +41,7 @@ Implemented so far:
 - package preparation and validation before opening the Android TV connection;
 - single-APK install orchestration through the native ADB client;
 - live URL download and acknowledged APK transfer progress with byte counts in the install UI;
+- lazy ADB sync framing with at most one 1 MiB transfer batch beyond the selected APK in memory;
 - explicit APK-install cancellation with a recoverable status and same-source retry;
 - checked remote staging and cleanup with cleanup failures preserved in technical diagnostics;
 - single active install or remote operation, bound to its originating device until completion or cancellation;

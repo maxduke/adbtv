@@ -255,6 +255,43 @@ final class ADBDeviceSessionTests: XCTestCase {
         XCTAssertEqual(writePackets[1].payload, try ADBSyncFrame.quit().encoded())
     }
 
+    func testPushFileCapsBatchesWhenPeerAdvertisesOversizedMaxData() async throws {
+        let remotePath = try ADBRemotePath("/data/local/tmp/adbtv/large.apk")
+        let contents = Array(repeating: UInt8(9), count: 1280 * 1024)
+        let plan = try ADBSyncPushPlan(remotePath: remotePath, totalByteCount: contents.count)
+        let syncBytes = try plan.encode(contents: contents).encodedBytes()
+        let maximumBatchByteCount = 1024 * 1024
+        let expectedTransferWriteCount = syncBytes.chunks(
+            maxByteCount: maximumBatchByteCount
+        ).count
+        let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
+            writeChunkCount: expectedTransferWriteCount,
+            responsePayload: ADBSyncFrame(id: .okay, value: 0).encoded(),
+            coalesceResponseWithFinalWriteAcknowledgement: true
+        ))
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: 2 * 1024 * 1024))),
+            transport: transport
+        )
+
+        let events = try await session.pushFile(contents: contents, plan: plan)
+        let sentChunks = await transport.sentChunks()
+        let sentPackets = try sentChunks.map { try $0.decodedPacket() }
+        let transferWrites = sentPackets.filter { $0.command == .write }.dropLast()
+
+        XCTAssertEqual(transferWrites.count, expectedTransferWriteCount)
+        XCTAssertTrue(transferWrites.allSatisfy { $0.payload.count <= maximumBatchByteCount })
+        XCTAssertEqual(transferWrites.flatMap(\.payload), syncBytes)
+        XCTAssertEqual(events.last, .completed)
+        XCTAssertEqual(
+            events.filter { event in
+                if case .progress = event { return true }
+                return false
+            }.count,
+            contents.count / ADBSyncFrame.maxDataByteCount
+        )
+    }
+
     func testTransportSessionOutputExtractsConnectedDeviceAndFinishedShellOutput() throws {
         let connectedOutput = try ADBTransportSessionOutput(driverOutput: ADBClientDriverOutput(
             actions: [

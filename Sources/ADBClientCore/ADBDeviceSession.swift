@@ -58,13 +58,17 @@ public struct ADBDeviceSession: Sendable {
         let localID = try startOutput.startedStreamLocalID(service: "sync:")
         try await waitForStreamReady(localID: localID, service: "sync:")
 
-        let encoding = try plan.encode(contents: contents)
         var events: [ADBSyncPushEvent] = []
         let maxPayloadByteCount = try streamWritePayloadByteCount()
+        var batcher = try ADBSyncPushBatcher(
+            plan: plan,
+            contents: contents,
+            maxByteCount: maxPayloadByteCount
+        )
         var responseDecoder = ADBSyncResponseDecoder()
         var bufferedResponse: ADBSyncResponse?
 
-        for batch in try encoding.writeBatches(maxByteCount: maxPayloadByteCount) {
+        while let batch = try batcher.next() {
             _ = try await transportSession.writeStream(localID: localID, payload: batch.payload)
             let outputs = try await waitForStreamWritable(localID: localID)
             for output in outputs where bufferedResponse == nil {
@@ -104,7 +108,7 @@ public struct ADBDeviceSession: Sendable {
             throw ADBDeviceSessionError.invalidMaxData(maxData)
         }
 
-        return Int(maxData)
+        return min(Int(maxData), ADBSyncPushBatcher.maximumBatchByteCount)
     }
 
     private mutating func waitForStreamReady(localID: UInt32, service: String) async throws {
@@ -215,49 +219,109 @@ private struct ADBSyncWriteBatch: Sendable {
     var completedEvents: [ADBSyncPushEvent]
 }
 
-private extension ADBSyncPushEncoding {
-    func writeBatches(maxByteCount: Int) throws -> [ADBSyncWriteBatch] {
-        guard maxByteCount > 0 else {
-            return []
+private struct ADBSyncPushBatcher: Sendable {
+    static let maximumBatchByteCount = 1024 * 1024
+
+    private enum Stage: Sendable {
+        case send
+        case data(offset: Int)
+        case done
+        case finished
+    }
+
+    private let plan: ADBSyncPushPlan
+    private let contents: [UInt8]
+    private let maxByteCount: Int
+    private var stage: Stage
+    private var currentFrameBytes: [UInt8]?
+    private var currentFrameOffset: Int
+    private var currentEvent: ADBSyncPushEvent?
+
+    init(plan: ADBSyncPushPlan, contents: [UInt8], maxByteCount: Int) throws {
+        let expectedTotal = plan.totalByteCount ?? contents.count
+        guard expectedTotal == contents.count else {
+            throw ADBSyncPushPlanError.totalByteCountMismatch(
+                expected: expectedTotal,
+                actual: contents.count
+            )
         }
 
-        var batches: [ADBSyncWriteBatch] = []
+        self.plan = plan
+        self.contents = contents
+        self.maxByteCount = maxByteCount
+        self.stage = .send
+        self.currentFrameBytes = nil
+        self.currentFrameOffset = 0
+        self.currentEvent = nil
+    }
+
+    mutating func next() throws -> ADBSyncWriteBatch? {
         var payload: [UInt8] = []
+        payload.reserveCapacity(maxByteCount)
         var completedEvents: [ADBSyncPushEvent] = []
 
-        for (frame, event) in zip(frames, events) {
-            let encodedFrame = try frame.encoded()
-            var offset = 0
+        while payload.count < maxByteCount {
+            if currentFrameBytes == nil {
+                try loadNextFrame()
+            }
+            guard let currentFrameBytes else {
+                break
+            }
 
-            while offset < encodedFrame.count {
-                let availableByteCount = maxByteCount - payload.count
-                let copiedByteCount = min(availableByteCount, encodedFrame.count - offset)
-                payload.append(contentsOf: encodedFrame[offset ..< offset + copiedByteCount])
-                offset += copiedByteCount
+            let availableByteCount = maxByteCount - payload.count
+            let remainingFrameByteCount = currentFrameBytes.count - currentFrameOffset
+            let copiedByteCount = min(availableByteCount, remainingFrameByteCount)
+            let endOffset = currentFrameOffset + copiedByteCount
+            payload.append(contentsOf: currentFrameBytes[currentFrameOffset ..< endOffset])
+            currentFrameOffset = endOffset
 
-                if offset == encodedFrame.count {
-                    completedEvents.append(event)
+            if currentFrameOffset == currentFrameBytes.count {
+                if let currentEvent {
+                    completedEvents.append(currentEvent)
                 }
-
-                if payload.count == maxByteCount {
-                    batches.append(ADBSyncWriteBatch(
-                        payload: payload,
-                        completedEvents: completedEvents
-                    ))
-                    payload = []
-                    completedEvents = []
-                }
+                self.currentFrameBytes = nil
+                currentFrameOffset = 0
+                currentEvent = nil
             }
         }
 
-        if !payload.isEmpty {
-            batches.append(ADBSyncWriteBatch(
-                payload: payload,
-                completedEvents: completedEvents
-            ))
+        guard !payload.isEmpty else {
+            return nil
+        }
+        return ADBSyncWriteBatch(payload: payload, completedEvents: completedEvents)
+    }
+
+    private mutating func loadNextFrame() throws {
+        let frame: ADBSyncFrame
+        switch stage {
+        case .send:
+            frame = try .sendV1(path: plan.remotePath, mode: plan.mode)
+            currentEvent = .started(
+                remotePath: plan.remotePath,
+                totalByteCount: contents.count
+            )
+            stage = contents.isEmpty ? .done : .data(offset: 0)
+        case .data(let offset):
+            let endOffset = min(offset + ADBSyncFrame.maxDataByteCount, contents.count)
+            frame = try .data(Array(contents[offset ..< endOffset]))
+            currentEvent = .progress(
+                sentByteCount: endOffset,
+                totalByteCount: contents.count
+            )
+            stage = endOffset == contents.count ? .done : .data(offset: endOffset)
+        case .done:
+            frame = .done(modificationTime: plan.modificationTime)
+            currentEvent = .finishedSending(
+                sentByteCount: contents.count,
+                totalByteCount: contents.count
+            )
+            stage = .finished
+        case .finished:
+            return
         }
 
-        return batches
+        currentFrameBytes = try frame.encoded()
+        currentFrameOffset = 0
     }
 }
 

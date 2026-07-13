@@ -67,6 +67,7 @@ APK Installation can expand quickly: single APK, split APKs, install sessions, p
 - Model installation as phases: download, validate, transfer, install, result.
 - Report ordered byte progress for URL download and ADB transfer, with indeterminate download progress when the server does not advertise a length.
 - Limit both URL and Files packages to 512 MiB before retaining them in memory.
+- Generate ADB sync frames lazily and cap transport batches at 1 MiB so transfer framing does not duplicate the full package in memory.
 - Download and structurally validate the package before opening the ADB connection.
 - Reject non-success HTTP responses and clearly non-package text, JSON, or XML content types before device work.
 
