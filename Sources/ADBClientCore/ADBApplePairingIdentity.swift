@@ -65,10 +65,11 @@ public extension ADBAppleAuthenticationIdentity {
     }
 
     static func importedIdentity(from value: Any) throws -> SecIdentity {
-        guard let identity = value as? SecIdentity else {
+        let object = value as AnyObject
+        guard CFGetTypeID(object) == SecIdentityGetTypeID() else {
             throw ADBApplePairingIdentityError.invalidImportedIdentity
         }
-        return identity
+        return unsafeBitCast(object, to: SecIdentity.self)
     }
 
     private static func generatePKCS12(privateKeyDER: [UInt8]) throws -> [UInt8] {

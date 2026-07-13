@@ -106,10 +106,10 @@ public struct ADBAppleAuthenticationIdentityStore: Sendable {
     }
 
     func privateKey(fromKeychainResult result: CFTypeRef?) throws -> SecKey {
-        guard let privateKey = result as? SecKey else {
+        guard let result, CFGetTypeID(result) == SecKeyGetTypeID() else {
             throw ADBAppleAuthenticationIdentityError.invalidKeychainItem
         }
-        return privateKey
+        return unsafeBitCast(result, to: SecKey.self)
     }
 
     public func createIdentity() throws -> ADBAppleAuthenticationIdentity {
