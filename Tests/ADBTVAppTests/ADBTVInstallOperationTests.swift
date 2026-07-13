@@ -38,9 +38,9 @@ final class ADBTVInstallOperationTests: XCTestCase {
 
         XCTAssertEqual(report.result, .success)
         XCTAssertEqual(connection.installedContents, [contents])
-        XCTAssertEqual(connection.installedPlans.map(\.remoteAPKPath.rawValue), [
-            "/data/local/tmp/adbtv/app.apk"
-        ])
+        let installedPath = try XCTUnwrap(connection.installedPlans.first?.remoteAPKPath.rawValue)
+        XCTAssertTrue(installedPath.hasPrefix("/data/local/tmp/adbtv/"))
+        XCTAssertTrue(installedPath.hasSuffix(".apk"))
         XCTAssertEqual(connection.modificationTimes, [123])
         XCTAssertEqual(streamedEvents, [
             .installer(.phaseStarted(.validatePackage)),
@@ -90,9 +90,9 @@ final class ADBTVInstallOperationTests: XCTestCase {
 
         XCTAssertEqual(report.result, .success)
         XCTAssertEqual(connection.installedContents, [contents])
-        XCTAssertEqual(connection.installedPlans.map(\.remoteAPKPath.rawValue), [
-            "/data/local/tmp/adbtv/Remote_App.apk"
-        ])
+        let installedPath = try XCTUnwrap(connection.installedPlans.first?.remoteAPKPath.rawValue)
+        XCTAssertTrue(installedPath.hasPrefix("/data/local/tmp/adbtv/"))
+        XCTAssertTrue(installedPath.hasSuffix(".apk"))
         XCTAssertEqual(
             connection.installedPlans.map(\.package.byteCount),
             [Optional(Int64(contents.count))]

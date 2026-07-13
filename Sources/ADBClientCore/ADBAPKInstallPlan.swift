@@ -19,10 +19,12 @@ public struct ADBAPKInstallPlan: Equatable, Sendable {
         fileName: String,
         byteCount: Int64? = nil,
         remoteDirectory: ADBRemotePath = ADBRemotePath.temporaryInstallDirectory,
+        stagingIdentifier: UUID = UUID(),
         options: ADBAPKInstallOptions = ADBAPKInstallOptions()
     ) throws -> ADBAPKInstallPlan {
         let package = try ADBInstallPackage(fileName: fileName, byteCount: byteCount)
-        let remotePath = try remoteDirectory.appendingPathComponent(package.remoteFileName)
+        let remoteFileName = stagingIdentifier.uuidString.lowercased() + ".apk"
+        let remotePath = try remoteDirectory.appendingPathComponent(remoteFileName)
         return ADBAPKInstallPlan(package: package, remoteAPKPath: remotePath, options: options)
     }
 
@@ -32,7 +34,7 @@ public struct ADBAPKInstallPlan: Equatable, Sendable {
 
     public func prepareRemoteDirectoryShellCommand() throws -> ADBShellCommand {
         try ADBShellCommand(
-            "mkdir -p \(remoteAPKPath.parentDirectory.shellEscaped) && rm -f \(remoteAPKPath.shellEscaped)"
+            "mkdir -p \(remoteAPKPath.parentDirectory.shellEscaped) && \(verifiedRemovalShellCommand)"
         )
     }
 
@@ -45,11 +47,15 @@ public struct ADBAPKInstallPlan: Equatable, Sendable {
     }
 
     public func cleanupShellCommand() throws -> ADBShellCommand {
-        try ADBShellCommand("rm -f \(remoteAPKPath.shellEscaped)")
+        try ADBShellCommand(verifiedRemovalShellCommand)
     }
 
     public func cleanupShellInvocation() throws -> ADBCheckedShellInvocation {
         try ADBCheckedShellInvocation(command: cleanupShellCommand())
+    }
+
+    private var verifiedRemovalShellCommand: String {
+        "rm -f \(remoteAPKPath.shellEscaped) && test ! -e \(remoteAPKPath.shellEscaped)"
     }
 }
 
@@ -78,14 +84,6 @@ public struct ADBInstallPackage: Equatable, Sendable {
         self.byteCount = byteCount
     }
 
-    public var remoteFileName: String {
-        let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
-        let sanitized = String(fileName.map { character in
-            allowed.contains(character) ? character : "_"
-        })
-
-        return sanitized.isEmpty ? "package.apk" : sanitized
-    }
 }
 
 public enum ADBInstallPackageError: Error, Equatable, Sendable {

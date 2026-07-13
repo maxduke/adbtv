@@ -734,15 +734,18 @@ public struct ADBTVInstallDraft: Equatable, Sendable {
     }
 
     public var canBuildInstallPlan: Bool {
-        if selectedPackage != nil {
-            return (try? installPlan()) != nil
+        if let selectedPackage {
+            return (try? ADBInstallPackage(
+                fileName: selectedPackage.fileName,
+                byteCount: selectedPackage.byteCount
+            )) != nil
         }
 
         guard let urlFileName else {
             return false
         }
 
-        return (try? ADBAPKInstallPlan.singleAPK(fileName: urlFileName)) != nil
+        return (try? ADBInstallPackage(fileName: urlFileName)) != nil
     }
 
     public func installPlan() throws -> ADBAPKInstallPlan {

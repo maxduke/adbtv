@@ -1,16 +1,20 @@
+import Foundation
 import XCTest
 @testable import ADBClientCore
 
 final class ADBAPKInstallPlanTests: XCTestCase {
+    private let stagingIdentifier = UUID(uuidString: "01234567-89AB-CDEF-0123-456789ABCDEF")!
+
     func testSingleAPKPlanBuildsRemotePathAndCommands() throws {
+        let expectedPath = "/data/local/tmp/adbtv/01234567-89ab-cdef-0123-456789abcdef.apk"
         let plan = try ADBAPKInstallPlan.singleAPK(
             fileName: "Example App.apk",
-            byteCount: 42
+            byteCount: 42,
+            stagingIdentifier: stagingIdentifier
         )
 
         XCTAssertEqual(plan.package, try ADBInstallPackage(fileName: "Example App.apk", byteCount: 42))
-        XCTAssertEqual(plan.package.remoteFileName, "Example_App.apk")
-        XCTAssertEqual(plan.remoteAPKPath.rawValue, "/data/local/tmp/adbtv/Example_App.apk")
+        XCTAssertEqual(plan.remoteAPKPath.rawValue, expectedPath)
         XCTAssertEqual(plan.phases, [
             .validatePackage,
             .prepareRemoteDirectory,
@@ -20,34 +24,45 @@ final class ADBAPKInstallPlanTests: XCTestCase {
         ])
         XCTAssertEqual(
             try plan.prepareRemoteDirectoryShellCommand().rawValue,
-            "mkdir -p '/data/local/tmp/adbtv' && rm -f '/data/local/tmp/adbtv/Example_App.apk'"
+            "mkdir -p '/data/local/tmp/adbtv' && rm -f '\(expectedPath)' && test ! -e '\(expectedPath)'"
         )
         XCTAssertEqual(
             try plan.installShellCommand().rawValue,
-            "pm install -r '/data/local/tmp/adbtv/Example_App.apk'"
+            "pm install -r '\(expectedPath)'"
         )
         XCTAssertEqual(
             try plan.cleanupShellCommand().rawValue,
-            "rm -f '/data/local/tmp/adbtv/Example_App.apk'"
+            "rm -f '\(expectedPath)' && test ! -e '\(expectedPath)'"
         )
+    }
+
+    func testSingleAPKPlanUsesUniqueStagingPaths() throws {
+        let first = try ADBAPKInstallPlan.singleAPK(fileName: "app.apk")
+        let second = try ADBAPKInstallPlan.singleAPK(fileName: "app.apk")
+
+        XCTAssertNotEqual(first.remoteAPKPath, second.remoteAPKPath)
+        XCTAssertTrue(first.remoteAPKPath.rawValue.hasPrefix("/data/local/tmp/adbtv/"))
+        XCTAssertTrue(first.remoteAPKPath.rawValue.hasSuffix(".apk"))
+        XCTAssertEqual(first.package.fileName, "app.apk")
     }
 
     func testInstallCommandCanOmitReplaceOption() throws {
         let plan = try ADBAPKInstallPlan.singleAPK(
             fileName: "app.apk",
+            stagingIdentifier: stagingIdentifier,
             options: ADBAPKInstallOptions(replaceExisting: false)
         )
 
         XCTAssertEqual(
             try plan.installShellCommand().rawValue,
-            "pm install '/data/local/tmp/adbtv/app.apk'"
+            "pm install '/data/local/tmp/adbtv/01234567-89ab-cdef-0123-456789abcdef.apk'"
         )
     }
 
-    func testInstallPackageAcceptsUppercaseAPKExtension() throws {
+    func testInstallPackagePreservesUppercaseAPKExtension() throws {
         let package = try ADBInstallPackage(fileName: "TV.APP.APK")
 
-        XCTAssertEqual(package.remoteFileName, "TV.APP.APK")
+        XCTAssertEqual(package.fileName, "TV.APP.APK")
     }
 
     func testRemotePathShellEscapesSingleQuotes() throws {

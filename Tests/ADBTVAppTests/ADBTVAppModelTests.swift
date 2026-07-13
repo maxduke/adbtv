@@ -23,7 +23,9 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertTrue(draft.canBuildInstallPlan)
         XCTAssertEqual(plan.package.fileName, "Example App.apk")
         XCTAssertEqual(plan.package.byteCount, 42)
-        XCTAssertEqual(plan.remoteAPKPath.rawValue, "/data/local/tmp/adbtv/Example_App.apk")
+        XCTAssertTrue(plan.remoteAPKPath.rawValue.hasPrefix("/data/local/tmp/adbtv/"))
+        XCTAssertTrue(plan.remoteAPKPath.rawValue.hasSuffix(".apk"))
+        XCTAssertNotEqual(plan.remoteAPKPath.rawValue, "/data/local/tmp/adbtv/Example_App.apk")
     }
 
     func testPackageDraftRejectsMissingAndNonAPKPackages() {
