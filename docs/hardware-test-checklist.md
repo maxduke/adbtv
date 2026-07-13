@@ -26,6 +26,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Cold-launch in light and dark appearance and confirm the launch screen transitions without a contrasting flash.
 - [ ] Launch on portrait iPhone and iPad layouts without clipped or overlapping controls.
 - [ ] Confirm camera and local-network permission text identifies why access is needed.
+- [ ] Open **About**, confirm the candidate version and build, and open the bundled open-source notices.
 
 ## Pairing Code
 

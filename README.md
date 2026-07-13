@@ -67,6 +67,7 @@ Implemented so far:
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - unsigned IPA packaging in GitHub Actions;
+- packaged MIT and BoringSSL license notices with an in-app About surface;
 - repository-owned app icon and accent-color assets with packaged-product validation;
 - adaptive system launch-screen configuration for iPhone and iPad.
 
@@ -145,3 +146,6 @@ ASCII remote text uses Android's built-in `input text` command with checked exit
 ## License
 
 ADB TV is available under the [MIT License](./LICENSE).
+The app bundles the exact project and BoringSSL terms listed in
+[OpenSourceNotices.txt](./Sources/ADBTVApp/Resources/OpenSourceNotices.txt), available from
+the **About** screen in every packaged build.

@@ -51,6 +51,7 @@ APP_ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimar
 MARKETING_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST_PATH")"
 BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$INFO_PLIST_PATH")"
 INPUT_HELPER_APK="$APP_PATH/ADBTVInput.apk"
+OPEN_SOURCE_NOTICES="$(/usr/bin/find "$APP_PATH" -type f -name OpenSourceNotices.txt -print -quit)"
 APK_TYPE_IDENTIFIER="$(/usr/libexec/PlistBuddy -c 'Print :UTImportedTypeDeclarations:0:UTTypeIdentifier' "$INFO_PLIST_PATH")"
 APK_TYPE_EXTENSION="$(/usr/libexec/PlistBuddy -c 'Print :UTImportedTypeDeclarations:0:UTTypeTagSpecification:public.filename-extension:0' "$INFO_PLIST_PATH")"
 if ! /usr/libexec/PlistBuddy -c 'Print :UILaunchScreen' "$INFO_PLIST_PATH" >/dev/null; then
@@ -69,8 +70,16 @@ if [[ "$PAIRING_SERVICE" != '_adb-tls-pairing._tcp' \
     || -z "$MARKETING_VERSION" \
     || -z "$BUILD_VERSION" \
     || ! -f "$INPUT_HELPER_APK" \
+    || -z "$OPEN_SOURCE_NOTICES" \
+    || ! -f "$OPEN_SOURCE_NOTICES" \
     || ! -f "$APP_PATH/Assets.car" ]]; then
   echo "Built app has invalid discovery, permission, APK/input-helper, HTTP, or app icon metadata" >&2
+  exit 1
+fi
+if ! /usr/bin/grep -q 'Copyright (c) 2026 maxduke' "$OPEN_SOURCE_NOTICES" \
+    || ! /usr/bin/grep -q 'BoringSSL SwiftPM 0.41.0' "$OPEN_SOURCE_NOTICES" \
+    || ! /usr/bin/grep -q 'Apache License' "$OPEN_SOURCE_NOTICES"; then
+  echo "Built app has incomplete open source notices" >&2
   exit 1
 fi
 if [[ -n "$EXPECTED_MARKETING_VERSION" \
