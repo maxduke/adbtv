@@ -156,7 +156,7 @@ import Dispatch
 @preconcurrency import Network
 
 public final class ADBBonjourServiceBrowser: @unchecked Sendable {
-    public static let localDomain = "local."
+    public static let browseDomain: String? = nil
 
     public typealias UpdateHandler = @MainActor ([ADBDiscoveredService]) -> Void
     public typealias StateHandler = @MainActor (ADBBonjourDiscoveryBrowserState) -> Void
@@ -188,7 +188,7 @@ public final class ADBBonjourServiceBrowser: @unchecked Sendable {
         browsers = serviceKinds.map { serviceKind in
             let descriptor = NWBrowser.Descriptor.bonjour(
                 type: serviceKind.bonjourType,
-                domain: Self.localDomain
+                domain: Self.browseDomain
             )
             let browser = NWBrowser(for: descriptor, using: parameters)
             browser.browseResultsChangedHandler = { [weak self] results, _ in

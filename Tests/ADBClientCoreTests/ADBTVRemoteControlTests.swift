@@ -15,6 +15,15 @@ final class ADBTVRemoteControlTests: XCTestCase {
         XCTAssertEqual(ADBTVRemoteAction.volumeUp.keyEvent, .volumeUp)
         XCTAssertEqual(ADBTVRemoteAction.volumeDown.keyEvent, .volumeDown)
         XCTAssertEqual(ADBTVRemoteAction.power.keyEvent, .power)
+        XCTAssertEqual(ADBTVRemoteAction.mediaPrevious.keyEvent, .mediaPrevious)
+        XCTAssertEqual(ADBTVRemoteAction.mediaRewind.keyEvent, .mediaRewind)
+        XCTAssertEqual(ADBTVRemoteAction.mediaPlayPause.keyEvent, .mediaPlayPause)
+        XCTAssertEqual(ADBTVRemoteAction.mediaFastForward.keyEvent, .mediaFastForward)
+        XCTAssertEqual(ADBTVRemoteAction.mediaNext.keyEvent, .mediaNext)
+        XCTAssertEqual(ADBTVRemoteAction.mediaStop.keyEvent, .mediaStop)
+        XCTAssertEqual(ADBTVRemoteAction.enter.keyEvent, .enter)
+        XCTAssertEqual(ADBTVRemoteAction.delete.keyEvent, .delete)
+        XCTAssertEqual(ADBTVRemoteAction.tab.keyEvent, .tab)
     }
 
     func testKeyEventBuildsNumericInputCommand() throws {

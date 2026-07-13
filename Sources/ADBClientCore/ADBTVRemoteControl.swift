@@ -49,6 +49,15 @@ public enum ADBTVRemoteAction: CaseIterable, Equatable, Sendable {
     case volumeUp
     case volumeDown
     case power
+    case mediaPrevious
+    case mediaRewind
+    case mediaPlayPause
+    case mediaFastForward
+    case mediaNext
+    case mediaStop
+    case enter
+    case delete
+    case tab
 
     public var keyEvent: ADBTVRemoteKeyEvent {
         switch self {
@@ -76,6 +85,24 @@ public enum ADBTVRemoteAction: CaseIterable, Equatable, Sendable {
             return .volumeDown
         case .power:
             return .power
+        case .mediaPrevious:
+            return .mediaPrevious
+        case .mediaRewind:
+            return .mediaRewind
+        case .mediaPlayPause:
+            return .mediaPlayPause
+        case .mediaFastForward:
+            return .mediaFastForward
+        case .mediaNext:
+            return .mediaNext
+        case .mediaStop:
+            return .mediaStop
+        case .enter:
+            return .enter
+        case .delete:
+            return .delete
+        case .tab:
+            return .tab
         }
     }
 
@@ -99,7 +126,16 @@ public enum ADBTVRemoteKeyEvent: Int, Equatable, Sendable {
     case volumeUp = 24
     case volumeDown = 25
     case power = 26
+    case tab = 61
+    case enter = 66
+    case delete = 67
     case menu = 82
+    case mediaPlayPause = 85
+    case mediaStop = 86
+    case mediaNext = 87
+    case mediaPrevious = 88
+    case mediaRewind = 89
+    case mediaFastForward = 90
     case settings = 176
 
     public func shellCommand() throws -> ADBShellCommand {

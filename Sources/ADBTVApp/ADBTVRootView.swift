@@ -2111,6 +2111,10 @@ private struct RemoteActionsPanel: View {
 
             Divider()
 
+            mediaControls
+
+            Divider()
+
             VStack(alignment: .leading, spacing: 8) {
                 Text("Text Input")
                     .font(.headline)
@@ -2189,6 +2193,63 @@ private struct RemoteActionsPanel: View {
 
     private var controlBackground: Color {
         Color.secondary.opacity(0.14)
+    }
+
+    private var mediaControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Media Controls")
+                .font(.headline)
+
+            HStack(spacing: 0) {
+                mediaButton(.mediaPrevious, systemImage: "backward.end.fill", title: "Prev")
+                Spacer(minLength: 4)
+                mediaButton(.mediaRewind, systemImage: "backward.fill", title: "Rew")
+                Spacer(minLength: 4)
+                mediaButton(.mediaPlayPause, systemImage: "playpause.fill", title: "Play")
+                Spacer(minLength: 4)
+                mediaButton(.mediaFastForward, systemImage: "forward.fill", title: "FF")
+                Spacer(minLength: 4)
+                mediaButton(.mediaNext, systemImage: "forward.end.fill", title: "Next")
+            }
+
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                mediaButton(.mediaStop, systemImage: "stop.fill", title: "Stop", tint: .red)
+                Spacer(minLength: 12)
+                mediaButton(.enter, systemImage: "return", title: "Enter")
+                Spacer(minLength: 12)
+                mediaButton(.delete, systemImage: "delete.left.fill", title: "Delete")
+                Spacer(minLength: 12)
+                mediaButton(.tab, systemImage: "arrow.right.to.line", title: "Tab")
+                Spacer(minLength: 0)
+            }
+        }
+        .disabled(status.isSending || deviceOperationInProgress)
+    }
+
+    private func mediaButton(
+        _ action: ADBTVRemoteAction,
+        systemImage: String,
+        title: String,
+        tint: Color = .primary
+    ) -> some View {
+        Button {
+            send(action)
+        } label: {
+            VStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.title3.weight(.semibold))
+                    .frame(height: 24)
+                Text(title)
+                    .font(.caption2)
+                    .lineLimit(1)
+            }
+            .foregroundStyle(tint)
+            .frame(width: 54, height: 58)
+            .background(controlBackground, in: RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(action.displayTitle)
     }
 
     private func directionButton(
@@ -2335,6 +2396,24 @@ private extension ADBTVRemoteAction {
             return "Volume Down"
         case .power:
             return "Power"
+        case .mediaPrevious:
+            return "Previous"
+        case .mediaRewind:
+            return "Rewind"
+        case .mediaPlayPause:
+            return "Play or Pause"
+        case .mediaFastForward:
+            return "Fast Forward"
+        case .mediaNext:
+            return "Next"
+        case .mediaStop:
+            return "Stop"
+        case .enter:
+            return "Enter"
+        case .delete:
+            return "Delete"
+        case .tab:
+            return "Tab"
         }
     }
 }
