@@ -50,7 +50,7 @@ Implemented so far:
 - user-facing operation status plus technical diagnostic details;
 - bounded connection, pairing, remote-action, and APK-install operations with timeout diagnostics;
 - bounded QR pairing and post-pairing discovery so missing Bonjour advertisements cannot leave the pairing sheet stuck;
-- entitlement-aware Bonjour discovery and QR pairing that appear and start only when the running app has Apple's Multicast Networking entitlement;
+- capability-gated Bonjour discovery and QR pairing that are disabled in default self-signed builds;
 - AOSP-compatible TLS 1.3, TLS exporter, SPAKE2, and encrypted peer-info pairing stack;
 - self-signed TLS identity generation from the synchronized ADB RSA key;
 - manual Pairing Code app flow with separate pairing and connection ports, cancellation, diagnostics, and saved-device handoff;
@@ -128,7 +128,7 @@ To run from Xcode on an iPhone or iPad:
 3. Change `com.maxduke.adbtv` to a bundle identifier available to that team if necessary.
 4. Build and run on the connected device.
 
-The unsigned IPA supports manual IP and port entry without special Apple capabilities. Automatic discovery browses Android's non-IANA `_adb-tls-pairing._tcp` and `_adb-tls-connect._tcp` Bonjour service types. The app reads its effective code-signing entitlement at runtime and exposes Discovery and QR Pairing only when Apple's restricted [Multicast Networking entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.networking.multicast) is present. An approved developer account can add the capability under **Signing & Capabilities** and sign with a provisioning profile that authorizes it. Do not add the entitlement when self-signing: an entitlement absent from the provisioning profile makes the signature invalid.
+The unsigned IPA supports manual IP and port entry without special Apple capabilities. Automatic discovery browses Android's non-IANA `_adb-tls-pairing._tcp` and `_adb-tls-connect._tcp` Bonjour service types. Default builds set `ADBTV_BONJOUR_DISCOVERY_ENABLED=NO`, which hides Discovery and QR Pairing. An approved developer account can add Apple's restricted [Multicast Networking entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.networking.multicast), sign with a matching provisioning profile, and set that build setting to `YES`. Do not enable either part when self-signing: an entitlement absent from the provisioning profile makes the signature invalid.
 
 The ADB identity is a synchronizable, When Unlocked Keychain item. To reuse it across iOS devices, sign each build with the same team and bundle identifier, enable iCloud Keychain for the same Apple Account, and allow time for Keychain synchronization. Changing the team or bundle identifier creates a different Keychain access namespace and therefore a different ADB identity. Pairing still works without Keychain sync, but each isolated identity must be authorized separately by the Android TV.
 

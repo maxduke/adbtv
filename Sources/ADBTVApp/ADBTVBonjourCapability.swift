@@ -1,10 +1,7 @@
 import Foundation
-#if canImport(Security)
-import Security
-#endif
 
 struct ADBTVBonjourCapability: Equatable, Sendable {
-    static let multicastEntitlement = "com.apple.developer.networking.multicast"
+    static let configurationKey = "ADBTVBonjourDiscoveryEnabled"
 
     let isAvailable: Bool
     let automaticallyStartsDiscovery: Bool
@@ -22,28 +19,22 @@ struct ADBTVBonjourCapability: Equatable, Sendable {
         automaticallyStartsDiscovery: Bool? = nil
     ) -> ADBTVBonjourCapability {
         ADBTVBonjourCapability(
-            isAvailable: hasEffectiveMulticastEntitlement,
+            isAvailable: isEnabled(
+                configurationValue: Bundle.main.object(
+                    forInfoDictionaryKey: configurationKey
+                )
+            ),
             automaticallyStartsDiscovery: automaticallyStartsDiscovery
         )
     }
 
-    static func isEnabled(entitlementValue: Any?) -> Bool {
-        (entitlementValue as? Bool) == true
-    }
-
-    private static var hasEffectiveMulticastEntitlement: Bool {
-#if canImport(Security)
-        guard let task = SecTaskCreateFromSelf(nil),
-              let value = SecTaskCopyValueForEntitlement(
-                  task,
-                  multicastEntitlement as CFString,
-                  nil
-              ) else {
+    static func isEnabled(configurationValue: Any?) -> Bool {
+        if let value = configurationValue as? Bool {
+            return value
+        }
+        guard let value = configurationValue as? String else {
             return false
         }
-        return isEnabled(entitlementValue: value)
-#else
-        return false
-#endif
+        return ["1", "true", "yes"].contains(value.lowercased())
     }
 }

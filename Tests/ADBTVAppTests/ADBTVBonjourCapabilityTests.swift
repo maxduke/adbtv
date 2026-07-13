@@ -30,10 +30,12 @@ final class ADBTVBonjourCapabilityTests: XCTestCase {
         XCTAssertFalse(capability.automaticallyStartsDiscovery)
     }
 
-    func testEntitlementValueRequiresBooleanTrue() {
-        XCTAssertTrue(ADBTVBonjourCapability.isEnabled(entitlementValue: true))
-        XCTAssertFalse(ADBTVBonjourCapability.isEnabled(entitlementValue: false))
-        XCTAssertFalse(ADBTVBonjourCapability.isEnabled(entitlementValue: "true"))
-        XCTAssertFalse(ADBTVBonjourCapability.isEnabled(entitlementValue: nil))
+    func testConfigurationAcceptsBuildSettingAndBooleanValues() {
+        XCTAssertTrue(ADBTVBonjourCapability.isEnabled(configurationValue: true))
+        XCTAssertTrue(ADBTVBonjourCapability.isEnabled(configurationValue: "YES"))
+        XCTAssertTrue(ADBTVBonjourCapability.isEnabled(configurationValue: "true"))
+        XCTAssertFalse(ADBTVBonjourCapability.isEnabled(configurationValue: false))
+        XCTAssertFalse(ADBTVBonjourCapability.isEnabled(configurationValue: "NO"))
+        XCTAssertFalse(ADBTVBonjourCapability.isEnabled(configurationValue: nil))
     }
 }

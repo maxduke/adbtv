@@ -133,7 +133,7 @@ Side-effecting shell commands use an explicit exit-status trailer when they do n
 ## iOS Platform Constraints
 
 **Local network access**:
-Device Discovery needs local network permission and Bonjour service declarations. The app declares `_adb-tls-pairing._tcp` and `_adb-tls-connect._tcp`, but iOS also requires Apple's restricted Multicast Networking entitlement for these non-IANA types. The default self-signed release therefore gates Discovery and QR Pairing on the running task's effective entitlement and retains manual Pairing Code and host/port entry.
+Device Discovery needs local network permission and Bonjour service declarations. The app declares `_adb-tls-pairing._tcp` and `_adb-tls-connect._tcp`, but iOS also requires Apple's restricted Multicast Networking entitlement for these non-IANA types. The default self-signed release therefore disables Discovery and QR Pairing through an explicit build capability and retains manual Pairing Code and host/port entry.
 
 **HTTP install URLs**:
 Allowing HTTP Install URLs means the app needs an App Transport Security policy that permits the intended insecure local-network download cases. The UI should still show the source URL clearly before install because HTTP does not protect package integrity in transit.
