@@ -1781,7 +1781,10 @@ private struct DiscoveryStatusView: View {
 #if os(iOS)
     private var settingsButton: some View {
         Button {
-            openURL(URL(string: UIApplication.openSettingsURLString)!)
+            guard let settingsURL = URL(string: UIApplication.openSettingsURLString) else {
+                return
+            }
+            openURL(settingsURL)
         } label: {
             Label("Open Settings", systemImage: "gear")
         }

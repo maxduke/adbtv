@@ -52,6 +52,30 @@ final class ADBAppleAuthenticationIdentityTests: XCTestCase {
         )
     }
 
+    func testStoreRejectsUnexpectedKeychainResultType() {
+        let store = ADBAppleAuthenticationIdentityStore()
+
+        XCTAssertThrowsError(
+            try store.privateKey(fromKeychainResult: "not a key" as CFString)
+        ) { error in
+            XCTAssertEqual(
+                error as? ADBAppleAuthenticationIdentityError,
+                .invalidKeychainItem
+            )
+        }
+    }
+
+    func testPairingIdentityRejectsUnexpectedImportedValueType() {
+        XCTAssertThrowsError(
+            try ADBAppleAuthenticationIdentity.importedIdentity(from: "not an identity")
+        ) { error in
+            XCTAssertEqual(
+                error as? ADBApplePairingIdentityError,
+                .invalidImportedIdentity
+            )
+        }
+    }
+
     func testAuthenticationIdentityCreatesMatchingTLSIdentityAndPairingMaterial() throws {
         let authenticationIdentity = ADBAppleAuthenticationIdentity(
             privateKey: try makePrivateKey(),

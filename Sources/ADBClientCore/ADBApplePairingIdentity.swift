@@ -61,7 +61,14 @@ public extension ADBAppleAuthenticationIdentity {
             throw ADBApplePairingIdentityError.identityImportFailed(status)
         }
 
-        return identityValue as! SecIdentity
+        return try importedIdentity(from: identityValue)
+    }
+
+    static func importedIdentity(from value: Any) throws -> SecIdentity {
+        guard let identity = value as? SecIdentity else {
+            throw ADBApplePairingIdentityError.invalidImportedIdentity
+        }
+        return identity
     }
 
     private static func generatePKCS12(privateKeyDER: [UInt8]) throws -> [UInt8] {
@@ -140,6 +147,7 @@ public enum ADBApplePairingIdentityError: Error, Equatable, Sendable {
     case pkcs12GenerationFailed
     case invalidGeneratedCertificate
     case identityImportFailed(OSStatus)
+    case invalidImportedIdentity
     case networkIdentityCreationFailed
 }
 #endif

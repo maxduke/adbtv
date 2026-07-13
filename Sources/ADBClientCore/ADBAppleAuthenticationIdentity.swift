@@ -94,10 +94,7 @@ public struct ADBAppleAuthenticationIdentityStore: Sendable {
 
         switch status {
         case errSecSuccess:
-            guard let result else {
-                throw ADBAppleAuthenticationIdentityError.invalidKeychainItem
-            }
-            let privateKey = result as! SecKey
+            let privateKey = try privateKey(fromKeychainResult: result)
             return ADBAppleAuthenticationIdentity(privateKey: privateKey, publicKeyComment: publicKeyComment)
 
         case errSecItemNotFound:
@@ -106,6 +103,13 @@ public struct ADBAppleAuthenticationIdentityStore: Sendable {
         default:
             throw ADBAppleAuthenticationIdentityError.keyLookupFailed(status)
         }
+    }
+
+    func privateKey(fromKeychainResult result: CFTypeRef?) throws -> SecKey {
+        guard let privateKey = result as? SecKey else {
+            throw ADBAppleAuthenticationIdentityError.invalidKeychainItem
+        }
+        return privateKey
     }
 
     public func createIdentity() throws -> ADBAppleAuthenticationIdentity {
