@@ -2427,7 +2427,9 @@ private struct RemoteActionsPanel: View {
     var cancelRemoteOperation: () -> Void
     var installUnicodeInputHelper: () -> Void
 
-    @State private var isMediaControlsExpanded = false
+    @State private var isMediaControlsExpanded = ProcessInfo.processInfo.arguments.contains(
+        "--ui-media-expanded"
+    )
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {

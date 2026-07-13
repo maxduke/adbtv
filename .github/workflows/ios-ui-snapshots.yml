@@ -66,6 +66,12 @@ jobs:
                 "$output/$device_name-$appearance-remote-portrait.png"
               xcrun simctl terminate "$udid" com.maxduke.adbtv
 
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-media-expanded
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-remote-media-expanded-portrait.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
+
               xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-install
               sleep 2
               xcrun simctl io "$udid" screenshot \
