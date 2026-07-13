@@ -383,6 +383,41 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.installDraft.status, .cancelled)
     }
 
+    func testCancellingInstallKeepsOwnershipUntilCleanupFinishes() {
+        let first = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
+        let second = ADBTVDeviceSummary(displayName: "Bedroom", host: "192.168.1.51", port: 5555)
+        var model = ADBTVAppModel(devices: [first, second])
+        model.selectPackage(fileName: "app.apk", byteCount: 100)
+        XCTAssertTrue(model.startInstall(on: first.id))
+
+        XCTAssertTrue(model.beginCancellingInstall(on: first.id))
+        XCTAssertEqual(model.installDraft.status, .cancelling)
+        XCTAssertTrue(model.installDraft.status.isRunning)
+        XCTAssertFalse(model.installDraft.status.canCancel)
+        XCTAssertEqual(model.activeDeviceOperation, .install(deviceID: first.id))
+        XCTAssertFalse(model.selectDevice(id: second.id))
+        XCTAssertFalse(model.recordInstallEvent(
+            .installer(.transfer(.progress(sentByteCount: 100, totalByteCount: 100))),
+            on: first.id
+        ))
+        XCTAssertEqual(model.installDraft.status, .cancelling)
+
+        let cleanupFailure = DiagnosticDetail(
+            summary: "cleanup timed out",
+            context: ["phase": "cleanup"]
+        )
+        XCTAssertTrue(model.finishCancellingInstall(
+            cleanupFailure: cleanupFailure,
+            on: first.id
+        ))
+        XCTAssertEqual(
+            model.installDraft.status,
+            .cancelledWithCleanupFailure(cleanupFailure)
+        )
+        XCTAssertNil(model.activeDeviceOperation)
+        XCTAssertTrue(model.selectDevice(id: second.id))
+    }
+
     func testInstallOwnsItsTargetUntilMatchingCompletion() {
         let first = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
         let second = ADBTVDeviceSummary(displayName: "Bedroom", host: "192.168.1.51", port: 5555)

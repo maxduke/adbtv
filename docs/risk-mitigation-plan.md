@@ -68,6 +68,7 @@ APK Installation can expand quickly: single APK, split APKs, install sessions, p
 - Report ordered byte progress for URL download and ADB transfer, with indeterminate download progress when the server does not advertise a length.
 - Limit both URL and Files packages to 512 MiB before retaining them in memory.
 - Generate ADB sync frames lazily and cap transport batches at 1 MiB so transfer framing does not duplicate the full package in memory.
+- On cancellation or timeout after package preparation, close the active transport and use a bounded fresh connection to remove the exact staged path before releasing operation ownership.
 - Download and structurally validate the package before opening the ADB connection.
 - Reject non-success HTTP responses and clearly non-package text, JSON, or XML content types before device work.
 

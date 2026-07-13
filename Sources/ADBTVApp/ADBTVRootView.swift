@@ -854,8 +854,17 @@ public struct ADBTVRootView: View {
                         }
                     }
                 ))
+            } catch let error as ADBTVInstallCancellationError {
+                completion = .cancelled(
+                    cleanupFailure: error.cleanupError.map {
+                        Self.installCancellationCleanupDiagnosticDetail(
+                            cleanupError: $0,
+                            device: device
+                        )
+                    }
+                )
             } catch is CancellationError {
-                return
+                completion = .cancelled(cleanupFailure: nil)
             } catch {
                 completion = .failure(
                     userMessage: Self.installUserMessage(for: error),
@@ -863,13 +872,7 @@ public struct ADBTVRootView: View {
                 )
             }
 
-            guard !Task.isCancelled else {
-                return
-            }
             await MainActor.run {
-                guard !Task.isCancelled else {
-                    return
-                }
                 completeInstall(completion, on: device.id)
             }
         }
@@ -898,12 +901,13 @@ public struct ADBTVRootView: View {
     }
 
     private func cancelInstall() {
-        installTask?.cancel()
-        installTask = nil
         guard case .install(let deviceID) = model.activeDeviceOperation else {
             return
         }
-        model.cancelInstall(on: deviceID)
+        guard model.beginCancellingInstall(on: deviceID) else {
+            return
+        }
+        installTask?.cancel()
     }
 
     private static func installPackage(
@@ -912,19 +916,50 @@ public struct ADBTVRootView: View {
         eventHandler: @escaping ADBTVInstallEventHandler
     ) async throws -> ADBAPKInstallReport {
 #if canImport(Network) && canImport(Security)
-        return try await ADBTVOperationTimeoutPolicy.apkInstallation.run(operation: .apkInstallation) {
-            let operation = ADBTVInstallOperation()
-            let package = try await operation.prepareSelectedPackage(
-                from: installModel,
-                eventHandler: eventHandler
-            )
-            var connection = try await connectedDevice(for: device)
-            defer { connection.cancel() }
-            return try await operation.installPreparedPackage(
-                package,
-                using: &connection,
-                eventHandler: eventHandler
-            )
+        let planRecorder = ADBTVPreparedInstallPlanRecorder()
+        do {
+            return try await ADBTVOperationTimeoutPolicy.apkInstallation.run(operation: .apkInstallation) {
+                let operation = ADBTVInstallOperation()
+                let package = try await operation.prepareSelectedPackage(
+                    from: installModel,
+                    eventHandler: eventHandler
+                )
+                await planRecorder.record(package.plan)
+                var connection = try await connectedDevice(for: device)
+                defer { connection.cancel() }
+                return try await operation.installPreparedPackage(
+                    package,
+                    using: &connection,
+                    eventHandler: eventHandler
+                )
+            }
+        } catch {
+            let preparedPlan = await planRecorder.recordedPlan()
+            if Task.isCancelled {
+                let cleanupError: String?
+                if let preparedPlan {
+                    cleanupError = await cleanupStagedPackageAfterInterruption(
+                        plan: preparedPlan,
+                        device: device
+                    )
+                } else {
+                    cleanupError = nil
+                }
+                throw ADBTVInstallCancellationError(cleanupError: cleanupError)
+            }
+            if let timeoutError = error as? ADBTVOperationTimeoutError,
+               let preparedPlan {
+                if let cleanupError = await cleanupStagedPackageAfterInterruption(
+                    plan: preparedPlan,
+                    device: device
+                ) {
+                    throw ADBTVInstallTimeoutCleanupError(
+                        timeoutError: timeoutError,
+                        cleanupError: cleanupError
+                    )
+                }
+            }
+            throw error
         }
 #else
         throw ADBTVInstallOperationError.unsupportedPlatform
@@ -946,7 +981,51 @@ public struct ADBTVRootView: View {
                 diagnosticDetail: diagnosticDetail,
                 on: deviceID
             )
+        case .cancelled(let cleanupFailure):
+            model.finishCancellingInstall(
+                cleanupFailure: cleanupFailure,
+                on: deviceID
+            )
         }
+    }
+
+#if canImport(Network) && canImport(Security)
+    private static func cleanupStagedPackageAfterInterruption(
+        plan: ADBAPKInstallPlan,
+        device: ADBTVDeviceSummary
+    ) async -> String? {
+        await Task.detached { () -> String? in
+            do {
+                try await ADBTVOperationTimeoutPolicy.apkStagingCleanup.run(
+                    operation: .apkStagingCleanup
+                ) {
+                    var connection = try await connectedDevice(for: device)
+                    defer { connection.cancel() }
+                    try await ADBAPKStagingCleaner().cleanup(
+                        plan: plan,
+                        using: &connection
+                    )
+                }
+                return nil
+            } catch {
+                return String(describing: error)
+            }
+        }.value
+    }
+#endif
+
+    private static func installCancellationCleanupDiagnosticDetail(
+        cleanupError: String,
+        device: ADBTVDeviceSummary
+    ) -> DiagnosticDetail {
+        DiagnosticDetail(
+            summary: cleanupError,
+            context: [
+                "device": device.connectionDescription,
+                "operation": "cleanupCancelledAPK",
+                "phase": "cleanup"
+            ]
+        )
     }
 
     private static func installDiagnosticDetail(_ error: Error, device: ADBTVDeviceSummary) -> DiagnosticDetail {
@@ -962,14 +1041,25 @@ public struct ADBTVRootView: View {
         }
         context = operationDiagnosticContext(error: error, base: context)
 
+        if let recoveryError = error as? ADBTVInstallTimeoutCleanupError {
+            if case let .timedOut(operation, seconds) = recoveryError.timeoutError {
+                context["timedOperation"] = operation.rawValue
+                context["timeoutSeconds"] = String(seconds)
+            }
+            context["cleanupError"] = recoveryError.cleanupError
+        }
+
+        let summary = (error as? ADBTVInstallTimeoutCleanupError).map {
+            String(describing: $0.timeoutError)
+        } ?? String(describing: error)
         return DiagnosticDetail(
-            summary: String(describing: error),
+            summary: summary,
             context: context
         )
     }
 
     private static func installUserMessage(for error: Error) -> String {
-        if error is ADBTVOperationTimeoutError {
+        if error is ADBTVOperationTimeoutError || error is ADBTVInstallTimeoutCleanupError {
             return "APK installation timed out."
         }
         if error is ADBAPKValidationError {
@@ -1266,6 +1356,28 @@ private enum ADBTVManualDeviceError: Error {
 private enum InstallCompletion: Sendable {
     case success(ADBAPKInstallReport)
     case failure(userMessage: String, diagnosticDetail: DiagnosticDetail)
+    case cancelled(cleanupFailure: DiagnosticDetail?)
+}
+
+private struct ADBTVInstallCancellationError: Error, Sendable {
+    var cleanupError: String?
+}
+
+private struct ADBTVInstallTimeoutCleanupError: Error, Sendable {
+    var timeoutError: ADBTVOperationTimeoutError
+    var cleanupError: String
+}
+
+private actor ADBTVPreparedInstallPlanRecorder {
+    private var plan: ADBAPKInstallPlan?
+
+    func record(_ plan: ADBAPKInstallPlan) {
+        self.plan = plan
+    }
+
+    func recordedPlan() -> ADBAPKInstallPlan? {
+        plan
+    }
 }
 
 private enum RemoteCompletion: Sendable {
@@ -1890,7 +2002,7 @@ private struct APKInstallPanel: View {
                 HStack(spacing: 12) {
                     chooseButton
                     installButton
-                    if installDraft.status.isRunning {
+                    if installDraft.status.canCancel {
                         cancelButton
                     }
                 }
@@ -1900,7 +2012,7 @@ private struct APKInstallPanel: View {
                         chooseButton
                         installButton
                     }
-                    if installDraft.status.isRunning {
+                    if installDraft.status.canCancel {
                         cancelButton
                     }
                 }
@@ -2029,12 +2141,24 @@ private struct InstallStatusView: View {
                     .font(.footnote.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
+        case .cancelling:
+            VStack(alignment: .leading, spacing: 8) {
+                ProgressView()
+                Label("Cancelling and cleaning up", systemImage: "trash")
+                    .foregroundStyle(.secondary)
+            }
         case .succeeded:
             Label("Installed", systemImage: "checkmark.circle.fill")
                 .foregroundStyle(.green)
         case .cancelled:
             Label("Installation cancelled", systemImage: "xmark.circle")
                 .foregroundStyle(.secondary)
+        case .cancelledWithCleanupFailure(let diagnosticDetail):
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Installation cancelled, but device cleanup failed.", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
+            }
         case .failed(let userMessage, let diagnosticDetail):
             VStack(alignment: .leading, spacing: 8) {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")

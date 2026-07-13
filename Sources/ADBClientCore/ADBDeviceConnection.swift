@@ -259,6 +259,8 @@ public struct ADBDeviceConnection: Sendable {
     }
 }
 
+extension ADBDeviceConnection: ADBShellCommandRunningSession {}
+
 private struct ADBInitialConnectionFrame {
     static let maximumBufferedByteCount = 64 * 1024
 

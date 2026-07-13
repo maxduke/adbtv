@@ -253,6 +253,25 @@ final class ADBAPKInstallerTests: XCTestCase {
         XCTAssertEqual(session.commands.filter { $0 == cleanupCommand }.count, 1)
     }
 
+    func testStagingCleanerChecksRemoteRemovalExitStatus() async throws {
+        let plan = try ADBAPKInstallPlan.singleAPK(fileName: "app.apk")
+        let cleanupCommand = try plan.cleanupShellInvocation().shellCommand.rawValue
+        var session = RecordingAPKInstallSession(shellOutputs: [
+            cleanupCommand: checkedShellOutput("rm denied", exitCode: 1)
+        ])
+
+        do {
+            try await ADBAPKStagingCleaner().cleanup(plan: plan, using: &session)
+            XCTFail("Expected checked cleanup to fail.")
+        } catch let error as ADBCheckedShellInvocationError {
+            XCTAssertEqual(
+                error,
+                .commandFailed(exitCode: 1, output: "rm denied")
+            )
+        }
+        XCTAssertEqual(session.commands, [cleanupCommand])
+    }
+
     func testInstallRejectsPackageByteCountMismatchBeforeCommands() async throws {
         let plan = try ADBAPKInstallPlan.singleAPK(fileName: "app.apk", byteCount: 4)
         var session = RecordingAPKInstallSession()

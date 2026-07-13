@@ -14,6 +14,19 @@ public extension ADBAPKInstallRunningSession {
 
 extension ADBDeviceSession: ADBAPKInstallRunningSession {}
 
+public struct ADBAPKStagingCleaner: Sendable {
+    public init() {}
+
+    public func cleanup<Session: ADBShellCommandRunningSession>(
+        plan: ADBAPKInstallPlan,
+        using session: inout Session
+    ) async throws {
+        let invocation = try plan.cleanupShellInvocation()
+        let output = try await session.runShellCommand(invocation.shellCommand)
+        _ = try invocation.validatedOutput(from: output)
+    }
+}
+
 public struct ADBAPKInstaller: Sendable {
     public init() {}
 
@@ -170,9 +183,7 @@ public struct ADBAPKInstaller: Sendable {
         let cleanupStarted = ADBAPKInstallEvent.phaseStarted(.cleanup)
         events.append(cleanupStarted)
         await eventHandler(cleanupStarted)
-        let invocation = try plan.cleanupShellInvocation()
-        let output = try await session.runShellCommand(invocation.shellCommand)
-        _ = try invocation.validatedOutput(from: output)
+        try await ADBAPKStagingCleaner().cleanup(plan: plan, using: &session)
         let cleanupFinished = ADBAPKInstallEvent.phaseFinished(.cleanup)
         events.append(cleanupFinished)
         await eventHandler(cleanupFinished)

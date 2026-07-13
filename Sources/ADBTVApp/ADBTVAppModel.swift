@@ -143,7 +143,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
         on deviceID: ADBTVDeviceSummary.ID
     ) -> Bool {
         guard activeDeviceOperation == .install(deviceID: deviceID),
-              installDraft.status.isRunning else {
+              installDraft.status.acceptsProgressEvents else {
             return false
         }
 
@@ -202,13 +202,39 @@ public struct ADBTVAppModel: Equatable, Sendable {
     }
 
     @discardableResult
-    public mutating func cancelInstall(on deviceID: ADBTVDeviceSummary.ID) -> Bool {
-        guard activeDeviceOperation == .install(deviceID: deviceID) else {
+    public mutating func beginCancellingInstall(on deviceID: ADBTVDeviceSummary.ID) -> Bool {
+        guard activeDeviceOperation == .install(deviceID: deviceID),
+              installDraft.status.canCancel else {
+            return false
+        }
+        installDraft.status = .cancelling
+        return true
+    }
+
+    @discardableResult
+    public mutating func finishCancellingInstall(
+        cleanupFailure: DiagnosticDetail? = nil,
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .install(deviceID: deviceID),
+              installDraft.status == .cancelling else {
             return false
         }
         activeDeviceOperation = nil
-        installDraft.status = .cancelled
+        if let cleanupFailure {
+            installDraft.status = .cancelledWithCleanupFailure(cleanupFailure)
+        } else {
+            installDraft.status = .cancelled
+        }
         return true
+    }
+
+    @discardableResult
+    public mutating func cancelInstall(on deviceID: ADBTVDeviceSummary.ID) -> Bool {
+        guard beginCancellingInstall(on: deviceID) else {
+            return false
+        }
+        return finishCancellingInstall(on: deviceID)
     }
 
     public mutating func cancelActiveDeviceOperation() {
@@ -779,8 +805,10 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
     case running(ADBAPKInstallPhase)
     case downloading(receivedByteCount: Int64, totalByteCount: Int64?)
     case transferring(sentByteCount: Int, totalByteCount: Int)
+    case cancelling
     case succeeded
     case cancelled
+    case cancelledWithCleanupFailure(DiagnosticDetail)
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 
     public init(event: ADBAPKInstallEvent) {
@@ -828,11 +856,25 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
 
     public var isRunning: Bool {
         switch self {
-        case .running, .downloading, .transferring:
+        case .running, .downloading, .transferring, .cancelling:
             return true
-        case .idle, .ready, .succeeded, .cancelled, .failed:
+        case .idle, .ready, .succeeded, .cancelled, .cancelledWithCleanupFailure, .failed:
             return false
         }
+    }
+
+    public var canCancel: Bool {
+        switch self {
+        case .running, .downloading, .transferring:
+            return true
+        case .idle, .ready, .cancelling, .succeeded, .cancelled,
+             .cancelledWithCleanupFailure, .failed:
+            return false
+        }
+    }
+
+    fileprivate var acceptsProgressEvents: Bool {
+        canCancel
     }
 }
 

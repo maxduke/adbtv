@@ -85,6 +85,24 @@ final class ADBTVOperationTimeoutTests: XCTestCase {
             XCTFail("Expected ADBTVOperationTimeoutError, got \(error).")
         }
     }
+
+    func testStagingCleanupHasDedicatedBoundedTimeout() async {
+        let timeout = ADBTVOperationTimeout(
+            seconds: 45,
+            sleep: { _ in }
+        )
+
+        do {
+            try await timeout.waitUntilTimedOut(operation: .apkStagingCleanup)
+        } catch let error as ADBTVOperationTimeoutError {
+            XCTAssertEqual(
+                error,
+                .timedOut(operation: .apkStagingCleanup, seconds: 45)
+            )
+        } catch {
+            XCTFail("Expected ADBTVOperationTimeoutError, got \(error).")
+        }
+    }
 }
 
 private enum TestOperationError: Error, Equatable {
