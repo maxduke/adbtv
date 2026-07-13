@@ -60,6 +60,12 @@ jobs:
             for appearance in light dark; do
               xcrun simctl ui "$udid" appearance "$appearance"
 
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-library
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-library-self-signed-portrait.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
+
               xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview
               sleep 2
               xcrun simctl io "$udid" screenshot \

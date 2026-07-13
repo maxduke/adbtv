@@ -12,7 +12,13 @@ struct ADBTViOSApp: App {
     @ViewBuilder
     private var appRoot: some View {
 #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--ui-preview") {
+        if ProcessInfo.processInfo.arguments.contains("--ui-library") {
+            ADBTVRootView(
+                model: ADBTVAppModel(),
+                automaticallyStartsDiscovery: false,
+                bonjourDiscoveryAvailable: false
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-preview") {
             ADBTVRootView(
                 model: .preview,
                 automaticallyStartsDiscovery: false

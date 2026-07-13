@@ -12,7 +12,7 @@ public struct ADBTVRootView: View {
 #endif
 
     private let deviceStore: ADBTVDeviceStore
-    private let automaticallyStartsDiscovery: Bool
+    private let bonjourCapability: ADBTVBonjourCapability
 
     @State private var model: ADBTVAppModel
     @State private var isFileImporterPresented = false
@@ -35,13 +35,19 @@ public struct ADBTVRootView: View {
 
     public init(
         deviceStore: ADBTVDeviceStore = ADBTVDeviceStore(),
-        automaticallyStartsDiscovery: Bool = true
+        automaticallyStartsDiscovery: Bool? = nil,
+        bonjourDiscoveryAvailable: Bool? = nil
     ) {
         let loadResult = deviceStore.loadDevices()
         var initialModel = ADBTVAppModel(devices: loadResult.devices)
         _ = initialModel.selectDevice(id: nil)
         self.deviceStore = deviceStore
-        self.automaticallyStartsDiscovery = automaticallyStartsDiscovery
+        self.bonjourCapability = bonjourDiscoveryAvailable.map {
+            ADBTVBonjourCapability(
+                isAvailable: $0,
+                automaticallyStartsDiscovery: automaticallyStartsDiscovery
+            )
+        } ?? .current(automaticallyStartsDiscovery: automaticallyStartsDiscovery)
         self._model = State(initialValue: initialModel)
         self._devicePersistenceError = State(
             initialValue: Self.deviceLoadDiagnosticDetail(for: loadResult)
@@ -51,10 +57,16 @@ public struct ADBTVRootView: View {
     public init(
         model: ADBTVAppModel,
         deviceStore: ADBTVDeviceStore = ADBTVDeviceStore(),
-        automaticallyStartsDiscovery: Bool = true
+        automaticallyStartsDiscovery: Bool? = nil,
+        bonjourDiscoveryAvailable: Bool? = nil
     ) {
         self.deviceStore = deviceStore
-        self.automaticallyStartsDiscovery = automaticallyStartsDiscovery
+        self.bonjourCapability = bonjourDiscoveryAvailable.map {
+            ADBTVBonjourCapability(
+                isAvailable: $0,
+                automaticallyStartsDiscovery: automaticallyStartsDiscovery
+            )
+        } ?? .current(automaticallyStartsDiscovery: automaticallyStartsDiscovery)
         self._model = State(initialValue: model)
     }
 
@@ -80,15 +92,17 @@ public struct ADBTVRootView: View {
                     }
                 }
 
-                Section("Discovery") {
-                    DiscoveryContent(
-                        status: model.discoveryStatus,
-                        services: model.discoveredServices,
-                        canPair: model.activeDeviceOperation == nil
-                            && !deviceConnectionState.isConnecting,
-                        toggleDiscovery: toggleDiscovery,
-                        pairService: prepareDiscoveredPairing
-                    )
+                if bonjourCapability.isAvailable {
+                    Section("Discovery") {
+                        DiscoveryContent(
+                            status: model.discoveryStatus,
+                            services: model.discoveredServices,
+                            canPair: model.activeDeviceOperation == nil
+                                && !deviceConnectionState.isConnecting,
+                            toggleDiscovery: toggleDiscovery,
+                            pairService: prepareDiscoveredPairing
+                        )
+                    }
                 }
             }
             .navigationTitle("ADB TV")
@@ -103,10 +117,12 @@ public struct ADBTVRootView: View {
                         }
 
 #if os(iOS) && canImport(AVFoundation)
-                        Button {
-                            presentQRCodeScanner()
-                        } label: {
-                            Label("Scan Pairing QR Code", systemImage: "qrcode.viewfinder")
+                        if bonjourCapability.isAvailable {
+                            Button {
+                                presentQRCodeScanner()
+                            } label: {
+                                Label("Scan Pairing QR Code", systemImage: "qrcode.viewfinder")
+                            }
                         }
 #endif
 
@@ -294,7 +310,7 @@ public struct ADBTVRootView: View {
     private func handleScenePhase(_ phase: ScenePhase) {
         switch phase {
         case .active:
-            if (automaticallyStartsDiscovery
+            if (bonjourCapability.automaticallyStartsDiscovery
                 && automaticDiscoveryPolicy.shouldStartDiscovery(status: model.discoveryStatus))
                 || automaticDiscoveryPolicy.shouldResumeDiscovery(status: model.discoveryStatus)
                 || automaticDiscoveryPolicy.shouldRetryAuthorizationFailureAfterActivation(

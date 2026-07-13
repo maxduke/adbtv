@@ -1,6 +1,7 @@
 import ADBClientCore
 import Foundation
 import XCTest
+@testable import ADBTVApp
 
 final class ADBTVAppMetadataTests: XCTestCase {
     func testInfoPlistDeclaresRequiredNetworkAndCameraConfiguration() throws {
@@ -22,6 +23,10 @@ final class ADBTVAppMetadataTests: XCTestCase {
         XCTAssertEqual(
             propertyList["NSBonjourServices"] as? [String],
             ["_adb-tls-pairing._tcp", "_adb-tls-connect._tcp"]
+        )
+        XCTAssertEqual(
+            propertyList[ADBTVBonjourCapability.configurationKey] as? String,
+            "$(ADBTV_BONJOUR_DISCOVERY_ENABLED)"
         )
         XCTAssertFalse(try XCTUnwrap(propertyList["NSCameraUsageDescription"] as? String).isEmpty)
         XCTAssertFalse(try XCTUnwrap(propertyList["NSLocalNetworkUsageDescription"] as? String).isEmpty)
@@ -81,6 +86,10 @@ final class ADBTVAppMetadataTests: XCTestCase {
             encoding: .utf8
         )
         XCTAssertTrue(project.contains("ADBTVInput.apk in Resources"))
+        XCTAssertEqual(
+            project.components(separatedBy: "ADBTV_BONJOUR_DISCOVERY_ENABLED = NO;").count - 1,
+            2
+        )
     }
 
     private var packageRoot: URL {
