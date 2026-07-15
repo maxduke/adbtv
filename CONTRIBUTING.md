@@ -42,4 +42,7 @@ Protocol and state changes should include focused tests. Changes that affect pai
 - Preserve user-facing error messages plus copyable technical diagnostics.
 - Record any physical Android TV and iOS versions used for validation.
 
-By contributing, you agree that your contributions are licensed under the repository's MIT License.
+By contributing, you agree that your contributions are licensed under the
+[ADB TV Noncommercial Source License 1.0](./LICENSE). Contributors retain
+copyright in their contributions. Do not submit code that you cannot license
+under those terms.

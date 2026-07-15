@@ -76,10 +76,11 @@ if [[ "$PAIRING_SERVICE" != '_adb-tls-pairing._tcp' \
   echo "Built app has invalid discovery, permission, APK/input-helper, HTTP, or app icon metadata" >&2
   exit 1
 fi
-if ! /usr/bin/grep -q 'Copyright (c) 2026 maxduke' "$OPEN_SOURCE_NOTICES" \
+if ! /usr/bin/grep -q 'ADB TV Noncommercial Source License 1.0' "$OPEN_SOURCE_NOTICES" \
+    || ! /usr/bin/grep -q 'Copyright (c) 2026 maxduke' "$OPEN_SOURCE_NOTICES" \
     || ! /usr/bin/grep -q 'BoringSSL SwiftPM 0.41.0' "$OPEN_SOURCE_NOTICES" \
     || ! /usr/bin/grep -q 'Apache License' "$OPEN_SOURCE_NOTICES"; then
-  echo "Built app has incomplete open source notices" >&2
+  echo "Built app has incomplete legal notices" >&2
   exit 1
 fi
 if [[ -n "$EXPECTED_MARKETING_VERSION" \
