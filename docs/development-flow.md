@@ -89,3 +89,13 @@ The GitHub `main` branch requires:
 - no force-pushes or branch deletion.
 
 Unsigned IPA packaging remains a release and pull-request validation check, but it is not required for documentation-only changes because that workflow uses path filtering.
+
+## GitHub Actions Supply Chain
+
+Workflow actions are pinned to full upstream commit SHAs. Keep the adjacent major-version
+comment, such as `# v7`, so Dependabot can continue proposing readable updates. Before
+accepting an action update, verify that the proposed commit is the commit referenced by the
+intended upstream tag and let the pull-request workflows resolve the pinned action successfully.
+
+Repository settings require full-length action SHAs. Do not replace a pinned commit with a
+mutable branch or tag reference.
