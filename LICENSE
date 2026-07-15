@@ -1,21 +1,142 @@
-MIT License
+ADB TV Noncommercial Source License 1.0
 
-Copyright (c) 2026 maxduke
+Copyright (c) 2026 maxduke. All rights reserved except as expressly granted
+below.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This license applies to the project-authored portions of ADB TV (the
+"Software"). It does not apply to third-party software identified in the
+notices distributed with ADB TV. Third-party software remains governed by its
+own license terms.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Definitions
+
+"Corresponding Source" means the preferred form for making modifications,
+including all project-authored source code, interface definitions,
+documentation, and scripts needed to build and package the Software or a
+Derivative Work. It does not include third-party software available under its
+own license from a public source identified in the distributed notices.
+
+"Derivative Work" means a work based on or incorporating any material portion
+of the Software, including a modified version or fork.
+
+"Distribute" means to provide a copy of the Software or a Derivative Work to
+another person or entity, whether in source, object, executable, or any other
+form.
+
+"Monetize" means to exercise rights in the Software or a Derivative Work to
+provide a product or service to a third party for a fee or other consideration
+when the product's or service's value derives entirely or substantially from
+the Software. Monetization includes paid distribution, sale, rental,
+subscription access, paid application listings, in-app purchases,
+advertising-supported distribution, sponsorship-gated access, and paid
+hosting, support, or consulting whose value derives substantially from the
+Software. Charging no more than the documented cost of physical media and
+delivery is not Monetization.
+
+"Noncommercial Purpose" means a purpose that does not Monetize the Software or
+a Derivative Work. Internal use by a person or organization, including a
+business, is a Noncommercial Purpose when no third party is charged for access
+to or value substantially derived from the Software.
+
+2. Copyright License
+
+Subject to every condition in this license, each copyright holder grants you a
+worldwide, non-exclusive, royalty-free copyright license to use, reproduce,
+modify, create Derivative Works of, and Distribute the Software solely for
+Noncommercial Purposes.
+
+3. No Monetization
+
+This license does not grant the right to Monetize the Software or a Derivative
+Work. Monetization requires separate prior written permission from every
+copyright holder whose permission would otherwise be required.
+
+4. Distribution and Source Availability
+
+You may Distribute the Software or a Derivative Work only when you:
+
+a. include this complete license and all applicable copyright and attribution
+   notices;
+
+b. license the project-authored portions of the distributed work under this
+   exact license, without additional terms that restrict a recipient's
+   exercise of the rights granted here;
+
+c. provide the complete Corresponding Source at no charge with the distributed
+   work, or publish it at a clearly identified, publicly accessible URL at the
+   same time as the distribution;
+
+d. keep Corresponding Source offered by URL available for as long as you
+   Distribute the work and for at least three years after your last
+   distribution;
+
+e. include the Corresponding Source URL with every distributed object or
+   executable form when source does not accompany that form; and
+
+f. prominently identify that you changed the Software, the date of your
+   changes, and that your work is not an official ADB TV release.
+
+You may not Distribute the Software or a Derivative Work under a nondisclosure
+agreement or in any other manner that prevents recipients from accessing,
+using, modifying, or redistributing the Corresponding Source as permitted by
+this license.
+
+5. Patent License
+
+Each contributor grants you a worldwide, non-exclusive, royalty-free patent
+license under patent claims they can license that are necessarily infringed by
+their contribution alone or by combination with the Software. This patent
+license terminates if you initiate patent litigation alleging that the
+Software or a contribution infringes a patent.
+
+6. Third-Party Software
+
+No rights are granted to third-party software under this license. When you
+Distribute ADB TV, you must also comply with every applicable third-party
+license and preserve the notices supplied with the Software. A third-party
+component does not become subject to this license merely because it is built,
+linked, or distributed with ADB TV.
+
+7. Names and Marks
+
+This license does not grant permission to use the names, logos, trademarks, or
+service marks of ADB TV or any contributor to suggest endorsement or to label a
+modified work as an official release. Accurate, nominative references that
+identify the Software or describe a work's origin are permitted.
+
+8. Contributions
+
+Unless explicitly stated otherwise in writing, a contribution intentionally
+submitted for inclusion in ADB TV is licensed under this license. Contributors
+retain copyright in their contributions.
+
+9. Termination and Cure
+
+Your rights under this license terminate automatically when you violate its
+terms. The rights are reinstated provisionally when the violation stops and
+permanently if the copyright holders do not notify you of the violation within
+sixty days after it stops. After notice, rights are reinstated permanently only
+if this is your first notice of violation from that copyright holder and you
+cure the violation within thirty days after receiving notice.
+
+10. Disclaimer of Warranty
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. YOU BEAR ALL
+RISK AS TO THE QUALITY AND PERFORMANCE OF THE SOFTWARE.
+
+11. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, NO COPYRIGHT HOLDER OR CONTRIBUTOR WILL
+BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY ARISING FROM OR RELATED TO
+THE SOFTWARE OR THIS LICENSE, WHETHER IN CONTRACT, TORT, OR OTHERWISE.
+
+12. General
+
+This license does not limit rights you have under applicable law without a
+license. If any provision is unenforceable, it will be reformed only as much as
+necessary to make it enforceable, and the remaining provisions will continue
+in effect. This license is the entire public license granted for the current
+project-authored Software and can be supplemented or waived only by a separate
+written agreement signed by the affected copyright holders.

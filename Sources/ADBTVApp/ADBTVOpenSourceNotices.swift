@@ -5,7 +5,7 @@ enum ADBTVOpenSourceNotices {
     static let resourceExtension = "txt"
 
     static var text: String {
-        (try? loadBundledText()) ?? "Open source notices are unavailable in this build."
+        (try? loadBundledText()) ?? "Legal notices are unavailable in this build."
     }
 
     static func loadBundledText() throws -> String {

@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - ".github/workflows/ios-unsigned-ipa.yml"
+      - "LICENSE"
       - "ADBTV.xcodeproj/**"
       - "Apps/ADBTViOS/**"
       - "Package.swift"

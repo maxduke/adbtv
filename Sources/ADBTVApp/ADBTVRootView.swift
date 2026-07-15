@@ -1527,7 +1527,7 @@ private struct ADBTVAboutView: View {
                     NavigationLink {
                         ADBTVOpenSourceNoticesView()
                     } label: {
-                        Label("Open Source Licenses", systemImage: "doc.text")
+                        Label("Licenses & Notices", systemImage: "doc.text")
                     }
                 }
             }
@@ -1577,7 +1577,7 @@ private struct ADBTVOpenSourceNoticesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
         }
-        .navigationTitle("Open Source Licenses")
+        .navigationTitle("Licenses & Notices")
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif

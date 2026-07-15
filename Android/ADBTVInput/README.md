@@ -1,5 +1,9 @@
 # ADB TV Input
 
+Standalone workflow artifacts include the repository `LICENSE` and
+`ADBTV-SOURCE.txt` beside the APK. When bundled in the iOS app, the same license
+and source URL are included in ADB TV's **Licenses & Notices** screen.
+
 ADB TV Input is the optional Android IME used for Chinese and other Unicode remote text. It has no launcher, network permission, persistent data, or third-party runtime dependency.
 
 The explicit text receiver requires `android.permission.DUMP`, so ordinary Android applications cannot invoke it. ADB TV calls it through the authenticated ADB shell, temporarily selects this IME, commits UTF-8 text to the focused input connection, and restores the previous IME.

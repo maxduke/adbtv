@@ -3,6 +3,7 @@ name: Android Input Helper
 on:
   pull_request:
     paths:
+      - "LICENSE"
       - "Android/ADBTVInput/**"
       - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
       - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
@@ -12,6 +13,7 @@ on:
       - main
       - protocol-spike
     paths:
+      - "LICENSE"
       - "Android/ADBTVInput/**"
       - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
       - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
@@ -70,5 +72,8 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ADBTVInput-debug
-          path: Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk
+            Android/ADBTVInput/ADBTV-SOURCE.txt
+            LICENSE
           if-no-files-found: error

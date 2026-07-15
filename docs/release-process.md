@@ -9,8 +9,11 @@ Before tagging a release:
 1. Merge only changes whose required SwiftPM and simulator checks pass.
 2. Run every applicable item in the [hardware release checklist](./hardware-test-checklist.md) on a physical iPhone and Android TV.
 3. Resolve or document every failed checklist item.
-4. Set `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `ADBTV.xcodeproj`.
-5. Package the unsigned IPA locally or through the manual workflow and verify its checksum.
+4. Confirm the bundled project license exactly matches `LICENSE`, every
+   third-party notice remains present, and any license change has received
+   appropriate legal review.
+5. Set `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in `ADBTV.xcodeproj`.
+6. Package the unsigned IPA locally or through the manual workflow and verify its checksum.
 
 ## Create a draft release
 

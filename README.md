@@ -17,7 +17,7 @@ snapshots in light and dark appearance.
 Current direction:
 
 - iOS 17+ universal app for iPhone and iPad;
-- sideloaded/open-source friendly distribution;
+- sideloaded/source-available distribution;
 - no helper Mac, Linux host, Raspberry Pi, or server after installation;
 - Android TV as the primary target;
 - Wireless Debugging pairing by code and QR;
@@ -67,7 +67,7 @@ Implemented so far:
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - unsigned IPA packaging in GitHub Actions;
-- packaged MIT and BoringSSL license notices with an in-app About surface;
+- packaged ADB TV and BoringSSL license notices with an in-app About surface;
 - repository-owned app icon and accent-color assets with packaged-product validation;
 - adaptive system launch-screen configuration for iPhone and iPad.
 
@@ -145,7 +145,19 @@ ASCII remote text uses Android's built-in `input text` command with checked exit
 
 ## License
 
-ADB TV is available under the [MIT License](./LICENSE).
-The app bundles the exact project and BoringSSL terms listed in
+The project-authored portions of ADB TV are available under the
+[ADB TV Noncommercial Source License 1.0](./LICENSE). It permits personal and
+internal use, requires public Corresponding Source for distributed forks, and
+prohibits selling or monetizing ADB TV or a fork without separate written
+permission. These terms are source-available, not OSI-approved open source.
+
+Code first published at or before commit
+`b6860809a5c2fd6cf56f4e7ade0212b8c8bafb14` remains available under the MIT
+License previously granted for that code. The new license applies to the
+current project-authored version and future contributions; it does not revoke
+rights already granted for earlier code.
+
+Third-party components keep their own licenses. The app bundles the exact
+project and BoringSSL terms listed in
 [OpenSourceNotices.txt](./Sources/ADBTVApp/Resources/OpenSourceNotices.txt), available from
 the **About** screen in every packaged build.

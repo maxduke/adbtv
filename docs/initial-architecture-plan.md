@@ -102,7 +102,7 @@ Exit criteria:
 
 ### Milestone 5: QR Pairing and Polish
 
-Goal: complete the initial pairing and open-source project experience.
+Goal: complete the initial pairing and source-available project experience.
 
 Scope:
 - Pairing QR Code scan and parsing;
