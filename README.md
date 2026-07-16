@@ -30,6 +30,7 @@ Current direction:
 Implemented so far:
 
 - manual device connection verification and persistence with clear success or failure details;
+- saved-device renaming with trimmed nonempty names and atomic Device Library persistence;
 - checked saved-device reconnect before Remote or Install tools are shown, with a bounded retry surface for unreachable TVs;
 - verified connection repair for unreachable saved devices, with atomic endpoint replacement and duplicate protection;
 - resilient Device Library loading that preserves legacy records, recovers valid entries from partial corruption, and reports rejected data without rewriting it;

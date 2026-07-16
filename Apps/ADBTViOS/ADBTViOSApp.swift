@@ -32,6 +32,13 @@ struct ADBTViOSApp: App {
                 bonjourDiscoveryAvailable: false,
                 initiallyPresentsConnectionRepair: true
             )
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-rename") {
+            ADBTVRootView(
+                model: .preview,
+                automaticallyStartsDiscovery: false,
+                bonjourDiscoveryAvailable: false,
+                initiallyPresentsDeviceRename: true
+            )
         } else if ProcessInfo.processInfo.arguments.contains("--ui-preview") {
             ADBTVRootView(
                 model: .preview,
