@@ -3018,7 +3018,8 @@ private struct InstalledAppsPanel: View {
         HStack(spacing: 12) {
             Text(package.packageName)
                 .font(.body.monospaced())
-                .lineLimit(2)
+                .lineLimit(1)
+                .truncationMode(.middle)
                 .textSelection(.enabled)
 
             Spacer(minLength: 8)
