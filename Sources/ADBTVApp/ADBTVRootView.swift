@@ -2211,6 +2211,19 @@ private struct RepairDeviceConnectionView: View {
                 }
                 .disabled(status.isVerifying)
 
+                if status.verifiedDevice == nil {
+                    Section {
+                        Button {
+                            testConnection()
+                        } label: {
+                            Label("Test Connection", systemImage: "network")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(candidateDevice == nil || status.isVerifying)
+                    }
+                }
+
                 RepairDeviceConnectionStatusView(
                     status: status,
                     warnsAboutDifferentModel: status.verifiedDevice.map(modelDiffers) ?? false
@@ -2237,11 +2250,6 @@ private struct RepairDeviceConnectionView: View {
                                 save(verifiedDevice)
                             }
                         }
-                    } else {
-                        Button("Test Connection") {
-                            testConnection()
-                        }
-                        .disabled(candidateDevice == nil || status.isVerifying)
                     }
                 }
             }
