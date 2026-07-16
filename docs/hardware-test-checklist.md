@@ -61,6 +61,9 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Force-quit and relaunch the app, then reconnect without pairing again.
 - [ ] Confirm relaunch shows no saved-device tool page until a Managed Device passes checked reconnect and model verification.
 - [ ] Select an unreachable saved device, confirm a bounded connection error replaces the tools, and confirm **Retry Connection** works after restoring the TV.
+- [ ] From an unreachable saved device, open **Update Connection**, test a replacement host and port, and confirm the old endpoint remains unchanged until **Save** is tapped.
+- [ ] Save a verified replacement endpoint, confirm the original name and Device Library entry are preserved without a duplicate, and reconnect successfully after relaunching.
+- [ ] Verify an endpoint reporting a different TV model and confirm ADB TV warns before replacing the connection.
 - [ ] Upgrade over an earlier candidate build with multiple saved devices and confirm every valid Device Library entry remains available.
 - [ ] If a Device Library warning appears, confirm valid entries remain visible and the copyable Technical Details report recovered and rejected record counts.
 - [ ] Install a build signed by the same team and bundle identifier on a second iOS device using the same Apple Account and confirm the synchronized identity reconnects without pairing again.
