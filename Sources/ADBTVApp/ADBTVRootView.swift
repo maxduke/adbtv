@@ -2219,7 +2219,6 @@ private struct RepairDeviceConnectionView: View {
                             Label("Test Connection", systemImage: "network")
                                 .frame(maxWidth: .infinity)
                         }
-                        .buttonStyle(.borderedProminent)
                         .disabled(candidateDevice == nil || status.isVerifying)
                     }
                 }
