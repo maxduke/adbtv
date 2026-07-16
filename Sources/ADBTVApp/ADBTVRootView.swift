@@ -19,6 +19,7 @@ public struct ADBTVRootView: View {
     @State private var isAddDevicePresented = false
     @State private var isPairDevicePresented = false
     @State private var isAboutPresented: Bool
+    @State private var repairingDevice: ADBTVDeviceSummary?
     @State private var devicePersistenceError: DiagnosticDetail?
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
@@ -52,6 +53,7 @@ public struct ADBTVRootView: View {
         } ?? .current(automaticallyStartsDiscovery: automaticallyStartsDiscovery)
         self._model = State(initialValue: initialModel)
         self._isAboutPresented = State(initialValue: initiallyPresentsAbout)
+        self._repairingDevice = State(initialValue: nil)
         self._devicePersistenceError = State(
             initialValue: Self.deviceLoadDiagnosticDetail(for: loadResult)
         )
@@ -62,7 +64,8 @@ public struct ADBTVRootView: View {
         deviceStore: ADBTVDeviceStore = ADBTVDeviceStore(),
         automaticallyStartsDiscovery: Bool? = nil,
         bonjourDiscoveryAvailable: Bool? = nil,
-        initiallyPresentsAbout: Bool = false
+        initiallyPresentsAbout: Bool = false,
+        initiallyPresentsConnectionRepair: Bool = false
     ) {
         self.deviceStore = deviceStore
         self.bonjourCapability = bonjourDiscoveryAvailable.map {
@@ -73,6 +76,9 @@ public struct ADBTVRootView: View {
         } ?? .current(automaticallyStartsDiscovery: automaticallyStartsDiscovery)
         self._model = State(initialValue: model)
         self._isAboutPresented = State(initialValue: initiallyPresentsAbout)
+        self._repairingDevice = State(
+            initialValue: initiallyPresentsConnectionRepair ? model.devices.first : nil
+        )
     }
 
     public var body: some View {
@@ -158,7 +164,8 @@ public struct ADBTVRootView: View {
                 SavedDeviceConnectionView(
                     device: connectionDevice,
                     state: deviceConnectionState,
-                    retry: { selectSavedDevice(id: connectionDevice.id) }
+                    retry: { selectSavedDevice(id: connectionDevice.id) },
+                    repair: { repairingDevice = connectionDevice }
                 )
             } else if let device = model.selectedDevice {
                 DeviceDetailView(
@@ -202,6 +209,18 @@ public struct ADBTVRootView: View {
             AddDeviceView(
                 verifyDevice: Self.verifyManualDevice,
                 addDevice: addDevice
+            )
+        }
+        .sheet(item: $repairingDevice) { device in
+            RepairDeviceConnectionView(
+                device: device,
+                verifyDevice: Self.verifySavedDevice,
+                saveDevice: { verifiedDevice in
+                    try replaceDeviceConnection(
+                        verifiedDevice,
+                        replacing: device.id
+                    )
+                }
             )
         }
         .sheet(isPresented: $isPairDevicePresented) {
@@ -377,6 +396,20 @@ public struct ADBTVRootView: View {
     private func addDevice(_ device: ADBTVDeviceSummary) {
         model.addDevice(device)
         saveDevices()
+    }
+
+    private func replaceDeviceConnection(
+        _ verifiedDevice: ADBTVDeviceSummary,
+        replacing deviceID: ADBTVDeviceSummary.ID
+    ) throws {
+        var updatedModel = model
+        try updatedModel.replaceDeviceConnection(id: deviceID, with: verifiedDevice)
+        try deviceStore.saveDevices(updatedModel.devices)
+
+        deviceConnectionTask?.cancel()
+        deviceConnectionTask = nil
+        deviceConnectionState = .idle
+        model = updatedModel
     }
 
     private func selectSavedDevice(id: ADBTVDeviceSummary.ID?) {
@@ -1722,6 +1755,24 @@ private struct PairingStatusView: View {
     }
 }
 
+private func connectionUserMessage(for error: Error, fallback: String) -> String {
+    error is ADBTVOperationTimeoutError
+        ? "The TV did not respond in time."
+        : fallback
+}
+
+private func connectionDiagnosticContext(
+    error: Error,
+    base: [String: String]
+) -> [String: String] {
+    var context = base
+    if case let ADBTVOperationTimeoutError.timedOut(operation, seconds) = error {
+        context["timedOperation"] = operation.rawValue
+        context["timeoutSeconds"] = String(seconds)
+    }
+    return context
+}
+
 private struct AddDeviceView: View {
     @Environment(\.dismiss) private var dismiss
 
@@ -1810,10 +1861,13 @@ private struct AddDeviceView: View {
                     return
                 }
                 status = .failed(
-                    userMessage: manualConnectionUserMessage(for: error),
+                    userMessage: connectionUserMessage(
+                        for: error,
+                        fallback: "Could not connect to this Android TV device."
+                    ),
                     diagnosticDetail: DiagnosticDetail(
                         summary: String(describing: error),
-                        context: manualConnectionDiagnosticContext(
+                        context: connectionDiagnosticContext(
                             error: error,
                             base: [
                                 "device": device.connectionDescription,
@@ -1824,24 +1878,6 @@ private struct AddDeviceView: View {
                 )
             }
         }
-    }
-
-    private func manualConnectionUserMessage(for error: Error) -> String {
-        error is ADBTVOperationTimeoutError
-            ? "The TV did not respond in time."
-            : "Could not connect to this Android TV device."
-    }
-
-    private func manualConnectionDiagnosticContext(
-        error: Error,
-        base: [String: String]
-    ) -> [String: String] {
-        var context = base
-        if case let ADBTVOperationTimeoutError.timedOut(operation, seconds) = error {
-            context["timedOperation"] = operation.rawValue
-            context["timeoutSeconds"] = String(seconds)
-        }
-        return context
     }
 }
 
@@ -2078,6 +2114,7 @@ private struct SavedDeviceConnectionView: View {
     var device: ADBTVDeviceSummary
     var state: ADBTVSavedDeviceConnectionState
     var retry: () -> Void
+    var repair: () -> Void
 
     var body: some View {
         ScrollView {
@@ -2106,6 +2143,11 @@ private struct SavedDeviceConnectionView: View {
                         }
                         .buttonStyle(.borderedProminent)
 
+                        Button(action: repair) {
+                            Label("Update Connection", systemImage: "network")
+                        }
+                        .buttonStyle(.bordered)
+
                         DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
                     }
                 }
@@ -2117,6 +2159,274 @@ private struct SavedDeviceConnectionView: View {
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
+    }
+}
+
+private struct RepairDeviceConnectionView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let device: ADBTVDeviceSummary
+    @State private var host: String
+    @State private var port: String
+    @State private var status = RepairDeviceConnectionStatus.idle
+    @State private var verificationTask: Task<Void, Never>?
+    @State private var confirmsDifferentModel = false
+
+    var verifyDevice: (ADBTVDeviceSummary) async throws -> ADBTVDeviceSummary
+    var saveDevice: (ADBTVDeviceSummary) throws -> Void
+
+    init(
+        device: ADBTVDeviceSummary,
+        verifyDevice: @escaping (ADBTVDeviceSummary) async throws -> ADBTVDeviceSummary,
+        saveDevice: @escaping (ADBTVDeviceSummary) throws -> Void
+    ) {
+        self.device = device
+        self.verifyDevice = verifyDevice
+        self.saveDevice = saveDevice
+        switch device.connection {
+        case .hostPort(let host, let port):
+            self._host = State(initialValue: host)
+            self._port = State(initialValue: String(port))
+        case .bonjour:
+            self._host = State(initialValue: "")
+            self._port = State(initialValue: "")
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Saved Device") {
+                    LabeledContent("Name", value: device.displayName)
+                    LabeledContent("Current Connection", value: device.connectionDescription)
+                    if let model = device.model {
+                        LabeledContent("Expected Model", value: model)
+                    }
+                }
+
+                Section("New Connection") {
+                    TextField("Host or IP Address", text: $host)
+                        .autocorrectionDisabled()
+                    TextField("Connection Port", text: $port)
+                }
+                .disabled(status.isVerifying)
+
+                RepairDeviceConnectionStatusView(
+                    status: status,
+                    warnsAboutDifferentModel: status.verifiedDevice.map(modelDiffers) ?? false
+                )
+            }
+            .navigationTitle("Update Connection")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        verificationTask?.cancel()
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    if let verifiedDevice = status.verifiedDevice {
+                        Button("Save") {
+                            if modelDiffers(from: verifiedDevice) {
+                                confirmsDifferentModel = true
+                            } else {
+                                save(verifiedDevice)
+                            }
+                        }
+                    } else {
+                        Button("Test Connection") {
+                            testConnection()
+                        }
+                        .disabled(candidateDevice == nil || status.isVerifying)
+                    }
+                }
+            }
+        }
+        .interactiveDismissDisabled(status.isVerifying)
+        .onChange(of: host) { _, _ in resetVerification() }
+        .onChange(of: port) { _, _ in resetVerification() }
+        .onDisappear { verificationTask?.cancel() }
+        .confirmationDialog(
+            "This looks like a different TV",
+            isPresented: $confirmsDifferentModel,
+            presenting: status.verifiedDevice
+        ) { verifiedDevice in
+            Button("Use This Connection", role: .destructive) {
+                save(verifiedDevice)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { verifiedDevice in
+            Text(
+                "The saved model is \(device.model ?? "unknown"), but this endpoint reports "
+                    + "\(verifiedDevice.model ?? "an unknown model")."
+            )
+        }
+    }
+
+    private var candidateDevice: ADBTVDeviceSummary? {
+        let normalizedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPort = port.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedHost.isEmpty,
+              let portValue = UInt16(normalizedPort),
+              portValue > 0 else {
+            return nil
+        }
+
+        return ADBTVDeviceSummary(
+            id: device.id,
+            displayName: device.displayName,
+            host: normalizedHost,
+            port: Int(portValue),
+            model: device.model
+        )
+    }
+
+    private func testConnection() {
+        guard let candidateDevice else {
+            return
+        }
+
+        verificationTask?.cancel()
+        status = .verifying
+        verificationTask = Task {
+            do {
+                let verifiedDevice = try await verifyDevice(candidateDevice)
+                guard !Task.isCancelled else {
+                    return
+                }
+                status = .verified(verifiedDevice)
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                status = .failed(
+                    userMessage: connectionUserMessage(
+                        for: error,
+                        fallback: "Could not verify this connection."
+                    ),
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: String(describing: error),
+                        context: connectionDiagnosticContext(
+                            error: error,
+                            base: [
+                                "device": candidateDevice.connectionDescription,
+                                "operation": "testReplacementConnection"
+                            ]
+                        )
+                    )
+                )
+            }
+        }
+    }
+
+    private func save(_ verifiedDevice: ADBTVDeviceSummary) {
+        do {
+            try saveDevice(verifiedDevice)
+            dismiss()
+        } catch {
+            status = .failed(
+                userMessage: saveFailureMessage(for: error),
+                diagnosticDetail: DiagnosticDetail(
+                    summary: String(describing: error),
+                    context: [
+                        "device": verifiedDevice.connectionDescription,
+                        "operation": "saveReplacementConnection"
+                    ]
+                )
+            )
+        }
+    }
+
+    private func resetVerification() {
+        guard !status.isVerifying else {
+            return
+        }
+        status = .idle
+    }
+
+    private func modelDiffers(from verifiedDevice: ADBTVDeviceSummary) -> Bool {
+        guard let expected = device.model?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !expected.isEmpty,
+              let detected = verifiedDevice.model?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !detected.isEmpty else {
+            return false
+        }
+        return expected.caseInsensitiveCompare(detected) != .orderedSame
+    }
+
+    private func saveFailureMessage(for error: Error) -> String {
+        if case let ADBTVDeviceRepairError.endpointAlreadySaved(displayName) = error {
+            return "This connection is already saved as \(displayName)."
+        }
+        return "Could not save the updated connection."
+    }
+}
+
+private enum RepairDeviceConnectionStatus: Equatable {
+    case idle
+    case verifying
+    case verified(ADBTVDeviceSummary)
+    case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
+
+    var isVerifying: Bool {
+        if case .verifying = self {
+            return true
+        }
+        return false
+    }
+
+    var verifiedDevice: ADBTVDeviceSummary? {
+        guard case .verified(let device) = self else {
+            return nil
+        }
+        return device
+    }
+}
+
+private struct RepairDeviceConnectionStatusView: View {
+    var status: RepairDeviceConnectionStatus
+    var warnsAboutDifferentModel: Bool
+
+    @ViewBuilder
+    var body: some View {
+        switch status {
+        case .idle:
+            EmptyView()
+        case .verifying:
+            Section {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Testing connection")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        case .verified(let device):
+            Section("Verified Device") {
+                Label("Connection verified", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                LabeledContent("Detected Model", value: device.model ?? "Unknown")
+                LabeledContent("Connection", value: device.connectionDescription)
+                if warnsAboutDifferentModel {
+                    Label(
+                        "The detected model differs from the saved device.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(.orange)
+                }
+            }
+        case .failed(let userMessage, let diagnosticDetail):
+            Section {
+                Label(userMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
+            }
+        }
     }
 }
 

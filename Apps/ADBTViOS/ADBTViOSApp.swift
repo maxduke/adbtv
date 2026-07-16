@@ -25,6 +25,13 @@ struct ADBTViOSApp: App {
                 automaticallyStartsDiscovery: false,
                 bonjourDiscoveryAvailable: false
             )
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-repair") {
+            ADBTVRootView(
+                model: .preview,
+                automaticallyStartsDiscovery: false,
+                bonjourDiscoveryAvailable: false,
+                initiallyPresentsConnectionRepair: true
+            )
         } else if ProcessInfo.processInfo.arguments.contains("--ui-preview") {
             ADBTVRootView(
                 model: .preview,
