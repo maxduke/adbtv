@@ -122,6 +122,79 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedDevice, savedDevice)
     }
 
+    func testModelReplacesVerifiedDeviceConnectionWithoutChangingIdentityOrName() throws {
+        let original = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "192.168.1.50",
+            port: 5555,
+            model: "Chromecast"
+        )
+        var model = ADBTVAppModel(devices: [original])
+        let verified = ADBTVDeviceSummary(
+            displayName: "Ignored Name",
+            host: "192.168.1.50",
+            port: 39555,
+            model: "Google TV Streamer"
+        )
+
+        let repaired = try model.replaceDeviceConnection(id: original.id, with: verified)
+
+        XCTAssertEqual(model.devices.count, 1)
+        XCTAssertEqual(repaired.id, original.id)
+        XCTAssertEqual(repaired.displayName, original.displayName)
+        XCTAssertEqual(repaired.connection, verified.connection)
+        XCTAssertEqual(repaired.model, "Google TV Streamer")
+        XCTAssertEqual(model.selectedDevice, repaired)
+    }
+
+    func testModelRejectsRepairToAnotherSavedEndpointWithoutChangingDevices() throws {
+        let livingRoom = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "192.168.1.50",
+            port: 5555
+        )
+        let bedroom = ADBTVDeviceSummary(
+            displayName: "Bedroom",
+            host: "192.168.1.51",
+            port: 5555
+        )
+        var model = ADBTVAppModel(devices: [livingRoom, bedroom])
+        let originalDevices = model.devices
+        let duplicateEndpoint = ADBTVDeviceSummary(
+            displayName: livingRoom.displayName,
+            host: bedroom.host,
+            port: bedroom.port
+        )
+
+        XCTAssertThrowsError(
+            try model.replaceDeviceConnection(id: livingRoom.id, with: duplicateEndpoint)
+        ) { error in
+            XCTAssertEqual(
+                error as? ADBTVDeviceRepairError,
+                .endpointAlreadySaved(displayName: bedroom.displayName)
+            )
+        }
+        XCTAssertEqual(model.devices, originalDevices)
+    }
+
+    func testModelRejectsRepairDuringActiveDeviceOperation() {
+        let device = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "192.168.1.50",
+            port: 5555
+        )
+        var model = ADBTVAppModel(
+            devices: [device],
+            activeDeviceOperation: .remoteAction(deviceID: device.id, action: .home)
+        )
+
+        XCTAssertThrowsError(
+            try model.replaceDeviceConnection(id: device.id, with: device)
+        ) { error in
+            XCTAssertEqual(error as? ADBTVDeviceRepairError, .operationInProgress)
+        }
+    }
+
 #if canImport(Network)
     func testDeviceConnectionBuildsHostPortAndBonjourNetworkTargets() throws {
         let hostDevice = ADBTVDeviceSummary(

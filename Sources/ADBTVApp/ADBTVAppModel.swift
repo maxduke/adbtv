@@ -102,6 +102,31 @@ public struct ADBTVAppModel: Equatable, Sendable {
         }
     }
 
+    @discardableResult
+    public mutating func replaceDeviceConnection(
+        id: ADBTVDeviceSummary.ID,
+        with verifiedDevice: ADBTVDeviceSummary
+    ) throws -> ADBTVDeviceSummary {
+        guard activeDeviceOperation == nil else {
+            throw ADBTVDeviceRepairError.operationInProgress
+        }
+        guard let index = devices.firstIndex(where: { $0.id == id }) else {
+            throw ADBTVDeviceRepairError.deviceNotFound
+        }
+        if let duplicate = devices.first(where: {
+            $0.id != id && $0.matchesEndpoint(of: verifiedDevice)
+        }) {
+            throw ADBTVDeviceRepairError.endpointAlreadySaved(displayName: duplicate.displayName)
+        }
+
+        var repairedDevice = verifiedDevice
+        repairedDevice.id = id
+        repairedDevice.displayName = devices[index].displayName
+        devices[index] = repairedDevice
+        selectedDeviceID = id
+        return repairedDevice
+    }
+
     public mutating func selectPackage(fileName: String, byteCount: Int64?) {
         installDraft.selectedPackage = ADBTVInstallPackageDraft(fileName: fileName, byteCount: byteCount)
         installDraft.urlString = ""
@@ -690,6 +715,12 @@ public struct ADBTVDeviceSummary: Codable, Identifiable, Equatable, Sendable {
 public enum ADBTVDeviceConnection: Codable, Equatable, Sendable {
     case hostPort(host: String, port: Int)
     case bonjour(ADBDiscoveredService)
+}
+
+public enum ADBTVDeviceRepairError: Error, Equatable, Sendable {
+    case operationInProgress
+    case deviceNotFound
+    case endpointAlreadySaved(displayName: String)
 }
 
 #if canImport(Network)
