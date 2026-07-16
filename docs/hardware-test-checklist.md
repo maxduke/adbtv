@@ -71,6 +71,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] For an entitlement-enabled build, restart Wireless Debugging so its port changes, then reconnect through the saved Bonjour service.
 - [ ] For an entitlement-enabled build, restart the Android TV and reconnect after discovery returns.
 - [ ] Add at least two Managed Devices and switch between them without mixing endpoints.
+- [ ] Rename a Managed Device, relaunch the app, and confirm its identity and connection are unchanged.
 - [ ] Start a long APK download or install on the first device and confirm device selection, deletion, pairing, and remote controls stay unavailable until it completes or is cancelled.
 - [ ] While that operation is active, attempt to select or remove its target and confirm progress remains attached to the original device; after completion or cancellation, confirm switching works normally.
 - [ ] Add a port 5555 endpoint manually, approve its RSA prompt on the TV, and confirm **Connected and saved** appears.

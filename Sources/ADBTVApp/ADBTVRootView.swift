@@ -20,6 +20,7 @@ public struct ADBTVRootView: View {
     @State private var isPairDevicePresented = false
     @State private var isAboutPresented: Bool
     @State private var repairingDevice: ADBTVDeviceSummary?
+    @State private var renamingDevice: ADBTVDeviceSummary?
     @State private var devicePersistenceError: DiagnosticDetail?
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
@@ -54,6 +55,7 @@ public struct ADBTVRootView: View {
         self._model = State(initialValue: initialModel)
         self._isAboutPresented = State(initialValue: initiallyPresentsAbout)
         self._repairingDevice = State(initialValue: nil)
+        self._renamingDevice = State(initialValue: nil)
         self._devicePersistenceError = State(
             initialValue: Self.deviceLoadDiagnosticDetail(for: loadResult)
         )
@@ -65,7 +67,8 @@ public struct ADBTVRootView: View {
         automaticallyStartsDiscovery: Bool? = nil,
         bonjourDiscoveryAvailable: Bool? = nil,
         initiallyPresentsAbout: Bool = false,
-        initiallyPresentsConnectionRepair: Bool = false
+        initiallyPresentsConnectionRepair: Bool = false,
+        initiallyPresentsDeviceRename: Bool = false
     ) {
         self.deviceStore = deviceStore
         self.bonjourCapability = bonjourDiscoveryAvailable.map {
@@ -78,6 +81,9 @@ public struct ADBTVRootView: View {
         self._isAboutPresented = State(initialValue: initiallyPresentsAbout)
         self._repairingDevice = State(
             initialValue: initiallyPresentsConnectionRepair ? model.devices.first : nil
+        )
+        self._renamingDevice = State(
+            initialValue: initiallyPresentsDeviceRename ? model.devices.first : nil
         )
     }
 
@@ -160,12 +166,15 @@ public struct ADBTVRootView: View {
                 }
             }
         } detail: {
-            if let connectionDevice = deviceConnectionState.device {
+            if let stateDevice = deviceConnectionState.device {
+                let connectionDevice = model.devices.first(where: { $0.id == stateDevice.id })
+                    ?? stateDevice
                 SavedDeviceConnectionView(
                     device: connectionDevice,
                     state: deviceConnectionState,
                     retry: { selectSavedDevice(id: connectionDevice.id) },
-                    repair: { repairingDevice = connectionDevice }
+                    repair: { repairingDevice = connectionDevice },
+                    rename: { renamingDevice = connectionDevice }
                 )
             } else if let device = model.selectedDevice {
                 DeviceDetailView(
@@ -183,6 +192,7 @@ public struct ADBTVRootView: View {
                     canInstall: model.canInstallSelectedPackage,
                     canSendRemoteText: model.canSendRemoteText,
                     deviceOperationInProgress: model.activeDeviceOperation != nil,
+                    rename: { renamingDevice = device },
                     chooseAPK: {
                         isFileImporterPresented = true
                     },
@@ -222,6 +232,11 @@ public struct ADBTVRootView: View {
                     )
                 }
             )
+        }
+        .sheet(item: $renamingDevice) { device in
+            RenameDeviceView(device: device) { displayName in
+                try renameDevice(id: device.id, to: displayName)
+            }
         }
         .sheet(isPresented: $isPairDevicePresented) {
             PairDeviceView(
@@ -396,6 +411,16 @@ public struct ADBTVRootView: View {
     private func addDevice(_ device: ADBTVDeviceSummary) {
         model.addDevice(device)
         saveDevices()
+    }
+
+    private func renameDevice(
+        id: ADBTVDeviceSummary.ID,
+        to displayName: String
+    ) throws {
+        var updatedModel = model
+        try updatedModel.renameDevice(id: id, to: displayName)
+        try deviceStore.saveDevices(updatedModel.devices)
+        model = updatedModel
     }
 
     private func replaceDeviceConnection(
@@ -2115,11 +2140,12 @@ private struct SavedDeviceConnectionView: View {
     var state: ADBTVSavedDeviceConnectionState
     var retry: () -> Void
     var repair: () -> Void
+    var rename: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                DeviceHeader(device: device)
+                DeviceHeader(device: device, rename: rename, renameDisabled: state.isConnecting)
 
                 switch state {
                 case .idle:
@@ -2159,6 +2185,76 @@ private struct SavedDeviceConnectionView: View {
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
+    }
+}
+
+private struct RenameDeviceView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let device: ADBTVDeviceSummary
+    let saveName: (String) throws -> Void
+
+    @State private var displayName: String
+    @State private var saveError: DiagnosticDetail?
+
+    init(
+        device: ADBTVDeviceSummary,
+        saveName: @escaping (String) throws -> Void
+    ) {
+        self.device = device
+        self.saveName = saveName
+        self._displayName = State(initialValue: device.displayName)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Device Name") {
+                    TextField("Name", text: $displayName)
+                }
+
+                if let saveError {
+                    Section {
+                        Label("Could not rename this device.", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        DiagnosticDisclosure(diagnosticDetail: saveError)
+                    }
+                }
+            }
+            .navigationTitle("Rename Device")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") { save() }
+                        .disabled(
+                            normalizedDisplayName.isEmpty
+                                || normalizedDisplayName == device.displayName
+                        )
+                }
+            }
+        }
+        .onChange(of: displayName) { _, _ in saveError = nil }
+    }
+
+    private var normalizedDisplayName: String {
+        displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func save() {
+        do {
+            try saveName(normalizedDisplayName)
+            dismiss()
+        } catch {
+            saveError = DiagnosticDetail(
+                summary: String(describing: error),
+                context: ["operation": "renameDevice"]
+            )
+        }
     }
 }
 
@@ -2446,6 +2542,7 @@ private struct DeviceDetailView: View {
     var canInstall: Bool
     var canSendRemoteText: Bool
     var deviceOperationInProgress: Bool
+    var rename: () -> Void
     var chooseAPK: () -> Void
     var install: () -> Void
     var cancelInstall: () -> Void
@@ -2461,7 +2558,11 @@ private struct DeviceDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                DeviceHeader(device: device)
+                DeviceHeader(
+                    device: device,
+                    rename: rename,
+                    renameDisabled: deviceOperationInProgress
+                )
 
                 Picker("Device Tool", selection: $selectedTool) {
                     ForEach(DeviceTool.allCases) { tool in
@@ -2548,6 +2649,8 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
 
 private struct DeviceHeader: View {
     var device: ADBTVDeviceSummary
+    var rename: () -> Void
+    var renameDisabled: Bool
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -2563,9 +2666,13 @@ private struct DeviceHeader: View {
 
             Spacer(minLength: 8)
 
-            Image(systemName: "tv")
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
+            Button(action: rename) {
+                Label("Rename Device", systemImage: "pencil")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .disabled(renameDisabled)
+            .help("Rename Device")
         }
     }
 }

@@ -78,6 +78,12 @@ jobs:
                 "$output/$device_name-$appearance-connection-repair-portrait.png"
               xcrun simctl terminate "$udid" com.maxduke.adbtv
 
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-rename
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-device-rename-portrait.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
+
               xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview
               sleep 2
               xcrun simctl io "$udid" screenshot \
