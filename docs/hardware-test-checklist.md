@@ -96,6 +96,18 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Send an action to an unreachable TV and confirm it times out instead of remaining in progress.
 - [ ] Cancel an in-flight action to an unreachable TV and confirm the interface becomes usable immediately.
 
+## Installed Apps
+
+- [ ] Open **Apps** and confirm user-installed package identifiers load in sorted order without system packages.
+- [ ] Search by a partial package identifier and confirm the list filters without another device request.
+- [ ] Launch an Android TV app and confirm its Leanback activity opens.
+- [ ] Launch a phone-style app without a Leanback activity and confirm the standard launcher fallback opens it, or a clear error with Technical Details appears.
+- [ ] Cancel the uninstall confirmation and confirm the package remains installed.
+- [ ] Confirm uninstall for a disposable package, verify its app data is removed, and confirm the row disappears.
+- [ ] Refresh after installing an app outside ADB TV and confirm the new package appears.
+- [ ] Disconnect the TV during each operation and confirm the failure is bounded and exposes copyable Technical Details.
+- [ ] Start an Apps operation and confirm device switching, Remote, Install, rename, and connection updates stay unavailable until it completes.
+
 ## APK Installation
 
 - [ ] Install a known-good signed single APK selected from Files.

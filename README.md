@@ -68,6 +68,7 @@ Implemented so far:
 - cancellable remote reconnect/action progress with an eight-second failure bound;
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
+- searchable user-installed package listing with Android TV launch, confirmed uninstall, and checked command diagnostics;
 - unsigned IPA packaging in GitHub Actions;
 - packaged ADB TV and BoringSSL license notices with an in-app About surface;
 - repository-owned app icon and accent-color assets with packaged-product validation;
