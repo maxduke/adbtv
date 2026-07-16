@@ -20,7 +20,7 @@ Before tagging a release:
 From an up-to-date `main` checkout, create and push an annotated semantic-version tag whose value matches `MARKETING_VERSION`:
 
 ```sh
-VERSION=0.1.1
+VERSION=0.2.0
 git tag -a "v$VERSION" -m "ADB TV $VERSION"
 git push origin "v$VERSION"
 ```

@@ -192,6 +192,7 @@ public struct ADBTVRootView: View {
                     canInstall: model.canInstallSelectedPackage,
                     canSendRemoteText: model.canSendRemoteText,
                     deviceOperationInProgress: model.activeDeviceOperation != nil,
+                    repair: { repairingDevice = device },
                     rename: { renamingDevice = device },
                     chooseAPK: {
                         isFileImporterPresented = true
@@ -2145,7 +2146,12 @@ private struct SavedDeviceConnectionView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                DeviceHeader(device: device, rename: rename, renameDisabled: state.isConnecting)
+                DeviceHeader(
+                    device: device,
+                    repair: repair,
+                    rename: rename,
+                    actionsDisabled: false
+                )
 
                 switch state {
                 case .idle:
@@ -2542,6 +2548,7 @@ private struct DeviceDetailView: View {
     var canInstall: Bool
     var canSendRemoteText: Bool
     var deviceOperationInProgress: Bool
+    var repair: () -> Void
     var rename: () -> Void
     var chooseAPK: () -> Void
     var install: () -> Void
@@ -2560,8 +2567,9 @@ private struct DeviceDetailView: View {
             VStack(alignment: .leading, spacing: 20) {
                 DeviceHeader(
                     device: device,
+                    repair: repair,
                     rename: rename,
-                    renameDisabled: deviceOperationInProgress
+                    actionsDisabled: deviceOperationInProgress
                 )
 
                 Picker("Device Tool", selection: $selectedTool) {
@@ -2649,8 +2657,9 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
 
 private struct DeviceHeader: View {
     var device: ADBTVDeviceSummary
+    var repair: () -> Void
     var rename: () -> Void
-    var renameDisabled: Bool
+    var actionsDisabled: Bool
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
@@ -2666,12 +2675,20 @@ private struct DeviceHeader: View {
 
             Spacer(minLength: 8)
 
+            Button(action: repair) {
+                Label("Update Connection", systemImage: "network")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .disabled(actionsDisabled)
+            .help("Update Connection")
+
             Button(action: rename) {
                 Label("Rename Device", systemImage: "pencil")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.bordered)
-            .disabled(renameDisabled)
+            .disabled(actionsDisabled)
             .help("Rename Device")
         }
     }

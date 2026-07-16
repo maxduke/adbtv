@@ -101,13 +101,14 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedDevice, first)
     }
 
-    func testModelUpdatesDeviceAtSameEndpointWithoutCreatingDuplicate() {
+    func testModelUpdatesDeviceAtSameEndpointWithoutCreatingDuplicateOrLosingName() throws {
         let original = ADBTVDeviceSummary(
             displayName: "Living Room",
             host: "tv.local",
             port: 5555
         )
         var model = ADBTVAppModel(devices: [original])
+        try model.renameDevice(id: original.id, to: "Family Room")
 
         let savedDevice = model.addDevice(ADBTVDeviceSummary(
             displayName: "Living Room TV",
@@ -118,7 +119,8 @@ final class ADBTVAppModelTests: XCTestCase {
 
         XCTAssertEqual(model.devices.count, 1)
         XCTAssertEqual(savedDevice.id, original.id)
-        XCTAssertEqual(savedDevice.displayName, "Living Room TV")
+        XCTAssertEqual(savedDevice.displayName, "Family Room")
+        XCTAssertEqual(savedDevice.model, "Android TV")
         XCTAssertEqual(model.selectedDevice, savedDevice)
     }
 

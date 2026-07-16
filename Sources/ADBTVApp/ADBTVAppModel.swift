@@ -79,6 +79,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
         if let index = devices.firstIndex(where: { $0.matchesEndpoint(of: device) }) {
             var updatedDevice = device
             updatedDevice.id = devices[index].id
+            updatedDevice.displayName = devices[index].displayName
             devices[index] = updatedDevice
             if activeDeviceOperation == nil {
                 selectedDeviceID = updatedDevice.id
