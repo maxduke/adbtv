@@ -2,7 +2,7 @@ import Foundation
 
 public struct ADBTVInstalledPackage: Hashable, Identifiable, Sendable {
     public var id: String { packageName }
-    public var packageName: String
+    public let packageName: String
 
     public init(packageName: String) throws {
         guard !packageName.isEmpty,
