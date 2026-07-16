@@ -122,6 +122,36 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.selectedDevice, savedDevice)
     }
 
+    func testModelRenamesDeviceWithoutChangingIdentityOrConnection() throws {
+        let device = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "192.168.1.50",
+            port: 5555
+        )
+        var model = ADBTVAppModel(devices: [device])
+
+        let renamed = try model.renameDevice(id: device.id, to: "  Family Room  ")
+
+        XCTAssertEqual(renamed.displayName, "Family Room")
+        XCTAssertEqual(renamed.id, device.id)
+        XCTAssertEqual(renamed.connection, device.connection)
+        XCTAssertEqual(model.selectedDevice, renamed)
+    }
+
+    func testModelRejectsEmptyRenameWithoutChangingDevice() {
+        let device = ADBTVDeviceSummary(
+            displayName: "Living Room",
+            host: "192.168.1.50",
+            port: 5555
+        )
+        var model = ADBTVAppModel(devices: [device])
+
+        XCTAssertThrowsError(try model.renameDevice(id: device.id, to: " \n ")) { error in
+            XCTAssertEqual(error as? ADBTVDeviceRenameError, .emptyDisplayName)
+        }
+        XCTAssertEqual(model.devices, [device])
+    }
+
     func testModelReplacesVerifiedDeviceConnectionWithoutChangingIdentityOrName() throws {
         let original = ADBTVDeviceSummary(
             displayName: "Living Room",

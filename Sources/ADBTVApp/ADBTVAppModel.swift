@@ -103,6 +103,23 @@ public struct ADBTVAppModel: Equatable, Sendable {
     }
 
     @discardableResult
+    public mutating func renameDevice(
+        id: ADBTVDeviceSummary.ID,
+        to displayName: String
+    ) throws -> ADBTVDeviceSummary {
+        let normalizedName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalizedName.isEmpty else {
+            throw ADBTVDeviceRenameError.emptyDisplayName
+        }
+        guard let index = devices.firstIndex(where: { $0.id == id }) else {
+            throw ADBTVDeviceRenameError.deviceNotFound
+        }
+
+        devices[index].displayName = normalizedName
+        return devices[index]
+    }
+
+    @discardableResult
     public mutating func replaceDeviceConnection(
         id: ADBTVDeviceSummary.ID,
         with verifiedDevice: ADBTVDeviceSummary
@@ -721,6 +738,11 @@ public enum ADBTVDeviceRepairError: Error, Equatable, Sendable {
     case operationInProgress
     case deviceNotFound
     case endpointAlreadySaved(displayName: String)
+}
+
+public enum ADBTVDeviceRenameError: Error, Equatable, Sendable {
+    case emptyDisplayName
+    case deviceNotFound
 }
 
 #if canImport(Network)
