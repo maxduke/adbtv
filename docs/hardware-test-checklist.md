@@ -100,7 +100,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 - [ ] Open **Apps** and confirm user-installed package identifiers load in sorted order without system packages.
 - [ ] Search by a partial package identifier and confirm the list filters without another device request.
-- [ ] Install or update the bundled Android helper, refresh **Apps**, and confirm real icons appear for Android TV and sideloaded apps.
+- [ ] Install the bundled Android helper from the **Apps** toolbar, confirm the Install panel exposes progress and cancellation, refresh **Apps**, and confirm real icons appear for Android TV and sideloaded apps.
 - [ ] Remove the helper, refresh **Apps**, and confirm generic icons appear without blocking list, search, launch, or uninstall.
 - [ ] Reinstall the helper, change an installed package, refresh, and confirm removed or replaced package icons are not retained.
 - [ ] Test a TV with a large third-party app library and confirm bounded icon loading does not block package actions or navigation.

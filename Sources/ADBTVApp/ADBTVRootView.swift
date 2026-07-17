@@ -2975,6 +2975,10 @@ private struct DeviceDetailView: View {
             state: installedAppsState,
             deviceOperationInProgress: deviceOperationInProgress,
             refresh: loadInstalledApps,
+            installHelper: {
+                selectedTool = .install
+                installUnicodeInputHelper()
+            },
             launch: launchInstalledApp,
             uninstall: uninstallInstalledApp,
             cancel: cancelInstalledAppOperation
@@ -3023,6 +3027,7 @@ private struct InstalledAppsPanel: View {
     var state: ADBTVInstalledAppsViewState
     var deviceOperationInProgress: Bool
     var refresh: () -> Void
+    var installHelper: () -> Void
     var launch: (ADBTVInstalledPackage) -> Void
     var uninstall: (ADBTVInstalledPackage) -> Void
     var cancel: () -> Void
@@ -3036,6 +3041,13 @@ private struct InstalledAppsPanel: View {
                 Text("User Apps")
                     .font(.title2.bold())
                 Spacer()
+                Button(action: installHelper) {
+                    Label("Install Android Helper", systemImage: "arrow.down.app")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .disabled(deviceOperationInProgress || state.status.isBusy)
+                .help("Install Android Helper")
                 Button(action: refresh) {
                     Label("Refresh Apps", systemImage: "arrow.clockwise")
                         .labelStyle(.iconOnly)
