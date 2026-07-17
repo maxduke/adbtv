@@ -184,6 +184,9 @@ public struct ADBTVRootView: View {
                     repair: { repairingDevice = connectionDevice },
                     rename: { renamingDevice = connectionDevice }
                 )
+                .onDisappear {
+                    leaveSavedDeviceConnection(connectionDevice.id)
+                }
             } else if let device = model.selectedDevice {
                 DeviceDetailView(
                     device: device,
@@ -231,6 +234,9 @@ public struct ADBTVRootView: View {
                     }
                 )
                 .id(device.id)
+                .onDisappear {
+                    leaveSavedDeviceDetail(device.id)
+                }
             } else {
                 ContentUnavailableView("Select a Device", systemImage: "tv.and.hifispeaker.fill")
             }
@@ -512,6 +518,23 @@ public struct ADBTVRootView: View {
                     )
                 )
             }
+        }
+    }
+
+    private func leaveSavedDeviceConnection(_ deviceID: ADBTVDeviceSummary.ID) {
+        guard deviceConnectionState.device?.id == deviceID else {
+            return
+        }
+        deviceConnectionTask?.cancel()
+        deviceConnectionTask = nil
+        deviceConnectionState = .idle
+        _ = model.selectDevice(id: nil)
+    }
+
+    private func leaveSavedDeviceDetail(_ deviceID: ADBTVDeviceSummary.ID) {
+        if model.selectedDeviceID == deviceID,
+           model.activeDeviceOperation == nil {
+            _ = model.selectDevice(id: nil)
         }
     }
 
