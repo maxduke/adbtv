@@ -53,22 +53,7 @@ jobs:
       - name: Build and test helper
         run: gradle -p Android/ADBTVInput testDebugUnitTest assembleDebug --no-daemon
 
-      - name: Verify helper identities
-        run: |
-          for apk in \
-            Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
-            Apps/ADBTViOS/Resources/ADBTVInput.apk; do
-            test "$(apkanalyzer manifest application-id "$apk")" = "com.maxduke.adbtv.input"
-            test "$(apkanalyzer manifest version-code "$apk")" = "1"
-          done
-
-      - name: Verify bundled helper payload
-        run: |
-          scripts/verify-bundled-input-helper.sh \
-            Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
-            Apps/ADBTViOS/Resources/ADBTVInput.apk
-
-      - name: Upload helper APK
+      - name: Upload source-built helper APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: ADBTVInput-debug
@@ -77,3 +62,19 @@ jobs:
             Android/ADBTVInput/ADBTV-SOURCE.txt
             LICENSE
           if-no-files-found: error
+          retention-days: 14
+
+      - name: Verify helper identities
+        run: |
+          for apk in \
+            Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
+            Apps/ADBTViOS/Resources/ADBTVInput.apk; do
+            test "$(apkanalyzer manifest application-id "$apk")" = "com.maxduke.adbtv.helper.v2"
+            test "$(apkanalyzer manifest version-code "$apk")" = "2"
+          done
+
+      - name: Verify bundled helper payload
+        run: |
+          scripts/verify-bundled-input-helper.sh \
+            Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
+            Apps/ADBTViOS/Resources/ADBTVInput.apk

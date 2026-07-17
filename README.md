@@ -68,7 +68,7 @@ Implemented so far:
 - cancellable remote reconnect/action progress with an eight-second failure bound;
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
-- searchable user-installed package listing with Android TV launch, confirmed uninstall, and checked command diagnostics;
+- searchable user-installed package listing with bounded real icons from the optional Android helper, local icon fallback, Android TV launch, confirmed uninstall, and checked command diagnostics;
 - unsigned IPA packaging in GitHub Actions;
 - packaged ADB TV and BoringSSL license notices with an in-app About surface;
 - repository-owned app icon and accent-color assets with packaged-product validation;
@@ -142,9 +142,11 @@ The ADB identity is a synchronizable, When Unlocked Keychain item. To reuse it a
 
 For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
 
-The repository contains `ADBClientCore`, `ADBTVApp`, and the source for the optional `ADBTVInput` Android IME. GitHub Actions runs Swift package tests, iOS simulator and unsigned IPA builds, plus Android helper unit tests and APK packaging.
+The repository contains `ADBClientCore`, `ADBTVApp`, and the source for the optional `ADBTVInput` Android helper. GitHub Actions runs Swift package tests, iOS simulator and unsigned IPA builds, plus Android helper unit tests and APK packaging.
 
 ASCII remote text uses Android's built-in `input text` command with checked exit status. Chinese and other non-ASCII text uses the optional bundled ADB TV Input helper because Android's built-in command cannot generate characters absent from the TV's virtual key map. Enter Unicode text, install the helper from the Remote panel once, focus a TV text field, and send again. The app temporarily selects the helper for each send and restores the previous TV keyboard afterward.
+
+The same helper renders installed-app icons through a shell-only provider. When it is missing, the Apps list remains fully functional and uses local generic icons. Install the versioned v2 helper from the Apps toolbar or Remote panel; it does not replace a differently signed legacy helper.
 
 ## License
 

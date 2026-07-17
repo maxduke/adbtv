@@ -59,6 +59,65 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         }
         XCTAssertTrue(session.commands[0].hasPrefix("pm uninstall 'com.example.player'; "))
     }
+
+    func testIconsLoadValidPNGAndIgnoreInvalidItems() async throws {
+        let validPNG = try XCTUnwrap(Data(base64Encoded: Self.onePixelPNGBase64))
+        let response = """
+        [
+          {"package":"com.example.player","png":"\(validPNG.base64EncodedString())"},
+          {"package":"com.example.invalid","png":"not-base64"},
+          {"package":"com.unrequested.app","png":"\(validPNG.base64EncodedString())"}
+        ]
+        """
+        var session = InstalledAppSession(outputs: [checkedOutput(response)])
+        let packages = [
+            try ADBTVInstalledPackage(packageName: "com.example.player"),
+            try ADBTVInstalledPackage(packageName: "com.example.invalid")
+        ]
+
+        let icons = await ADBTVInstalledAppManager().icons(for: packages, using: &session)
+
+        XCTAssertEqual(icons["com.example.player"]?.pngData, validPNG)
+        XCTAssertNil(icons["com.example.invalid"])
+        XCTAssertNil(icons["com.unrequested.app"])
+        XCTAssertTrue(session.commands[0].contains("content://com.maxduke.adbtv.helper.v2.icons/icons"))
+        XCTAssertTrue(session.commands[0].contains("head -c 1048576"))
+    }
+
+    func testIconsStopAfterUnavailableHelper() async throws {
+        let packages = try (0 ..< 17).map {
+            try ADBTVInstalledPackage(packageName: "com.example.app\($0)")
+        }
+        var session = InstalledAppSession(outputs: [checkedOutput("helper unavailable")])
+
+        let icons = await ADBTVInstalledAppManager().icons(for: packages, using: &session)
+
+        XCTAssertTrue(icons.isEmpty)
+        XCTAssertEqual(session.commands.count, 1)
+    }
+
+    func testIconRejectsOversizedAndInvalidDimensions() throws {
+        XCTAssertThrowsError(try ADBTVInstalledAppIcon(
+            pngData: Data(repeating: 0, count: ADBTVInstalledAppIcon.maximumPNGByteCount + 1)
+        )) {
+            XCTAssertEqual(
+                $0 as? ADBTVInstalledAppError,
+                .iconPNGTooLarge(ADBTVInstalledAppIcon.maximumPNGByteCount + 1)
+            )
+        }
+
+        var header = Array(try XCTUnwrap(Data(base64Encoded: Self.onePixelPNGBase64)).prefix(24))
+        header.replaceSubrange(16 ..< 20, with: [0, 0, 1, 0])
+        XCTAssertThrowsError(try ADBTVInstalledAppIcon(pngData: Data(header))) {
+            XCTAssertEqual(
+                $0 as? ADBTVInstalledAppError,
+                .invalidIconDimensions(width: 256, height: 1)
+            )
+        }
+    }
+
+    private static let onePixelPNGBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
 }
 
 private struct InstalledAppSession: ADBShellCommandRunningSession {
