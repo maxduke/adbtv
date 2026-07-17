@@ -319,6 +319,17 @@ public struct ADBTVAppModel: Equatable, Sendable {
     }
 
     @discardableResult
+    public mutating func cancelInstalledAppOperation(
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .installedApps(deviceID: deviceID) else {
+            return false
+        }
+        activeDeviceOperation = nil
+        return true
+    }
+
+    @discardableResult
     public mutating func recordRemoteActionStarted(
         _ action: ADBTVRemoteAction,
         on deviceID: ADBTVDeviceSummary.ID

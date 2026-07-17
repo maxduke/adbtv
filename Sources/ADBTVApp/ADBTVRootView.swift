@@ -228,7 +228,8 @@ public struct ADBTVRootView: View {
                     },
                     uninstallInstalledApp: { package in
                         runInstalledAppCommand(.uninstall(package), on: device)
-                    }
+                    },
+                    cancelInstalledAppOperation: cancelInstalledAppOperation
                 )
                 .id(device.id)
             } else {
@@ -1357,6 +1358,9 @@ public struct ADBTVRootView: View {
                     on: device
                 ))
             } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
                 completion = .failure(
                     userMessage: command.failureMessage,
                     diagnosticDetail: DiagnosticDetail(
@@ -1377,6 +1381,19 @@ public struct ADBTVRootView: View {
                 completeInstalledAppCommand(completion, on: device.id)
             }
         }
+    }
+
+    private func cancelInstalledAppOperation() {
+        guard case .installedApps(let deviceID) = model.activeDeviceOperation else {
+            return
+        }
+        installedAppsTask?.cancel()
+        installedAppsTask = nil
+        guard model.cancelInstalledAppOperation(on: deviceID),
+              installedAppsState.deviceID == deviceID else {
+            return
+        }
+        installedAppsState.status = .ready(message: "Cancelled.")
     }
 
     private func completeInstalledAppCommand(
@@ -2793,6 +2810,7 @@ private struct DeviceDetailView: View {
     var loadInstalledApps: () -> Void
     var launchInstalledApp: (ADBTVInstalledPackage) -> Void
     var uninstallInstalledApp: (ADBTVInstalledPackage) -> Void
+    var cancelInstalledAppOperation: () -> Void
 
     @State private var selectedTool = ProcessInfo.processInfo.arguments.contains("--ui-install")
         ? DeviceTool.install
@@ -2869,7 +2887,8 @@ private struct DeviceDetailView: View {
             deviceOperationInProgress: deviceOperationInProgress,
             refresh: loadInstalledApps,
             launch: launchInstalledApp,
-            uninstall: uninstallInstalledApp
+            uninstall: uninstallInstalledApp,
+            cancel: cancelInstalledAppOperation
         )
     }
 
@@ -2917,6 +2936,7 @@ private struct InstalledAppsPanel: View {
     var refresh: () -> Void
     var launch: (ADBTVInstalledPackage) -> Void
     var uninstall: (ADBTVInstalledPackage) -> Void
+    var cancel: () -> Void
 
     @State private var searchText = ""
     @State private var pendingUninstall: ADBTVInstalledPackage?
@@ -2983,11 +3003,11 @@ private struct InstalledAppsPanel: View {
         case .idle:
             EmptyView()
         case .loading:
-            progressLabel("Loading installed apps")
+            progressLabel("Loading installed apps", cancel: cancel)
         case .launching(let package):
-            progressLabel("Launching \(package.packageName)")
+            progressLabel("Launching \(package.packageName)", cancel: cancel)
         case .uninstalling(let package):
-            progressLabel("Uninstalling \(package.packageName)")
+            progressLabel("Uninstalling \(package.packageName)", cancel: cancel)
         case .ready(let message):
             if let message {
                 Label(message, systemImage: "checkmark.circle.fill")
@@ -3002,12 +3022,17 @@ private struct InstalledAppsPanel: View {
         }
     }
 
-    private func progressLabel(_ title: String) -> some View {
+    private func progressLabel(_ title: String, cancel: @escaping () -> Void) -> some View {
         HStack(spacing: 10) {
             ProgressView()
             Text(title)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+            Spacer(minLength: 8)
+            Button(action: cancel) {
+                Label("Cancel", systemImage: "xmark")
+            }
+            .buttonStyle(.bordered)
         }
     }
 

@@ -106,6 +106,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Confirm uninstall for a disposable package, verify its app data is removed, and confirm the row disappears.
 - [ ] Refresh after installing an app outside ADB TV and confirm the new package appears.
 - [ ] Disconnect the TV during each operation and confirm the failure is bounded and exposes copyable Technical Details.
+- [ ] Refresh while the TV is unreachable, tap **Cancel**, confirm the spinner stops immediately, return to the device list, and reconnect after restoring the TV.
 - [ ] After an operation fails because the TV is offline, return to the device list and confirm the same saved device can be opened again.
 - [ ] Start an Apps operation and confirm back navigation, device switching, Remote, Install, rename, and connection updates stay unavailable until it completes.
 

@@ -565,9 +565,11 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertFalse(model.selectDevice(id: second.id))
         XCTAssertFalse(model.recordRemoteActionStarted(.home, on: first.id))
         XCTAssertFalse(model.finishInstalledAppOperation(on: second.id))
+        XCTAssertFalse(model.cancelInstalledAppOperation(on: second.id))
 
-        XCTAssertTrue(model.finishInstalledAppOperation(on: first.id))
+        XCTAssertTrue(model.cancelInstalledAppOperation(on: first.id))
         XCTAssertNil(model.activeDeviceOperation)
+        XCTAssertFalse(model.finishInstalledAppOperation(on: first.id))
         XCTAssertTrue(model.selectDevice(id: second.id))
     }
 
