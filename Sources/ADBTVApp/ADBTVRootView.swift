@@ -1881,7 +1881,7 @@ private struct ADBTVInstalledAppsViewState: Equatable {
                 "com.disney.disneyplus",
                 "com.google.android.youtube.tv",
                 "com.netflix.ninja",
-                "tv.twitch.android.app"
+                "com.example.very.long.android.television.streaming.application"
             ].compactMap { try? ADBTVInstalledPackage(packageName: $0) },
             status: .ready(message: nil)
         )
@@ -3034,6 +3034,7 @@ private struct InstalledAppsPanel: View {
 
     @State private var searchText = ""
     @State private var pendingUninstall: ADBTVInstalledPackage?
+    @State private var selectedPackage: ADBTVInstalledPackage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -3099,6 +3100,15 @@ private struct InstalledAppsPanel: View {
         } message: { package in
             Text("This removes \(package.packageName) and its app data from the TV.")
         }
+        .sheet(item: $selectedPackage) { package in
+            InstalledAppDetailsView(
+                package: package,
+                icon: state.icons[package.packageName],
+                actionsDisabled: deviceOperationInProgress || state.status.isBusy,
+                launch: launch,
+                uninstall: uninstall
+            )
+        }
     }
 
     @ViewBuilder
@@ -3145,35 +3155,51 @@ private struct InstalledAppsPanel: View {
         icon: ADBTVInstalledAppIcon?
     ) -> some View {
         HStack(spacing: 12) {
-            InstalledAppIconView(icon: icon)
-
-            Text(package.packageName)
-                .font(.body.monospaced())
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .textSelection(.enabled)
-
-            Spacer(minLength: 8)
-
             Button {
-                launch(package)
+                selectedPackage = package
             } label: {
-                Label("Launch \(package.packageName)", systemImage: "play.fill")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.bordered)
-            .disabled(deviceOperationInProgress || state.status.isBusy)
-            .help("Launch App")
+                HStack(spacing: 12) {
+                    InstalledAppIconView(icon: icon)
 
-            Button(role: .destructive) {
-                pendingUninstall = package
+                    Text(package.packageName)
+                        .font(.body.monospaced())
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Show details for \(package.packageName)")
+
+            Menu {
+                Button {
+                    selectedPackage = package
+                } label: {
+                    Label("Details", systemImage: "info.circle")
+                }
+
+                Button {
+                    launch(package)
+                } label: {
+                    Label("Launch", systemImage: "play.fill")
+                }
+                .disabled(deviceOperationInProgress || state.status.isBusy)
+
+                Divider()
+
+                Button(role: .destructive) {
+                    pendingUninstall = package
+                } label: {
+                    Label("Uninstall", systemImage: "trash")
+                }
+                .disabled(deviceOperationInProgress || state.status.isBusy)
             } label: {
-                Label("Uninstall \(package.packageName)", systemImage: "trash")
+                Label("Actions for \(package.packageName)", systemImage: "ellipsis")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.bordered)
-            .disabled(deviceOperationInProgress || state.status.isBusy)
-            .help("Uninstall App")
+            .help("App Actions")
         }
         .padding(.vertical, 8)
     }
@@ -3185,6 +3211,88 @@ private struct InstalledAppsPanel: View {
         return state.packages.filter {
             $0.packageName.localizedCaseInsensitiveContains(searchText)
         }
+    }
+}
+
+private struct InstalledAppDetailsView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var package: ADBTVInstalledPackage
+    var icon: ADBTVInstalledAppIcon?
+    var actionsDisabled: Bool
+    var launch: (ADBTVInstalledPackage) -> Void
+    var uninstall: (ADBTVInstalledPackage) -> Void
+
+    @State private var confirmsUninstall = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Package Identifier") {
+                    HStack(alignment: .top, spacing: 12) {
+                        InstalledAppIconView(icon: icon)
+
+                        Text(package.packageName)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+
+                        Spacer(minLength: 0)
+
+                        Button(action: copyPackageName) {
+                            Label("Copy Package Identifier", systemImage: "doc.on.doc")
+                                .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Copy Package Identifier")
+                    }
+                }
+
+                Section {
+                    Button {
+                        dismiss()
+                        launch(package)
+                    } label: {
+                        Label("Launch App", systemImage: "play.fill")
+                    }
+                    .disabled(actionsDisabled)
+
+                    Button(role: .destructive) {
+                        confirmsUninstall = true
+                    } label: {
+                        Label("Uninstall App", systemImage: "trash")
+                    }
+                    .disabled(actionsDisabled)
+                }
+            }
+            .navigationTitle("App Details")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .confirmationDialog(
+                "Uninstall app?",
+                isPresented: $confirmsUninstall
+            ) {
+                Button("Uninstall \(package.packageName)", role: .destructive) {
+                    dismiss()
+                    uninstall(package)
+                }
+            } message: {
+                Text("This removes \(package.packageName) and its app data from the TV.")
+            }
+        }
+    }
+
+    private func copyPackageName() {
+#if os(iOS)
+        UIPasteboard.general.string = package.packageName
+#elseif os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(package.packageName, forType: .string)
+#endif
     }
 }
 
