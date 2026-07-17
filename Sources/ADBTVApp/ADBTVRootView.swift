@@ -2382,7 +2382,7 @@ private struct SavedDeviceConnectionView: View {
                     device: device,
                     repair: repair,
                     rename: rename,
-                    actionsDisabled: false
+                    actionsDisabled: state.isConnecting
                 )
 
                 switch state {
@@ -2832,6 +2832,7 @@ private struct DeviceDetailView: View {
         }
         .navigationTitle(device.displayName)
 #if os(iOS)
+        .navigationBarBackButtonHidden(deviceOperationInProgress)
         .navigationBarTitleDisplayMode(.inline)
 #endif
     }

@@ -98,7 +98,7 @@ final class ADBTVAppModelTests: XCTestCase {
         model.removeDevices(ids: [second.id])
 
         XCTAssertEqual(model.devices, [first])
-        XCTAssertEqual(model.selectedDevice, first)
+        XCTAssertNil(model.selectedDevice)
     }
 
     func testModelUpdatesDeviceAtSameEndpointWithoutCreatingDuplicateOrLosingName() throws {

@@ -107,7 +107,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Refresh after installing an app outside ADB TV and confirm the new package appears.
 - [ ] Disconnect the TV during each operation and confirm the failure is bounded and exposes copyable Technical Details.
 - [ ] After an operation fails because the TV is offline, return to the device list and confirm the same saved device can be opened again.
-- [ ] Start an Apps operation and confirm device switching, Remote, Install, rename, and connection updates stay unavailable until it completes.
+- [ ] Start an Apps operation and confirm back navigation, device switching, Remote, Install, rename, and connection updates stay unavailable until it completes.
 
 ## APK Installation
 

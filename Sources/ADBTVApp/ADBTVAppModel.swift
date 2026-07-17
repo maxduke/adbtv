@@ -99,7 +99,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
         devices.removeAll { ids.contains($0.id) && $0.id != protectedDeviceID }
 
         if let selectedDeviceID, !devices.contains(where: { $0.id == selectedDeviceID }) {
-            self.selectedDeviceID = devices.first?.id
+            self.selectedDeviceID = nil
         }
     }
 
