@@ -3162,8 +3162,7 @@ private struct InstalledAppsPanel: View {
                     InstalledAppIconView(icon: icon)
 
                     Text(package.packageName)
-                        .font(.body.monospaced())
-                        .lineLimit(2)
+                        .font(.subheadline.monospaced())
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
