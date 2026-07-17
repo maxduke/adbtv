@@ -1,4 +1,4 @@
-package com.maxduke.adbtv.helper.v2;
+package com.maxduke.adbtv.helper.v3;
 
 import android.inputmethodservice.InputMethodService;
 import android.view.inputmethod.InputConnection;

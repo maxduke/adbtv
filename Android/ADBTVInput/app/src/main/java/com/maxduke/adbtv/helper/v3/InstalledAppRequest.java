@@ -1,13 +1,13 @@
-package com.maxduke.adbtv.helper.v2;
+package com.maxduke.adbtv.helper.v3;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 
-final class AppIconRequest {
+final class InstalledAppRequest {
     static final int MAX_PACKAGE_COUNT = 16;
 
-    private AppIconRequest() {}
+    private InstalledAppRequest() {}
 
     static List<String> parsePackageNames(String value) {
         if (value == null || value.isEmpty()) {

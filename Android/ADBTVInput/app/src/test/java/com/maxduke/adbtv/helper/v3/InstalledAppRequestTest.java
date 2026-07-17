@@ -1,4 +1,4 @@
-package com.maxduke.adbtv.helper.v2;
+package com.maxduke.adbtv.helper.v3;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
@@ -9,12 +9,12 @@ import java.util.Arrays;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
-public final class AppIconRequestTest {
+public final class InstalledAppRequestTest {
     @Test
     public void parsesValidPackagesAndRemovesDuplicates() {
         assertEquals(
                 Arrays.asList("com.example.player", "tv.example_app"),
-                AppIconRequest.parsePackageNames(
+                InstalledAppRequest.parsePackageNames(
                         "com.example.player,tv.example_app,com.example.player"
                 )
         );
@@ -24,19 +24,19 @@ public final class AppIconRequestTest {
     public void rejectsMissingMalformedAndOversizedRequests() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> AppIconRequest.parsePackageNames(null)
+                () -> InstalledAppRequest.parsePackageNames(null)
         );
         assertThrows(
                 IllegalArgumentException.class,
-                () -> AppIconRequest.parsePackageNames("com.example;reboot")
+                () -> InstalledAppRequest.parsePackageNames("com.example;reboot")
         );
 
-        String packages = IntStream.range(0, AppIconRequest.MAX_PACKAGE_COUNT + 1)
+        String packages = IntStream.range(0, InstalledAppRequest.MAX_PACKAGE_COUNT + 1)
                 .mapToObj(index -> "com.example.app" + index)
                 .collect(Collectors.joining(","));
         assertThrows(
                 IllegalArgumentException.class,
-                () -> AppIconRequest.parsePackageNames(packages)
+                () -> InstalledAppRequest.parsePackageNames(packages)
         );
     }
 }

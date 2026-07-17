@@ -3,15 +3,15 @@ plugins {
 }
 
 android {
-    namespace = "com.maxduke.adbtv.helper.v2"
+    namespace = "com.maxduke.adbtv.helper.v3"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.maxduke.adbtv.helper.v2"
+        applicationId = "com.maxduke.adbtv.helper.v3"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
     }
 
     buildTypes {

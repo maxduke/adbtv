@@ -60,13 +60,22 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertTrue(session.commands[0].hasPrefix("pm uninstall 'com.example.player'; "))
     }
 
-    func testIconsLoadValidPNGAndIgnoreInvalidItems() async throws {
+    func testDetailsLoadMetadataAndIgnoreInvalidIconsAndUnrequestedItems() async throws {
         let validPNG = try XCTUnwrap(Data(base64Encoded: Self.onePixelPNGBase64))
         let response = """
         [
-          {"package":"com.example.player","png":"\(validPNG.base64EncodedString())"},
-          {"package":"com.example.invalid","png":"not-base64"},
-          {"package":"com.unrequested.app","png":"\(validPNG.base64EncodedString())"}
+          {
+            "package":"com.example.player",
+            "label":"Example Player",
+            "versionName":"2.4.1",
+            "versionCode":20401,
+            "firstInstallTime":1704067200000,
+            "lastUpdateTime":1711929600000,
+            "apkBytes":52428800,
+            "png":"\(validPNG.base64EncodedString())"
+          },
+          {"package":"com.example.invalid","label":"Invalid Icon","png":"not-base64"},
+          {"package":"com.unrequested.app","label":"Unrequested"}
         ]
         """
         var session = InstalledAppSession(outputs: [checkedOutput(response)])
@@ -75,25 +84,48 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             try ADBTVInstalledPackage(packageName: "com.example.invalid")
         ]
 
-        let icons = await ADBTVInstalledAppManager().icons(for: packages, using: &session)
+        let details = await ADBTVInstalledAppManager().details(for: packages, using: &session)
 
-        XCTAssertEqual(icons["com.example.player"]?.pngData, validPNG)
-        XCTAssertNil(icons["com.example.invalid"])
-        XCTAssertNil(icons["com.unrequested.app"])
-        XCTAssertTrue(session.commands[0].contains("content://com.maxduke.adbtv.helper.v2.icons/icons"))
+        XCTAssertEqual(details["com.example.player"]?.displayName, "Example Player")
+        XCTAssertEqual(details["com.example.player"]?.versionName, "2.4.1")
+        XCTAssertEqual(details["com.example.player"]?.versionCode, 20_401)
+        XCTAssertEqual(details["com.example.player"]?.apkByteCount, 52_428_800)
+        XCTAssertEqual(details["com.example.player"]?.icon?.pngData, validPNG)
+        XCTAssertEqual(details["com.example.invalid"]?.displayName, "Invalid Icon")
+        XCTAssertNil(details["com.example.invalid"]?.icon)
+        XCTAssertNil(details["com.unrequested.app"])
+        XCTAssertTrue(session.commands[0].contains("content://com.maxduke.adbtv.helper.v3.apps/apps"))
         XCTAssertTrue(session.commands[0].contains("head -c 1048576"))
     }
 
-    func testIconsStopAfterUnavailableHelper() async throws {
+    func testDetailsStopAfterUnavailableHelper() async throws {
         let packages = try (0 ..< 17).map {
             try ADBTVInstalledPackage(packageName: "com.example.app\($0)")
         }
         var session = InstalledAppSession(outputs: [checkedOutput("helper unavailable")])
 
-        let icons = await ADBTVInstalledAppManager().icons(for: packages, using: &session)
+        let details = await ADBTVInstalledAppManager().details(for: packages, using: &session)
 
-        XCTAssertTrue(icons.isEmpty)
+        XCTAssertTrue(details.isEmpty)
         XCTAssertEqual(session.commands.count, 1)
+    }
+
+    func testDetailsDiscardUnsafeOrInvalidOptionalMetadata() {
+        let details = ADBTVInstalledAppDetails(
+            displayName: "  Example TV  ",
+            versionName: "bad\nversion",
+            versionCode: -1,
+            firstInstallTimeMilliseconds: 0,
+            lastUpdateTimeMilliseconds: 1_714_521_600_000,
+            apkByteCount: 0
+        )
+
+        XCTAssertEqual(details.displayName, "Example TV")
+        XCTAssertNil(details.versionName)
+        XCTAssertNil(details.versionCode)
+        XCTAssertNil(details.firstInstallDate)
+        XCTAssertNotNil(details.lastUpdateDate)
+        XCTAssertNil(details.apkByteCount)
     }
 
     func testIconRejectsOversizedAndInvalidDimensions() throws {

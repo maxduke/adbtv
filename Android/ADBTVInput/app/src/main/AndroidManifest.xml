@@ -5,7 +5,7 @@
     <application
         android:allowBackup="false"
         android:hasCode="true"
-        android:label="ADB TV Input"
+        android:label="ADB TV Helper"
         android:supportsRtl="true">
         <service
             android:name=".ADBTVInputMethodService"
@@ -25,13 +25,13 @@
             android:exported="true"
             android:permission="android.permission.DUMP">
             <intent-filter>
-                <action android:name="com.maxduke.adbtv.helper.v2.COMMIT_TEXT" />
+                <action android:name="com.maxduke.adbtv.helper.v3.COMMIT_TEXT" />
             </intent-filter>
         </receiver>
 
         <provider
-            android:name=".AppIconProvider"
-            android:authorities="com.maxduke.adbtv.helper.v2.icons"
+            android:name=".InstalledAppProvider"
+            android:authorities="com.maxduke.adbtv.helper.v3.apps"
             android:exported="true"
             android:grantUriPermissions="false"
             android:readPermission="android.permission.DUMP"

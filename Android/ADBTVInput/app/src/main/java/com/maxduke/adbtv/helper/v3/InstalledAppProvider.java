@@ -1,7 +1,9 @@
-package com.maxduke.adbtv.helper.v2;
+package com.maxduke.adbtv.helper.v3;
 
 import android.content.ContentProvider;
 import android.content.ContentValues;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -15,15 +17,17 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
-public final class AppIconProvider extends ContentProvider {
-    private static final String ICONS_PATH = "icons";
+public final class InstalledAppProvider extends ContentProvider {
+    private static final String APPS_PATH = "apps";
     private static final int ICON_SIZE = 96;
     private static final int MAX_PNG_BYTE_COUNT = 48 * 1024;
+    private static final int MAX_TEXT_CODE_POINTS = 256;
 
     @Override
     public boolean onCreate() {
@@ -34,13 +38,13 @@ public final class AppIconProvider extends ContentProvider {
     public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
         if (!"r".equals(mode)
                 || uri.getPathSegments().size() != 1
-                || !ICONS_PATH.equals(uri.getPathSegments().get(0))) {
-            throw new FileNotFoundException("Unsupported icon request");
+                || !APPS_PATH.equals(uri.getPathSegments().get(0))) {
+            throw new FileNotFoundException("Unsupported app request");
         }
 
         final List<String> packageNames;
         try {
-            packageNames = AppIconRequest.parsePackageNames(uri.getQueryParameter("packages"));
+            packageNames = InstalledAppRequest.parsePackageNames(uri.getQueryParameter("packages"));
         } catch (IllegalArgumentException error) {
             throw new FileNotFoundException(error.getMessage());
         }
@@ -49,13 +53,13 @@ public final class AppIconProvider extends ContentProvider {
         try {
             pipe = ParcelFileDescriptor.createPipe();
         } catch (IOException error) {
-            throw new FileNotFoundException("Could not create icon response");
+            throw new FileNotFoundException("Could not create app response");
         }
 
         ParcelFileDescriptor writeSide = pipe[1];
         new Thread(
                 () -> writeResponse(writeSide, packageNames),
-                "ADBTV-icon-provider"
+                "ADBTV-app-provider"
         ).start();
         return pipe[0];
     }
@@ -63,31 +67,69 @@ public final class AppIconProvider extends ContentProvider {
     private void writeResponse(ParcelFileDescriptor output, List<String> packageNames) {
         try (ParcelFileDescriptor.AutoCloseOutputStream stream =
                      new ParcelFileDescriptor.AutoCloseOutputStream(output)) {
-            stream.write(iconResponse(packageNames).getBytes(StandardCharsets.UTF_8));
+            stream.write(appResponse(packageNames).getBytes(StandardCharsets.UTF_8));
         } catch (IOException ignored) {
             // The ADB reader may have cancelled or reached its output limit.
         }
     }
 
-    private String iconResponse(List<String> packageNames) {
+    private String appResponse(List<String> packageNames) {
         JSONArray response = new JSONArray();
         PackageManager packageManager = getContext().getPackageManager();
 
         for (String packageName : packageNames) {
             try {
-                byte[] png = renderIcon(packageManager.getApplicationIcon(packageName));
-                if (png == null) {
-                    continue;
-                }
+                PackageInfo packageInfo = packageManager.getPackageInfo(packageName, 0);
+                ApplicationInfo applicationInfo = packageInfo.applicationInfo;
                 JSONObject item = new JSONObject();
                 item.put("package", packageName);
-                item.put("png", Base64.encodeToString(png, Base64.NO_WRAP));
+                item.put("label", boundedText(
+                        packageManager.getApplicationLabel(applicationInfo).toString()
+                ));
+                if (packageInfo.versionName != null) {
+                    item.put("versionName", boundedText(packageInfo.versionName));
+                }
+                item.put("versionCode", packageInfo.getLongVersionCode());
+                item.put("firstInstallTime", packageInfo.firstInstallTime);
+                item.put("lastUpdateTime", packageInfo.lastUpdateTime);
+                item.put("apkBytes", apkByteCount(
+                        applicationInfo.sourceDir,
+                        applicationInfo.splitSourceDirs
+                ));
+
+                byte[] png = renderIcon(packageManager.getApplicationIcon(applicationInfo));
+                if (png != null) {
+                    item.put("png", Base64.encodeToString(png, Base64.NO_WRAP));
+                }
                 response.put(item);
             } catch (Exception ignored) {
-                // One missing or malformed icon must not fail the batch.
+                // One missing or malformed app must not fail the batch.
             }
         }
         return response.toString();
+    }
+
+    static String boundedText(String value) {
+        int codePointCount = value.codePointCount(0, value.length());
+        if (codePointCount <= MAX_TEXT_CODE_POINTS) {
+            return value;
+        }
+        return value.substring(0, value.offsetByCodePoints(0, MAX_TEXT_CODE_POINTS));
+    }
+
+    static long apkByteCount(String sourceDir, String[] splitSourceDirs) {
+        long total = fileByteCount(sourceDir);
+        if (splitSourceDirs != null) {
+            for (String path : splitSourceDirs) {
+                long byteCount = fileByteCount(path);
+                total = Long.MAX_VALUE - total < byteCount ? Long.MAX_VALUE : total + byteCount;
+            }
+        }
+        return total;
+    }
+
+    private static long fileByteCount(String path) {
+        return path == null ? 0 : Math.max(0, new File(path).length());
     }
 
     private byte[] renderIcon(Drawable drawable) {

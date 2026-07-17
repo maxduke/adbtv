@@ -198,21 +198,29 @@ public struct ADBTVRemoteText: Equatable, Sendable {
         let component = ADBTVUnicodeInputHelper.inputMethodComponent
         let receiver = ADBTVUnicodeInputHelper.receiverComponent
         let action = ADBTVUnicodeInputHelper.commitTextAction
+        let legacyComponent = ADBTVUnicodeInputHelper.legacyInputMethodComponent
+        let legacyReceiver = ADBTVUnicodeInputHelper.legacyReceiverComponent
+        let legacyAction = ADBTVUnicodeInputHelper.legacyCommitTextAction
 
-        return "previous_ime=\"$(settings get secure default_input_method)\" || exit 20; "
+        return "if pm path '\(ADBTVUnicodeInputHelper.packageName)' >/dev/null 2>&1; then "
+            + "helper_component='\(component)'; helper_receiver='\(receiver)'; "
+            + "helper_action='\(action)'; else "
+            + "helper_component='\(legacyComponent)'; helper_receiver='\(legacyReceiver)'; "
+            + "helper_action='\(legacyAction)'; fi; "
+            + "previous_ime=\"$(settings get secure default_input_method)\" || exit 20; "
             + "restore_previous_ime() { "
             + "[ -z \"$previous_ime\" ] || [ \"$previous_ime\" = null ] "
             + "|| ime set \"$previous_ime\" >/dev/null; }; "
             + "trap 'restore_previous_ime >/dev/null 2>&1' EXIT; "
             + "trap 'exit 26' HUP INT TERM; "
-            + "ime enable '\(component)' >/dev/null || exit 21; "
-            + "ime set '\(component)' >/dev/null || exit 22; "
+            + "ime enable \"$helper_component\" >/dev/null || exit 21; "
+            + "ime set \"$helper_component\" >/dev/null || exit 22; "
             + "attempt=0; broadcast_status=1; broadcast_output=''; "
             + "while [ \"$attempt\" -lt 8 ]; do "
             + "sleep 0.25; "
             + "broadcast_output=\"$(am broadcast --user current "
-            + "--include-stopped-packages --receiver-foreground -a '\(action)' "
-            + "-n '\(receiver)' --es text_base64 '\(encodedText)' 2>&1)\"; "
+            + "--include-stopped-packages --receiver-foreground -a \"$helper_action\" "
+            + "-n \"$helper_receiver\" --es text_base64 '\(encodedText)' 2>&1)\"; "
             + "broadcast_status=$?; "
             + "if [ \"$broadcast_status\" -eq 0 ] "
             + "&& printf '%s' \"$broadcast_output\" "
@@ -230,12 +238,17 @@ public struct ADBTVRemoteText: Equatable, Sendable {
 }
 
 public enum ADBTVUnicodeInputHelper: Sendable {
-    public static let packageName = "com.maxduke.adbtv.helper.v2"
+    public static let packageName = "com.maxduke.adbtv.helper.v3"
     public static let inputMethodComponent =
-        "com.maxduke.adbtv.helper.v2/.ADBTVInputMethodService"
+        "com.maxduke.adbtv.helper.v3/.ADBTVInputMethodService"
     public static let receiverComponent =
+        "com.maxduke.adbtv.helper.v3/.TextCommitReceiver"
+    public static let commitTextAction = "com.maxduke.adbtv.helper.v3.COMMIT_TEXT"
+    public static let legacyInputMethodComponent =
+        "com.maxduke.adbtv.helper.v2/.ADBTVInputMethodService"
+    public static let legacyReceiverComponent =
         "com.maxduke.adbtv.helper.v2/.TextCommitReceiver"
-    public static let commitTextAction = "com.maxduke.adbtv.helper.v2.COMMIT_TEXT"
+    public static let legacyCommitTextAction = "com.maxduke.adbtv.helper.v2.COMMIT_TEXT"
     public static let bundledAPKFileName = "ADBTVInput.apk"
 }
 

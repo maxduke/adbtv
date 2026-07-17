@@ -1,4 +1,4 @@
-package com.maxduke.adbtv.helper.v2;
+package com.maxduke.adbtv.helper.v3;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;

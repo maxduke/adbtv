@@ -28,8 +28,8 @@ public struct ADBTVRootView: View {
     @State private var remoteTask: Task<Void, Never>?
     @State private var installedAppsTask: Task<Void, Never>?
     @State private var installedAppsOperationID: UUID?
-    @State private var installedAppIconsTask: Task<Void, Never>?
-    @State private var installedAppIconsOperationID: UUID?
+    @State private var installedAppDetailsTask: Task<Void, Never>?
+    @State private var installedAppDetailsOperationID: UUID?
     @State private var installedAppsState = ADBTVInstalledAppsViewState()
     @State private var pairingTask: Task<Void, Never>?
     @State private var deviceConnectionTask: Task<Void, Never>?
@@ -378,8 +378,8 @@ public struct ADBTVRootView: View {
             remoteTask?.cancel()
             installedAppsTask?.cancel()
             installedAppsOperationID = nil
-            installedAppIconsTask?.cancel()
-            installedAppIconsOperationID = nil
+            installedAppDetailsTask?.cancel()
+            installedAppDetailsOperationID = nil
             deviceConnectionTask?.cancel()
             model.cancelActiveDeviceOperation()
             cancelPairing()
@@ -472,7 +472,7 @@ public struct ADBTVRootView: View {
             return
         }
 
-        cancelInstalledAppIconLoad()
+        cancelInstalledAppDetailsLoad()
         deviceConnectionTask?.cancel()
         deviceConnectionTask = nil
 
@@ -1358,8 +1358,8 @@ public struct ADBTVRootView: View {
             installedAppsState = ADBTVInstalledAppsViewState(deviceID: device.id)
         }
         if case .list = command {
-            cancelInstalledAppIconLoad()
-            installedAppsState.icons = [:]
+            cancelInstalledAppDetailsLoad()
+            installedAppsState.details = [:]
         }
         installedAppsState.status = command.inProgressStatus
         let operationID = UUID()
@@ -1433,14 +1433,14 @@ public struct ADBTVRootView: View {
         case .success(.listed(let packages)):
             installedAppsState.packages = packages
             installedAppsState.status = .ready(message: nil)
-            startInstalledAppIconLoad(packages, on: device)
+            startInstalledAppDetailsLoad(packages, on: device)
         case .success(.launched(let package)):
             installedAppsState.status = .ready(
                 message: "Launched \(package.packageName)."
             )
         case .success(.uninstalled(let package)):
             installedAppsState.packages.removeAll { $0 == package }
-            installedAppsState.icons.removeValue(forKey: package.packageName)
+            installedAppsState.details.removeValue(forKey: package.packageName)
             installedAppsState.status = .ready(
                 message: "Uninstalled \(package.packageName)."
             )
@@ -1452,47 +1452,47 @@ public struct ADBTVRootView: View {
         }
     }
 
-    private func startInstalledAppIconLoad(
+    private func startInstalledAppDetailsLoad(
         _ packages: [ADBTVInstalledPackage],
         on device: ADBTVDeviceSummary
     ) {
-        cancelInstalledAppIconLoad()
+        cancelInstalledAppDetailsLoad()
         guard !packages.isEmpty else {
             return
         }
 
         let operationID = UUID()
-        installedAppIconsOperationID = operationID
-        installedAppIconsTask = Task {
-            let icons = await Self.loadInstalledAppIcons(packages, on: device)
+        installedAppDetailsOperationID = operationID
+        installedAppDetailsTask = Task {
+            let details = await Self.loadInstalledAppDetails(packages, on: device)
             guard !Task.isCancelled else {
                 return
             }
             await MainActor.run {
-                guard installedAppIconsOperationID == operationID,
+                guard installedAppDetailsOperationID == operationID,
                       installedAppsState.deviceID == device.id else {
                     return
                 }
                 let currentPackages = Set(installedAppsState.packages.map(\.packageName))
-                installedAppsState.icons = icons.filter {
+                installedAppsState.details = details.filter {
                     currentPackages.contains($0.key)
                 }
-                installedAppIconsTask = nil
-                installedAppIconsOperationID = nil
+                installedAppDetailsTask = nil
+                installedAppDetailsOperationID = nil
             }
         }
     }
 
-    private func cancelInstalledAppIconLoad() {
-        installedAppIconsTask?.cancel()
-        installedAppIconsTask = nil
-        installedAppIconsOperationID = nil
+    private func cancelInstalledAppDetailsLoad() {
+        installedAppDetailsTask?.cancel()
+        installedAppDetailsTask = nil
+        installedAppDetailsOperationID = nil
     }
 
-    private static func loadInstalledAppIcons(
+    private static func loadInstalledAppDetails(
         _ packages: [ADBTVInstalledPackage],
         on device: ADBTVDeviceSummary
-    ) async -> [String: ADBTVInstalledAppIcon] {
+    ) async -> [String: ADBTVInstalledAppDetails] {
 #if canImport(Network) && canImport(Security)
         do {
             return try await ADBTVOperationTimeoutPolicy.installedApps.run(
@@ -1500,7 +1500,7 @@ public struct ADBTVRootView: View {
             ) {
                 var connection = try await connectedDevice(for: device)
                 defer { connection.cancel() }
-                return await ADBTVInstalledAppManager().icons(
+                return await ADBTVInstalledAppManager().details(
                     for: packages,
                     using: &connection
                 )
@@ -1855,18 +1855,18 @@ private enum ADBTVInstalledAppCompletion: Sendable {
 private struct ADBTVInstalledAppsViewState: Equatable {
     var deviceID: ADBTVDeviceSummary.ID?
     var packages: [ADBTVInstalledPackage]
-    var icons: [String: ADBTVInstalledAppIcon]
+    var details: [String: ADBTVInstalledAppDetails]
     var status: ADBTVInstalledAppsStatus
 
     init(
         deviceID: ADBTVDeviceSummary.ID? = nil,
         packages: [ADBTVInstalledPackage] = [],
-        icons: [String: ADBTVInstalledAppIcon] = [:],
+        details: [String: ADBTVInstalledAppDetails] = [:],
         status: ADBTVInstalledAppsStatus = .idle
     ) {
         self.deviceID = deviceID
         self.packages = packages
-        self.icons = icons
+        self.details = details
         self.status = status
     }
 
@@ -1875,14 +1875,30 @@ private struct ADBTVInstalledAppsViewState: Equatable {
     }
 
     static func preview(deviceID: ADBTVDeviceSummary.ID) -> Self {
-        Self(
+        let packageNames = [
+            "com.disney.disneyplus",
+            "com.google.android.youtube.tv",
+            "com.netflix.ninja",
+            "com.example.very.long.android.television.streaming.application"
+        ]
+        return Self(
             deviceID: deviceID,
-            packages: [
-                "com.disney.disneyplus",
-                "com.google.android.youtube.tv",
-                "com.netflix.ninja",
-                "com.example.very.long.android.television.streaming.application"
-            ].compactMap { try? ADBTVInstalledPackage(packageName: $0) },
+            packages: packageNames.compactMap { try? ADBTVInstalledPackage(packageName: $0) },
+            details: [
+                packageNames[0]: ADBTVInstalledAppDetails(
+                    displayName: "Disney+",
+                    versionName: "4.18.0",
+                    versionCode: 418_000,
+                    firstInstallTimeMilliseconds: 1_704_067_200_000,
+                    lastUpdateTimeMilliseconds: 1_719_792_000_000,
+                    apkByteCount: 38_797_312
+                ),
+                packageNames[1]: ADBTVInstalledAppDetails(displayName: "YouTube"),
+                packageNames[2]: ADBTVInstalledAppDetails(displayName: "Netflix"),
+                packageNames[3]: ADBTVInstalledAppDetails(
+                    displayName: "A Streaming App With a Longer Name"
+                )
+            ],
             status: .ready(message: nil)
         )
     }
@@ -3068,7 +3084,7 @@ private struct InstalledAppsPanel: View {
                     ForEach(filteredPackages) { package in
                         installedAppRow(
                             package,
-                            icon: state.icons[package.packageName]
+                            details: state.details[package.packageName]
                         )
                         Divider()
                     }
@@ -3103,7 +3119,7 @@ private struct InstalledAppsPanel: View {
         .sheet(item: $selectedPackage) { package in
             InstalledAppDetailsView(
                 package: package,
-                icon: state.icons[package.packageName],
+                details: state.details[package.packageName],
                 actionsDisabled: deviceOperationInProgress || state.status.isBusy,
                 launch: launch,
                 uninstall: uninstall
@@ -3152,19 +3168,30 @@ private struct InstalledAppsPanel: View {
 
     private func installedAppRow(
         _ package: ADBTVInstalledPackage,
-        icon: ADBTVInstalledAppIcon?
+        details: ADBTVInstalledAppDetails?
     ) -> some View {
         HStack(spacing: 12) {
             Button {
                 selectedPackage = package
             } label: {
                 HStack(spacing: 12) {
-                    InstalledAppIconView(icon: icon)
+                    InstalledAppIconView(icon: details?.icon)
 
-                    Text(package.packageName)
-                        .font(.subheadline.monospaced())
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let displayName = details?.displayName {
+                            Text(displayName)
+                                .font(.headline)
+                                .lineLimit(2)
+                            Text(package.packageName)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(package.packageName)
+                                .font(.subheadline.monospaced())
+                        }
+                    }
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .contentShape(Rectangle())
             }
@@ -3209,6 +3236,8 @@ private struct InstalledAppsPanel: View {
         }
         return state.packages.filter {
             $0.packageName.localizedCaseInsensitiveContains(searchText)
+                || state.details[$0.packageName]?.displayName?
+                    .localizedCaseInsensitiveContains(searchText) == true
         }
     }
 }
@@ -3217,7 +3246,7 @@ private struct InstalledAppDetailsView: View {
     @Environment(\.dismiss) private var dismiss
 
     var package: ADBTVInstalledPackage
-    var icon: ADBTVInstalledAppIcon?
+    var details: ADBTVInstalledAppDetails?
     var actionsDisabled: Bool
     var launch: (ADBTVInstalledPackage) -> Void
     var uninstall: (ADBTVInstalledPackage) -> Void
@@ -3229,11 +3258,17 @@ private struct InstalledAppDetailsView: View {
             List {
                 Section("Package Identifier") {
                     HStack(alignment: .top, spacing: 12) {
-                        InstalledAppIconView(icon: icon)
+                        InstalledAppIconView(icon: details?.icon)
 
-                        Text(package.packageName)
-                            .font(.body.monospaced())
-                            .textSelection(.enabled)
+                        VStack(alignment: .leading, spacing: 4) {
+                            if let displayName = details?.displayName {
+                                Text(displayName)
+                                    .font(.headline)
+                            }
+                            Text(package.packageName)
+                                .font(.body.monospaced())
+                                .textSelection(.enabled)
+                        }
 
                         Spacer(minLength: 0)
 
@@ -3243,6 +3278,36 @@ private struct InstalledAppDetailsView: View {
                         }
                         .buttonStyle(.borderless)
                         .help("Copy Package Identifier")
+                    }
+                }
+
+                if hasMetadata {
+                    Section("Information") {
+                        if let versionName = details?.versionName {
+                            LabeledContent("Version", value: versionName)
+                        }
+                        if let versionCode = details?.versionCode {
+                            LabeledContent("Version Code", value: String(versionCode))
+                        }
+                        if let apkByteCount = details?.apkByteCount {
+                            LabeledContent(
+                                "APK Size",
+                                value: ByteCountFormatter.string(
+                                    fromByteCount: apkByteCount,
+                                    countStyle: .file
+                                )
+                            )
+                        }
+                        if let firstInstallDate = details?.firstInstallDate {
+                            LabeledContent("Installed") {
+                                Text(firstInstallDate, style: .date)
+                            }
+                        }
+                        if let lastUpdateDate = details?.lastUpdateDate {
+                            LabeledContent("Updated") {
+                                Text(lastUpdateDate, style: .date)
+                            }
+                        }
                     }
                 }
 
@@ -3263,7 +3328,7 @@ private struct InstalledAppDetailsView: View {
                     .disabled(actionsDisabled)
                 }
             }
-            .navigationTitle("App Details")
+            .navigationTitle(details?.displayName ?? "App Details")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
@@ -3283,6 +3348,14 @@ private struct InstalledAppDetailsView: View {
                 Text("This removes \(package.packageName) and its app data from the TV.")
             }
         }
+    }
+
+    private var hasMetadata: Bool {
+        details?.versionName != nil
+            || details?.versionCode != nil
+            || details?.apkByteCount != nil
+            || details?.firstInstallDate != nil
+            || details?.lastUpdateDate != nil
     }
 
     private func copyPackageName() {

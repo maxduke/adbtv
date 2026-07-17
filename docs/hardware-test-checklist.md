@@ -100,10 +100,13 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 - [ ] Open **Apps** and confirm user-installed package identifiers load in sorted order without system packages.
 - [ ] Search by a partial package identifier and confirm the list filters without another device request.
-- [ ] Install the bundled Android helper from the **Apps** toolbar, confirm the Install panel exposes progress and cancellation, refresh **Apps**, and confirm real icons appear for Android TV and sideloaded apps.
-- [ ] Remove the helper, refresh **Apps**, and confirm generic icons appear without blocking list, search, launch, or uninstall.
-- [ ] Reinstall the helper, change an installed package, refresh, and confirm removed or replaced package icons are not retained.
-- [ ] Test a TV with a large third-party app library and confirm bounded icon loading does not block package actions or navigation.
+- [ ] Install the bundled Android helper from the **Apps** toolbar, confirm the Install panel exposes progress and cancellation, refresh **Apps**, and confirm names and real icons appear for Android TV and sideloaded apps.
+- [ ] Open app details and confirm version, version code, installed/updated dates, and **APK Size** are sensible; confirm APK Size is not presented as app data or cache usage.
+- [ ] Search by both app name and package identifier.
+- [ ] Remove the v3 helper, refresh **Apps**, and confirm package identifiers and generic icons remain without blocking list, search, launch, or uninstall.
+- [ ] With only the v2 helper installed, confirm Chinese input still works; install v3 and confirm Chinese input continues to work.
+- [ ] Reinstall the helper, change an installed package, refresh, and confirm removed or replaced app metadata is not retained.
+- [ ] Test a TV with a large third-party app library and confirm bounded metadata loading does not block package actions or navigation.
 - [ ] Launch an Android TV app and confirm its Leanback activity opens.
 - [ ] Launch a phone-style app without a Leanback activity and confirm the standard launcher fallback opens it, or a clear error with Technical Details appears.
 - [ ] Cancel the uninstall confirmation and confirm the package remains installed.

@@ -63,11 +63,61 @@ public struct ADBTVInstalledAppIcon: Equatable, Sendable {
     }
 }
 
+public struct ADBTVInstalledAppDetails: Equatable, Sendable {
+    private static let maximumTextLength = 256
+
+    public let displayName: String?
+    public let versionName: String?
+    public let versionCode: Int64?
+    public let firstInstallDate: Date?
+    public let lastUpdateDate: Date?
+    public let apkByteCount: Int64?
+    public let icon: ADBTVInstalledAppIcon?
+
+    public init(
+        displayName: String? = nil,
+        versionName: String? = nil,
+        versionCode: Int64? = nil,
+        firstInstallTimeMilliseconds: Int64? = nil,
+        lastUpdateTimeMilliseconds: Int64? = nil,
+        apkByteCount: Int64? = nil,
+        icon: ADBTVInstalledAppIcon? = nil
+    ) {
+        self.displayName = Self.validatedText(displayName)
+        self.versionName = Self.validatedText(versionName)
+        self.versionCode = versionCode.flatMap { $0 >= 0 ? $0 : nil }
+        self.firstInstallDate = Self.date(milliseconds: firstInstallTimeMilliseconds)
+        self.lastUpdateDate = Self.date(milliseconds: lastUpdateTimeMilliseconds)
+        self.apkByteCount = apkByteCount.flatMap { $0 > 0 ? $0 : nil }
+        self.icon = icon
+    }
+
+    private static func validatedText(_ value: String?) -> String? {
+        guard let value else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed.unicodeScalars.count <= maximumTextLength,
+              trimmed.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func date(milliseconds: Int64?) -> Date? {
+        guard let milliseconds, milliseconds > 0 else {
+            return nil
+        }
+        return Date(timeIntervalSince1970: TimeInterval(milliseconds) / 1_000)
+    }
+}
+
 public struct ADBTVInstalledAppManager: Sendable {
-    private static let iconBatchSize = 16
-    private static let maximumIconCount = 128
-    private static let maximumIconResponseByteCount = 1024 * 1024
-    private static let iconProviderURI = "content://com.maxduke.adbtv.helper.v2.icons/icons"
+    private static let detailsBatchSize = 16
+    private static let maximumDetailsCount = 128
+    private static let maximumDetailsResponseByteCount = 1024 * 1024
+    private static let detailsProviderURI = "content://com.maxduke.adbtv.helper.v3.apps/apps"
 
     public init() {}
 
@@ -113,53 +163,62 @@ public struct ADBTVInstalledAppManager: Sendable {
         }
     }
 
-    public func icons<Session: ADBShellCommandRunningSession>(
+    public func details<Session: ADBShellCommandRunningSession>(
         for packages: [ADBTVInstalledPackage],
         using session: inout Session
-    ) async -> [String: ADBTVInstalledAppIcon] {
-        // ponytail: cap icon work; raise only if real TV libraries exceed 128 user apps.
-        let packages = Array(packages.prefix(Self.maximumIconCount))
-        var icons: [String: ADBTVInstalledAppIcon] = [:]
+    ) async -> [String: ADBTVInstalledAppDetails] {
+        // ponytail: cap helper work; raise only if real TV libraries exceed 128 user apps.
+        let packages = Array(packages.prefix(Self.maximumDetailsCount))
+        var details: [String: ADBTVInstalledAppDetails] = [:]
 
-        for startIndex in stride(from: 0, to: packages.count, by: Self.iconBatchSize) {
-            let endIndex = min(startIndex + Self.iconBatchSize, packages.count)
+        for startIndex in stride(from: 0, to: packages.count, by: Self.detailsBatchSize) {
+            let endIndex = min(startIndex + Self.detailsBatchSize, packages.count)
             let batch = Array(packages[startIndex ..< endIndex])
-            guard let batchIcons = try? await loadIconBatch(batch, using: &session) else {
+            guard let batchDetails = try? await loadDetailsBatch(batch, using: &session) else {
                 break
             }
-            icons.merge(batchIcons) { _, latest in latest }
+            details.merge(batchDetails) { _, latest in latest }
         }
-        return icons
+        return details
     }
 
-    private func loadIconBatch<Session: ADBShellCommandRunningSession>(
+    private func loadDetailsBatch<Session: ADBShellCommandRunningSession>(
         _ packages: [ADBTVInstalledPackage],
         using session: inout Session
-    ) async throws -> [String: ADBTVInstalledAppIcon] {
+    ) async throws -> [String: ADBTVInstalledAppDetails] {
         let packageQuery = packages.map(\.packageName).joined(separator: ",")
         let invocation = try ADBCheckedShellInvocation(
             command: ADBShellCommand(
-                "content read --uri '\(Self.iconProviderURI)?packages=\(packageQuery)' "
-                    + "2>/dev/null | head -c \(Self.maximumIconResponseByteCount)"
+                "content read --uri '\(Self.detailsProviderURI)?packages=\(packageQuery)' "
+                    + "2>/dev/null | head -c \(Self.maximumDetailsResponseByteCount)"
             )
         )
         let output = try await session.runShellCommand(invocation.shellCommand)
         let response = try JSONDecoder().decode(
-            [IconResponse].self,
+            [DetailsResponse].self,
             from: Data(invocation.validatedOutput(from: output).bytes)
         )
         let requestedPackages = Set(packages.map(\.packageName))
-        var icons: [String: ADBTVInstalledAppIcon] = [:]
+        var details: [String: ADBTVInstalledAppDetails] = [:]
 
         for item in response {
-            guard requestedPackages.contains(item.package),
-                  let data = Data(base64Encoded: item.png),
-                  let icon = try? ADBTVInstalledAppIcon(pngData: data) else {
+            guard requestedPackages.contains(item.package) else {
                 continue
             }
-            icons[item.package] = icon
+            let icon = item.png
+                .flatMap { Data(base64Encoded: $0) }
+                .flatMap { try? ADBTVInstalledAppIcon(pngData: $0) }
+            details[item.package] = ADBTVInstalledAppDetails(
+                displayName: item.label,
+                versionName: item.versionName,
+                versionCode: item.versionCode,
+                firstInstallTimeMilliseconds: item.firstInstallTime,
+                lastUpdateTimeMilliseconds: item.lastUpdateTime,
+                apkByteCount: item.apkBytes,
+                icon: icon
+            )
         }
-        return icons
+        return details
     }
 
     private static func parsePackages(
@@ -179,9 +238,15 @@ public struct ADBTVInstalledAppManager: Sendable {
     }
 }
 
-private struct IconResponse: Decodable {
+private struct DetailsResponse: Decodable {
     let package: String
-    let png: String
+    let label: String?
+    let versionName: String?
+    let versionCode: Int64?
+    let firstInstallTime: Int64?
+    let lastUpdateTime: Int64?
+    let apkBytes: Int64?
+    let png: String?
 }
 
 public enum ADBTVInstalledAppError: Error, Equatable, Sendable {
