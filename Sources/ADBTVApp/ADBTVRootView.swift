@@ -25,6 +25,7 @@ public struct ADBTVRootView: View {
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
     @State private var installedAppsTask: Task<Void, Never>?
+    @State private var installedAppsOperationID: UUID?
     @State private var installedAppsState = ADBTVInstalledAppsViewState()
     @State private var pairingTask: Task<Void, Never>?
     @State private var deviceConnectionTask: Task<Void, Never>?
@@ -372,6 +373,7 @@ public struct ADBTVRootView: View {
             installTask?.cancel()
             remoteTask?.cancel()
             installedAppsTask?.cancel()
+            installedAppsOperationID = nil
             deviceConnectionTask?.cancel()
             model.cancelActiveDeviceOperation()
             cancelPairing()
@@ -1349,6 +1351,8 @@ public struct ADBTVRootView: View {
             installedAppsState = ADBTVInstalledAppsViewState(deviceID: device.id)
         }
         installedAppsState.status = command.inProgressStatus
+        let operationID = UUID()
+        installedAppsOperationID = operationID
 
         installedAppsTask = Task {
             let completion: ADBTVInstalledAppCompletion
@@ -1378,7 +1382,11 @@ public struct ADBTVRootView: View {
             }
 
             await MainActor.run {
-                completeInstalledAppCommand(completion, on: device.id)
+                completeInstalledAppCommand(
+                    completion,
+                    operationID: operationID,
+                    on: device.id
+                )
             }
         }
     }
@@ -1389,6 +1397,7 @@ public struct ADBTVRootView: View {
         }
         installedAppsTask?.cancel()
         installedAppsTask = nil
+        installedAppsOperationID = nil
         guard model.cancelInstalledAppOperation(on: deviceID),
               installedAppsState.deviceID == deviceID else {
             return
@@ -1398,13 +1407,16 @@ public struct ADBTVRootView: View {
 
     private func completeInstalledAppCommand(
         _ completion: ADBTVInstalledAppCompletion,
+        operationID: UUID,
         on deviceID: ADBTVDeviceSummary.ID
     ) {
-        guard model.finishInstalledAppOperation(on: deviceID),
-              installedAppsState.deviceID == deviceID else {
+        guard installedAppsOperationID == operationID,
+              installedAppsState.deviceID == deviceID,
+              model.finishInstalledAppOperation(on: deviceID) else {
             return
         }
         installedAppsTask = nil
+        installedAppsOperationID = nil
 
         switch completion {
         case .success(.listed(let packages)):
