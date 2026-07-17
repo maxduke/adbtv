@@ -99,7 +99,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
         devices.removeAll { ids.contains($0.id) && $0.id != protectedDeviceID }
 
         if let selectedDeviceID, !devices.contains(where: { $0.id == selectedDeviceID }) {
-            self.selectedDeviceID = devices.first?.id
+            self.selectedDeviceID = nil
         }
     }
 
@@ -291,7 +291,42 @@ public struct ADBTVAppModel: Equatable, Sendable {
             installDraft.status = .cancelled
         case .remoteAction, .remoteText:
             remoteStatus = .idle
+        case .installedApps:
+            break
         }
+    }
+
+    @discardableResult
+    public mutating func startInstalledAppOperation(
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard selectedDeviceID == deviceID, activeDeviceOperation == nil else {
+            return false
+        }
+        activeDeviceOperation = .installedApps(deviceID: deviceID)
+        return true
+    }
+
+    @discardableResult
+    public mutating func finishInstalledAppOperation(
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .installedApps(deviceID: deviceID) else {
+            return false
+        }
+        activeDeviceOperation = nil
+        return true
+    }
+
+    @discardableResult
+    public mutating func cancelInstalledAppOperation(
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .installedApps(deviceID: deviceID) else {
+            return false
+        }
+        activeDeviceOperation = nil
+        return true
     }
 
     @discardableResult
@@ -943,10 +978,14 @@ public enum ADBTVActiveDeviceOperation: Equatable, Sendable {
     case install(deviceID: ADBTVDeviceSummary.ID)
     case remoteAction(deviceID: ADBTVDeviceSummary.ID, action: ADBTVRemoteAction)
     case remoteText(deviceID: ADBTVDeviceSummary.ID)
+    case installedApps(deviceID: ADBTVDeviceSummary.ID)
 
     public var deviceID: ADBTVDeviceSummary.ID {
         switch self {
-        case .install(let deviceID), .remoteAction(let deviceID, _), .remoteText(let deviceID):
+        case .install(let deviceID),
+             .remoteAction(let deviceID, _),
+             .remoteText(let deviceID),
+             .installedApps(let deviceID):
             return deviceID
         }
     }

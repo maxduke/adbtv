@@ -98,7 +98,7 @@ final class ADBTVAppModelTests: XCTestCase {
         model.removeDevices(ids: [second.id])
 
         XCTAssertEqual(model.devices, [first])
-        XCTAssertEqual(model.selectedDevice, first)
+        XCTAssertNil(model.selectedDevice)
     }
 
     func testModelUpdatesDeviceAtSameEndpointWithoutCreatingDuplicateOrLosingName() throws {
@@ -553,6 +553,24 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertEqual(model.installDraft.status, .succeeded)
         XCTAssertTrue(model.selectDevice(id: second.id))
         XCTAssertEqual(model.selectedDevice, second)
+    }
+
+    func testInstalledAppOperationOwnsItsTargetUntilMatchingCompletion() {
+        let first = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
+        let second = ADBTVDeviceSummary(displayName: "Bedroom", host: "192.168.1.51", port: 5555)
+        var model = ADBTVAppModel(devices: [first, second])
+
+        XCTAssertTrue(model.startInstalledAppOperation(on: first.id))
+        XCTAssertEqual(model.activeDeviceOperation, .installedApps(deviceID: first.id))
+        XCTAssertFalse(model.selectDevice(id: second.id))
+        XCTAssertFalse(model.recordRemoteActionStarted(.home, on: first.id))
+        XCTAssertFalse(model.finishInstalledAppOperation(on: second.id))
+        XCTAssertFalse(model.cancelInstalledAppOperation(on: second.id))
+
+        XCTAssertTrue(model.cancelInstalledAppOperation(on: first.id))
+        XCTAssertNil(model.activeDeviceOperation)
+        XCTAssertFalse(model.finishInstalledAppOperation(on: first.id))
+        XCTAssertTrue(model.selectDevice(id: second.id))
     }
 
     func testRemoteOperationRejectsOverlapAndStaleCompletion() {

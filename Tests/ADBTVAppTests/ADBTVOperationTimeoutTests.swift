@@ -5,6 +5,7 @@ final class ADBTVOperationTimeoutTests: XCTestCase {
     func testInteractiveDeviceTimeoutsAreShortAndBounded() {
         XCTAssertEqual(ADBTVOperationTimeoutPolicy.savedDeviceVerification.seconds, 10)
         XCTAssertEqual(ADBTVOperationTimeoutPolicy.remoteAction.seconds, 8)
+        XCTAssertEqual(ADBTVOperationTimeoutPolicy.installedApps.seconds, 30)
     }
 
     func testRunReturnsCompletedOperationResult() async throws {
