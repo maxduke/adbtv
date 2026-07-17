@@ -3,6 +3,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 #if os(iOS)
 import UIKit
+#elseif os(macOS)
+import AppKit
 #endif
 
 public struct ADBTVRootView: View {
@@ -26,6 +28,8 @@ public struct ADBTVRootView: View {
     @State private var remoteTask: Task<Void, Never>?
     @State private var installedAppsTask: Task<Void, Never>?
     @State private var installedAppsOperationID: UUID?
+    @State private var installedAppIconsTask: Task<Void, Never>?
+    @State private var installedAppIconsOperationID: UUID?
     @State private var installedAppsState = ADBTVInstalledAppsViewState()
     @State private var pairingTask: Task<Void, Never>?
     @State private var deviceConnectionTask: Task<Void, Never>?
@@ -374,6 +378,8 @@ public struct ADBTVRootView: View {
             remoteTask?.cancel()
             installedAppsTask?.cancel()
             installedAppsOperationID = nil
+            installedAppIconsTask?.cancel()
+            installedAppIconsOperationID = nil
             deviceConnectionTask?.cancel()
             model.cancelActiveDeviceOperation()
             cancelPairing()
@@ -466,6 +472,7 @@ public struct ADBTVRootView: View {
             return
         }
 
+        cancelInstalledAppIconLoad()
         deviceConnectionTask?.cancel()
         deviceConnectionTask = nil
 
@@ -1350,6 +1357,10 @@ public struct ADBTVRootView: View {
         if installedAppsState.deviceID != device.id {
             installedAppsState = ADBTVInstalledAppsViewState(deviceID: device.id)
         }
+        if case .list = command {
+            cancelInstalledAppIconLoad()
+            installedAppsState.icons = [:]
+        }
         installedAppsState.status = command.inProgressStatus
         let operationID = UUID()
         installedAppsOperationID = operationID
@@ -1385,7 +1396,7 @@ public struct ADBTVRootView: View {
                 completeInstalledAppCommand(
                     completion,
                     operationID: operationID,
-                    on: device.id
+                    on: device
                 )
             }
         }
@@ -1408,11 +1419,11 @@ public struct ADBTVRootView: View {
     private func completeInstalledAppCommand(
         _ completion: ADBTVInstalledAppCompletion,
         operationID: UUID,
-        on deviceID: ADBTVDeviceSummary.ID
+        on device: ADBTVDeviceSummary
     ) {
         guard installedAppsOperationID == operationID,
-              installedAppsState.deviceID == deviceID,
-              model.finishInstalledAppOperation(on: deviceID) else {
+              installedAppsState.deviceID == device.id,
+              model.finishInstalledAppOperation(on: device.id) else {
             return
         }
         installedAppsTask = nil
@@ -1422,12 +1433,14 @@ public struct ADBTVRootView: View {
         case .success(.listed(let packages)):
             installedAppsState.packages = packages
             installedAppsState.status = .ready(message: nil)
+            startInstalledAppIconLoad(packages, on: device)
         case .success(.launched(let package)):
             installedAppsState.status = .ready(
                 message: "Launched \(package.packageName)."
             )
         case .success(.uninstalled(let package)):
             installedAppsState.packages.removeAll { $0 == package }
+            installedAppsState.icons.removeValue(forKey: package.packageName)
             installedAppsState.status = .ready(
                 message: "Uninstalled \(package.packageName)."
             )
@@ -1437,6 +1450,67 @@ public struct ADBTVRootView: View {
                 diagnosticDetail: diagnosticDetail
             )
         }
+    }
+
+    private func startInstalledAppIconLoad(
+        _ packages: [ADBTVInstalledPackage],
+        on device: ADBTVDeviceSummary
+    ) {
+        cancelInstalledAppIconLoad()
+        guard !packages.isEmpty else {
+            return
+        }
+
+        let operationID = UUID()
+        installedAppIconsOperationID = operationID
+        installedAppIconsTask = Task {
+            let icons = await Self.loadInstalledAppIcons(packages, on: device)
+            guard !Task.isCancelled else {
+                return
+            }
+            await MainActor.run {
+                guard installedAppIconsOperationID == operationID,
+                      installedAppsState.deviceID == device.id else {
+                    return
+                }
+                let currentPackages = Set(installedAppsState.packages.map(\.packageName))
+                installedAppsState.icons = icons.filter {
+                    currentPackages.contains($0.key)
+                }
+                installedAppIconsTask = nil
+                installedAppIconsOperationID = nil
+            }
+        }
+    }
+
+    private func cancelInstalledAppIconLoad() {
+        installedAppIconsTask?.cancel()
+        installedAppIconsTask = nil
+        installedAppIconsOperationID = nil
+    }
+
+    private static func loadInstalledAppIcons(
+        _ packages: [ADBTVInstalledPackage],
+        on device: ADBTVDeviceSummary
+    ) async -> [String: ADBTVInstalledAppIcon] {
+#if canImport(Network) && canImport(Security)
+        do {
+            return try await ADBTVOperationTimeoutPolicy.installedApps.run(
+                operation: .installedApps
+            ) {
+                var connection = try await connectedDevice(for: device)
+                defer { connection.cancel() }
+                return await ADBTVInstalledAppManager().icons(
+                    for: packages,
+                    using: &connection
+                )
+            }
+        } catch {
+            return [:]
+        }
+#else
+        return [:]
+#endif
     }
 
     private static func performInstalledAppCommand(
@@ -1781,15 +1855,18 @@ private enum ADBTVInstalledAppCompletion: Sendable {
 private struct ADBTVInstalledAppsViewState: Equatable {
     var deviceID: ADBTVDeviceSummary.ID?
     var packages: [ADBTVInstalledPackage]
+    var icons: [String: ADBTVInstalledAppIcon]
     var status: ADBTVInstalledAppsStatus
 
     init(
         deviceID: ADBTVDeviceSummary.ID? = nil,
         packages: [ADBTVInstalledPackage] = [],
+        icons: [String: ADBTVInstalledAppIcon] = [:],
         status: ADBTVInstalledAppsStatus = .idle
     ) {
         self.deviceID = deviceID
         self.packages = packages
+        self.icons = icons
         self.status = status
     }
 
@@ -2976,7 +3053,10 @@ private struct InstalledAppsPanel: View {
             if !filteredPackages.isEmpty {
                 LazyVStack(spacing: 0) {
                     ForEach(filteredPackages) { package in
-                        installedAppRow(package)
+                        installedAppRow(
+                            package,
+                            icon: state.icons[package.packageName]
+                        )
                         Divider()
                     }
                 }
@@ -3048,8 +3128,13 @@ private struct InstalledAppsPanel: View {
         }
     }
 
-    private func installedAppRow(_ package: ADBTVInstalledPackage) -> some View {
+    private func installedAppRow(
+        _ package: ADBTVInstalledPackage,
+        icon: ADBTVInstalledAppIcon?
+    ) -> some View {
         HStack(spacing: 12) {
+            InstalledAppIconView(icon: icon)
+
             Text(package.packageName)
                 .font(.body.monospaced())
                 .lineLimit(1)
@@ -3088,6 +3173,50 @@ private struct InstalledAppsPanel: View {
         return state.packages.filter {
             $0.packageName.localizedCaseInsensitiveContains(searchText)
         }
+    }
+}
+
+private struct InstalledAppIconView: View {
+    var icon: ADBTVInstalledAppIcon?
+
+    @ViewBuilder
+    var body: some View {
+#if os(iOS)
+        if let icon, let image = UIImage(data: icon.pngData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
+        } else {
+            placeholder
+        }
+#elseif os(macOS)
+        if let icon, let image = NSImage(data: icon.pngData) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
+        } else {
+            placeholder
+        }
+#else
+        placeholder
+#endif
+    }
+
+    private var placeholder: some View {
+        Image(systemName: "app.fill")
+            .resizable()
+            .scaledToFit()
+            .padding(10)
+            .frame(width: 44, height: 44)
+            .foregroundStyle(.secondary)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityHidden(true)
     }
 }
 
