@@ -25,13 +25,13 @@
             android:exported="true"
             android:permission="android.permission.DUMP">
             <intent-filter>
-                <action android:name="com.maxduke.adbtv.input.COMMIT_TEXT" />
+                <action android:name="com.maxduke.adbtv.helper.v2.COMMIT_TEXT" />
             </intent-filter>
         </receiver>
 
         <provider
             android:name=".AppIconProvider"
-            android:authorities="com.maxduke.adbtv.input.icons"
+            android:authorities="com.maxduke.adbtv.helper.v2.icons"
             android:exported="true"
             android:grantUriPermissions="false"
             android:readPermission="android.permission.DUMP"

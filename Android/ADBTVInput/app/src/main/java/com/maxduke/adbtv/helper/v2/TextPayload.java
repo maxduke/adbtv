@@ -1,4 +1,4 @@
-package com.maxduke.adbtv.input;
+package com.maxduke.adbtv.helper.v2;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;

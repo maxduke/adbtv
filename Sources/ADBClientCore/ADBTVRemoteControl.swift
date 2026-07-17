@@ -230,12 +230,12 @@ public struct ADBTVRemoteText: Equatable, Sendable {
 }
 
 public enum ADBTVUnicodeInputHelper: Sendable {
-    public static let packageName = "com.maxduke.adbtv.input"
+    public static let packageName = "com.maxduke.adbtv.helper.v2"
     public static let inputMethodComponent =
-        "com.maxduke.adbtv.input/.ADBTVInputMethodService"
+        "com.maxduke.adbtv.helper.v2/.ADBTVInputMethodService"
     public static let receiverComponent =
-        "com.maxduke.adbtv.input/.TextCommitReceiver"
-    public static let commitTextAction = "com.maxduke.adbtv.input.COMMIT_TEXT"
+        "com.maxduke.adbtv.helper.v2/.TextCommitReceiver"
+    public static let commitTextAction = "com.maxduke.adbtv.helper.v2.COMMIT_TEXT"
     public static let bundledAPKFileName = "ADBTVInput.apk"
 }
 

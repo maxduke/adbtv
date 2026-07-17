@@ -18,6 +18,6 @@ To build it manually with those tools installed:
 gradle -p Android/ADBTVInput testDebugUnitTest assembleDebug --no-daemon
 ```
 
-Debug signing is sufficient because the helper is sideloaded over the user's authenticated ADB connection and is not distributed through an Android app store. If the helper protocol changes incompatibly, use a new package name so an older debug-signed helper cannot be mistaken for the new protocol.
+Debug signing is sufficient because the helper is sideloaded over the user's authenticated ADB connection and is not distributed through an Android app store. The v2 helper uses the versioned `com.maxduke.adbtv.helper.v2` package so it can install alongside an older helper signed by a different CI runner. Future incompatible helper protocols must use a new versioned package name.
 
 CI compares every non-signature ZIP entry in the source-built APK with the APK bundled by the iOS target. This permits different debug signing keys while preventing reviewed helper source and shipped helper code or resources from drifting apart.

@@ -80,7 +80,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertEqual(icons["com.example.player"]?.pngData, validPNG)
         XCTAssertNil(icons["com.example.invalid"])
         XCTAssertNil(icons["com.unrequested.app"])
-        XCTAssertTrue(session.commands[0].contains("content://com.maxduke.adbtv.input.icons/icons"))
+        XCTAssertTrue(session.commands[0].contains("content://com.maxduke.adbtv.helper.v2.icons/icons"))
         XCTAssertTrue(session.commands[0].contains("head -c 1048576"))
     }
 

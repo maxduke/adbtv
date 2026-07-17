@@ -69,7 +69,7 @@ jobs:
           for apk in \
             Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
             Apps/ADBTViOS/Resources/ADBTVInput.apk; do
-            test "$(apkanalyzer manifest application-id "$apk")" = "com.maxduke.adbtv.input"
+            test "$(apkanalyzer manifest application-id "$apk")" = "com.maxduke.adbtv.helper.v2"
             test "$(apkanalyzer manifest version-code "$apk")" = "2"
           done
 

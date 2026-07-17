@@ -67,7 +67,7 @@ public struct ADBTVInstalledAppManager: Sendable {
     private static let iconBatchSize = 16
     private static let maximumIconCount = 128
     private static let maximumIconResponseByteCount = 1024 * 1024
-    private static let iconProviderURI = "content://com.maxduke.adbtv.input.icons/icons"
+    private static let iconProviderURI = "content://com.maxduke.adbtv.helper.v2.icons/icons"
 
     public init() {}
 

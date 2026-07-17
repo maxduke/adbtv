@@ -3,11 +3,11 @@ plugins {
 }
 
 android {
-    namespace = "com.maxduke.adbtv.input"
+    namespace = "com.maxduke.adbtv.helper.v2"
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.maxduke.adbtv.input"
+        applicationId = "com.maxduke.adbtv.helper.v2"
         minSdk = 26
         targetSdk = 36
         versionCode = 2
