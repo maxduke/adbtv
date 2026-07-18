@@ -20,7 +20,7 @@ Before tagging a release:
 From an up-to-date `main` checkout, create and push an annotated semantic-version tag whose value matches `MARKETING_VERSION`:
 
 ```sh
-VERSION=0.3.0
+VERSION=0.4.0
 git tag -a "v$VERSION" -m "ADB TV $VERSION"
 git push origin "v$VERSION"
 ```
@@ -34,7 +34,6 @@ The **iOS Draft Release** workflow:
 - rejects a tag whose version differs from the built app;
 - builds and validates the unsigned device app;
 - creates the IPA and SHA-256 sidecar;
-- uploads both as workflow artifacts;
 - creates or updates a draft GitHub release.
 
 Inspect the draft release and its generated notes before publishing it. Publishing remains a manual action.

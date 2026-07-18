@@ -92,6 +92,18 @@ _Avoid_: Command when the action is broader than a shell command
 An ADB Operation exposed as a specific app control instead of free-form shell input.
 _Avoid_: Shortcut, macro
 
+**Device Information**:
+Structured Android TV properties and runtime values shown by the app, including Android version, display resolution, storage, uptime, and build identity.
+_Avoid_: Diagnostics when referring to normal device facts
+
+**TV Screenshot**:
+A bounded PNG image captured from a Managed Device through ADB and presented for preview or sharing.
+_Avoid_: Screen recording, camera capture
+
+**One-shot Shell Command**:
+A single user-provided command run to completion with bounded output, exit status, cancellation, and timeout. It is not an interactive terminal session.
+_Avoid_: Terminal, console when referring to the operation itself
+
 **TV Remote Action**:
 A Structured Action that sends Android TV remote input such as D-pad navigation, select, back, home, settings, text input, volume, or power.
 _Avoid_: Remote command

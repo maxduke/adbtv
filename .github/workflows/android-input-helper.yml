@@ -22,6 +22,10 @@ on:
       - ".github/workflows/android-input-helper.yml"
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -29,13 +33,14 @@ jobs:
   build:
     name: Build And Test Input Helper
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
 
       - name: Set up Java
-        uses: actions/setup-java@0f481fcb613427c0f801b606911222b5b6f3083a # v5
+        uses: actions/setup-java@03ad4de0992f5dab5e18fcb136590ce7c4a0ac95 # v5
         with:
           distribution: temurin
           java-version: "17"
@@ -64,7 +69,7 @@ jobs:
             Android/ADBTVInput/ADBTV-SOURCE.txt
             LICENSE
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
       - name: Verify helper identities
         run: |

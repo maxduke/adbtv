@@ -88,7 +88,7 @@ The GitHub `main` branch requires:
 - linear history;
 - no force-pushes or branch deletion.
 
-Unsigned IPA packaging remains a release and pull-request validation check, but it is not required for documentation-only changes because that workflow uses path filtering.
+Unsigned IPA packaging and portrait snapshots are manual release-candidate checks. Release tags package the final IPA automatically.
 
 ## GitHub Actions Supply Chain
 

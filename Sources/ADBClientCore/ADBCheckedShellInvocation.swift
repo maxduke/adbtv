@@ -13,6 +13,17 @@ public struct ADBCheckedShellInvocation: Equatable, Sendable {
     }
 
     public func validatedOutput(from output: ADBShellOutput) throws -> ADBShellOutput {
+        let result = try result(from: output)
+        guard result.exitCode == 0 else {
+            throw ADBCheckedShellInvocationError.commandFailed(
+                exitCode: result.exitCode,
+                output: diagnosticOutput(from: result.output.bytes)
+            )
+        }
+        return result.output
+    }
+
+    public func result(from output: ADBShellOutput) throws -> ADBCheckedShellResult {
         let marker = Array(("\n" + Self.exitStatusMarker).utf8)
         guard let markerIndex = lastIndex(of: marker, in: output.bytes) else {
             throw ADBCheckedShellInvocationError.missingExitStatus(
@@ -32,13 +43,10 @@ public struct ADBCheckedShellInvocation: Equatable, Sendable {
         }
 
         let commandOutput = Array(output.bytes[..<markerIndex])
-        guard exitCode == 0 else {
-            throw ADBCheckedShellInvocationError.commandFailed(
-                exitCode: exitCode,
-                output: diagnosticOutput(from: commandOutput)
-            )
-        }
-        return ADBShellOutput(bytes: commandOutput)
+        return ADBCheckedShellResult(
+            output: ADBShellOutput(bytes: commandOutput),
+            exitCode: exitCode
+        )
     }
 
     private func lastIndex(of marker: [UInt8], in bytes: [UInt8]) -> Int? {
@@ -58,6 +66,16 @@ public struct ADBCheckedShellInvocation: Equatable, Sendable {
         let prefix = bytes.prefix(Self.maximumDiagnosticByteCount)
         let value = String(decoding: prefix, as: UTF8.self)
         return bytes.count > prefix.count ? value + " [truncated]" : value
+    }
+}
+
+public struct ADBCheckedShellResult: Equatable, Sendable {
+    public var output: ADBShellOutput
+    public var exitCode: Int
+
+    public init(output: ADBShellOutput, exitCode: Int) {
+        self.output = output
+        self.exitCode = exitCode
     }
 }
 
