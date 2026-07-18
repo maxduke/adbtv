@@ -51,7 +51,7 @@ struct ADBTViOSApp: App {
                 model: .preview,
                 automaticallyStartsDiscovery: false,
                 bonjourDiscoveryAvailable: false,
-                initiallyPresentsDeviceTools: true
+                initiallyPresentsFileBrowser: true
             )
         } else if ProcessInfo.processInfo.arguments.contains("--ui-tools") {
             ADBTVRootView(

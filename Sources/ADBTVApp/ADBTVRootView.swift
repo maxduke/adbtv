@@ -15,6 +15,7 @@ public struct ADBTVRootView: View {
 
     private let deviceStore: ADBTVDeviceStore
     private let bonjourCapability: ADBTVBonjourCapability
+    private let initiallyPresentsFileBrowser: Bool
 
     @State private var model: ADBTVAppModel
     @State private var isFileImporterPresented = false
@@ -56,6 +57,7 @@ public struct ADBTVRootView: View {
         var initialModel = ADBTVAppModel(devices: loadResult.devices)
         _ = initialModel.selectDevice(id: nil)
         self.deviceStore = deviceStore
+        self.initiallyPresentsFileBrowser = false
         self.bonjourCapability = bonjourDiscoveryAvailable.map {
             ADBTVBonjourCapability(
                 isAvailable: $0,
@@ -80,9 +82,11 @@ public struct ADBTVRootView: View {
         initiallyPresentsConnectionRepair: Bool = false,
         initiallyPresentsDeviceRename: Bool = false,
         initiallyPresentsInstalledApps: Bool = false,
-        initiallyPresentsDeviceTools: Bool = false
+        initiallyPresentsDeviceTools: Bool = false,
+        initiallyPresentsFileBrowser: Bool = false
     ) {
         self.deviceStore = deviceStore
+        self.initiallyPresentsFileBrowser = initiallyPresentsFileBrowser
         self.bonjourCapability = bonjourDiscoveryAvailable.map {
             ADBTVBonjourCapability(
                 isAvailable: $0,
@@ -198,6 +202,8 @@ public struct ADBTVRootView: View {
                     repair: { repairingDevice = connectionDevice },
                     rename: { renamingDevice = connectionDevice }
                 )
+            } else if let device = model.selectedDevice, initiallyPresentsFileBrowser {
+                ADBTVFileBrowserView(device: device)
             } else if let device = model.selectedDevice {
                 DeviceDetailView(
                     device: device,
@@ -3116,7 +3122,6 @@ private struct DeviceDetailView: View {
         : ProcessInfo.processInfo.arguments.contains("--ui-apps")
             ? DeviceTool.apps
             : ProcessInfo.processInfo.arguments.contains("--ui-tools")
-                || ProcessInfo.processInfo.arguments.contains("--ui-files")
                 ? DeviceTool.tools
                 : DeviceTool.remote
     @State private var isFileBrowserPresented = false
@@ -3156,11 +3161,6 @@ private struct DeviceDetailView: View {
         .navigationTitle(device.displayName)
         .navigationDestination(isPresented: $isFileBrowserPresented) {
             ADBTVFileBrowserView(device: device)
-        }
-        .task {
-            guard ProcessInfo.processInfo.arguments.contains("--ui-files") else { return }
-            await Task.yield()
-            isFileBrowserPresented = true
         }
 #if os(iOS)
         .navigationBarBackButtonHidden(deviceOperationInProgress)
