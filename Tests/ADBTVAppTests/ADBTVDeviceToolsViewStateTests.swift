@@ -38,4 +38,17 @@ final class ADBTVDeviceToolsViewStateTests: XCTestCase {
         XCTAssertNil(secondState.screenshot)
         XCTAssertNil(secondState.shellResult)
     }
+
+    func testShellPresetsUseExpectedReadOnlyCommands() {
+        XCTAssertEqual(
+            ADBTVShellPreset.all.map(\.command),
+            [
+                "getprop",
+                "ip addr show",
+                "df -h",
+                "pm list packages -3",
+                "logcat -d -t 200"
+            ]
+        )
+    }
 }

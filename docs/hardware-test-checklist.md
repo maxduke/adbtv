@@ -143,12 +143,14 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Open **Tools**, refresh Device Information, and confirm model, Android/API version, resolution, storage, uptime, and build identity match the TV.
 - [ ] Capture a screenshot and confirm its orientation, dimensions, colors, and visible TV content are correct.
 - [ ] Share the captured screenshot to Files and confirm the resulting PNG opens correctly.
+- [ ] Save the captured screenshot to Photos, allow add-only access, and confirm the image appears in the library.
 - [ ] Capture a second screenshot and confirm the preview replaces the first without retaining history.
 - [ ] Run `getprop ro.build.version.release` and confirm the output and exit code are shown.
 - [ ] Run a command that exits nonzero and confirm its output and nonzero exit code remain visible without being reported as success.
 - [ ] Run a command that produces no output and confirm the completed state remains understandable.
 - [ ] Run a command with enough multiline output to scroll horizontally and vertically without resizing or clipping the surrounding layout.
 - [ ] Start a slow shell command, cancel it, and immediately run another command without a late result replacing it.
+- [ ] Select each built-in shell command, confirm it fills the editable command field, and run it successfully.
 - [ ] Make the TV unreachable during Device Information, screenshot, and shell operations; confirm each failure is bounded and exposes copyable Technical Details.
 - [ ] Start each Device Tools operation and confirm the tool picker, back navigation, and other device operations remain unavailable while its visible Cancel button works.
 - [ ] Confirm shell commands and output are not saved after leaving the device or relaunching ADB TV.

@@ -59,6 +59,8 @@
 	<string>ADB TV uses the camera to scan Android Wireless Debugging pairing QR codes.</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>ADB TV uses the local network to discover and connect to Android TV devices with Wireless Debugging enabled.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>ADB TV saves captured Android TV screenshots to your photo library.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UIRequiresFullScreen</key>

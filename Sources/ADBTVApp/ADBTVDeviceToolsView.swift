@@ -4,6 +4,7 @@ import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(iOS)
+import Photos
 import UIKit
 #elseif os(macOS)
 import AppKit
@@ -179,6 +180,20 @@ enum ADBTVShellStatus: Equatable {
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 }
 
+struct ADBTVShellPreset: Identifiable {
+    let title: String
+    let command: String
+    var id: String { command }
+
+    static let all = [
+        Self(title: "Device Properties", command: "getprop"),
+        Self(title: "Network Interfaces", command: "ip addr show"),
+        Self(title: "Storage Usage", command: "df -h"),
+        Self(title: "Third-party Apps", command: "pm list packages -3"),
+        Self(title: "Recent System Log", command: "logcat -d -t 200")
+    ]
+}
+
 struct ADBTVDeviceToolsPanel: View {
     var state: ADBTVDeviceToolsViewState
     var deviceOperationInProgress: Bool
@@ -190,6 +205,10 @@ struct ADBTVDeviceToolsPanel: View {
     @State private var shellCommand = ProcessInfo.processInfo.arguments.contains("--ui-tools")
         ? "getprop ro.build.version.release"
         : ""
+#if os(iOS)
+    @State private var savingScreenshot = false
+    @State private var photoSaveMessage: String?
+#endif
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
@@ -204,6 +223,19 @@ struct ADBTVDeviceToolsPanel: View {
                 loadInformation()
             }
         }
+#if os(iOS)
+        .alert(
+            "Screenshot",
+            isPresented: Binding(
+                get: { photoSaveMessage != nil },
+                set: { if !$0 { photoSaveMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(photoSaveMessage ?? "")
+        }
+#endif
     }
 
     private var informationSection: some View {
@@ -310,6 +342,18 @@ struct ADBTVDeviceToolsPanel: View {
 
                 if let screenshot = state.screenshot,
                    let image = platformImage(from: screenshot.pngData) {
+#if os(iOS)
+                    Button {
+                        saveScreenshotToPhotos(screenshot.pngData)
+                    } label: {
+                        Label("Save to Photos", systemImage: "square.and.arrow.down")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(deviceOperationInProgress || savingScreenshot)
+                    .help("Save to Photos")
+#endif
+
                     ShareLink(
                         item: ADBTVScreenshotShareItem(pngData: screenshot.pngData),
                         preview: SharePreview("Android TV Screenshot", image: image)
@@ -371,8 +415,25 @@ struct ADBTVDeviceToolsPanel: View {
 
     private var shellSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("ADB Shell", systemImage: "terminal")
-                .font(.title2.bold())
+            HStack {
+                Label("ADB Shell", systemImage: "terminal")
+                    .font(.title2.bold())
+                Spacer()
+                Menu {
+                    ForEach(ADBTVShellPreset.all) { preset in
+                        Button {
+                            shellCommand = preset.command
+                        } label: {
+                            Label(preset.title, systemImage: "terminal")
+                        }
+                    }
+                } label: {
+                    Label("Commands", systemImage: "list.bullet.rectangle")
+                }
+                .buttonStyle(.bordered)
+                .disabled(deviceOperationInProgress)
+                .help("Built-in Commands")
+            }
 
             HStack(alignment: .bottom, spacing: 10) {
                 shellCommandField
@@ -509,6 +570,40 @@ struct ADBTVDeviceToolsPanel: View {
         }
         runShellCommand(command)
     }
+
+#if os(iOS)
+    private func saveScreenshotToPhotos(_ pngData: Data) {
+        guard !savingScreenshot else {
+            return
+        }
+        savingScreenshot = true
+
+        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
+            Task { @MainActor in
+                guard status == .authorized || status == .limited else {
+                    savingScreenshot = false
+                    photoSaveMessage = "Photo access was not allowed. "
+                        + "You can enable Add Photos Only access in Settings."
+                    return
+                }
+
+                do {
+                    try await PHPhotoLibrary.shared().performChanges {
+                        let request = PHAssetCreationRequest.forAsset()
+                        let options = PHAssetResourceCreationOptions()
+                        options.originalFilename = "ADB-TV-Screenshot.png"
+                        request.addResource(with: .photo, data: pngData, options: options)
+                    }
+                    photoSaveMessage = "Saved to Photos."
+                } catch {
+                    photoSaveMessage = "Could not save the screenshot to Photos: "
+                        + error.localizedDescription
+                }
+                savingScreenshot = false
+            }
+        }
+    }
+#endif
 
     private func androidVersion(_ information: ADBTVDeviceInformation) -> String {
         guard !information.device.sdkVersion.isEmpty else {
