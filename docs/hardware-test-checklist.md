@@ -142,8 +142,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 - [ ] Open **Tools**, refresh Device Information, and confirm model, Android/API version, resolution, storage, uptime, and build identity match the TV.
 - [ ] Capture a screenshot and confirm its orientation, dimensions, colors, and visible TV content are correct.
-- [ ] Share the captured screenshot to Files and confirm the resulting PNG opens correctly.
-- [ ] Save the captured screenshot to Photos, allow add-only access, and confirm the image appears in the library.
+- [ ] Use Share to save the captured screenshot to Files and Photos; confirm both copies open correctly.
 - [ ] Capture a second screenshot and confirm the preview replaces the first without retaining history.
 - [ ] Run `getprop ro.build.version.release` and confirm the output and exit code are shown.
 - [ ] Run a command that exits nonzero and confirm its output and nonzero exit code remain visible without being reported as success.

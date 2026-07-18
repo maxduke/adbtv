@@ -46,7 +46,6 @@ CONNECT_SERVICE="$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:1' "$INF
 LOCAL_NETWORK_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "$INFO_PLIST_PATH")"
 BONJOUR_DISCOVERY_ENABLED="$(/usr/libexec/PlistBuddy -c 'Print :ADBTVBonjourDiscoveryEnabled' "$INFO_PLIST_PATH")"
 CAMERA_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSCameraUsageDescription' "$INFO_PLIST_PATH")"
-PHOTO_LIBRARY_ADD_DESCRIPTION="$(/usr/libexec/PlistBuddy -c 'Print :NSPhotoLibraryAddUsageDescription' "$INFO_PLIST_PATH")"
 ALLOWS_HTTP="$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' "$INFO_PLIST_PATH")"
 APP_ICON_NAME="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIcons:CFBundlePrimaryIcon:CFBundleIconName' "$INFO_PLIST_PATH")"
 MARKETING_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$INFO_PLIST_PATH")"
@@ -64,7 +63,6 @@ if [[ "$PAIRING_SERVICE" != '_adb-tls-pairing._tcp' \
     || -z "$LOCAL_NETWORK_DESCRIPTION" \
     || "$BONJOUR_DISCOVERY_ENABLED" != 'NO' \
     || -z "$CAMERA_DESCRIPTION" \
-    || -z "$PHOTO_LIBRARY_ADD_DESCRIPTION" \
     || "$ALLOWS_HTTP" != 'true' \
     || "$APP_ICON_NAME" != 'AppIcon' \
     || "$APK_TYPE_IDENTIFIER" != 'com.android.package-archive' \

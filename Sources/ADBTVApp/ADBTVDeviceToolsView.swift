@@ -4,7 +4,6 @@ import Foundation
 import SwiftUI
 import UniformTypeIdentifiers
 #if os(iOS)
-import Photos
 import UIKit
 #elseif os(macOS)
 import AppKit
@@ -205,11 +204,6 @@ struct ADBTVDeviceToolsPanel: View {
     @State private var shellCommand = ProcessInfo.processInfo.arguments.contains("--ui-tools")
         ? "getprop ro.build.version.release"
         : ""
-#if os(iOS)
-    @State private var savingScreenshot = false
-    @State private var photoSaveMessage: String?
-#endif
-
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             informationSection
@@ -223,19 +217,6 @@ struct ADBTVDeviceToolsPanel: View {
                 loadInformation()
             }
         }
-#if os(iOS)
-        .alert(
-            "Screenshot",
-            isPresented: Binding(
-                get: { photoSaveMessage != nil },
-                set: { if !$0 { photoSaveMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(photoSaveMessage ?? "")
-        }
-#endif
     }
 
     private var informationSection: some View {
@@ -342,18 +323,6 @@ struct ADBTVDeviceToolsPanel: View {
 
                 if let screenshot = state.screenshot,
                    let image = platformImage(from: screenshot.pngData) {
-#if os(iOS)
-                    Button {
-                        saveScreenshotToPhotos(screenshot.pngData)
-                    } label: {
-                        Label("Save to Photos", systemImage: "square.and.arrow.down")
-                            .labelStyle(.iconOnly)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(deviceOperationInProgress || savingScreenshot)
-                    .help("Save to Photos")
-#endif
-
                     ShareLink(
                         item: ADBTVScreenshotShareItem(pngData: screenshot.pngData),
                         preview: SharePreview("Android TV Screenshot", image: image)
@@ -570,40 +539,6 @@ struct ADBTVDeviceToolsPanel: View {
         }
         runShellCommand(command)
     }
-
-#if os(iOS)
-    private func saveScreenshotToPhotos(_ pngData: Data) {
-        guard !savingScreenshot else {
-            return
-        }
-        savingScreenshot = true
-
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            Task { @MainActor in
-                guard status == .authorized || status == .limited else {
-                    savingScreenshot = false
-                    photoSaveMessage = "Photo access was not allowed. "
-                        + "You can enable Add Photos Only access in Settings."
-                    return
-                }
-
-                do {
-                    try await PHPhotoLibrary.shared().performChanges {
-                        let request = PHAssetCreationRequest.forAsset()
-                        let options = PHAssetResourceCreationOptions()
-                        options.originalFilename = "ADB-TV-Screenshot.png"
-                        request.addResource(with: .photo, data: pngData, options: options)
-                    }
-                    photoSaveMessage = "Saved to Photos."
-                } catch {
-                    photoSaveMessage = "Could not save the screenshot to Photos: "
-                        + error.localizedDescription
-                }
-                savingScreenshot = false
-            }
-        }
-    }
-#endif
 
     private func androidVersion(_ information: ADBTVDeviceInformation) -> String {
         guard !information.device.sdkVersion.isEmpty else {

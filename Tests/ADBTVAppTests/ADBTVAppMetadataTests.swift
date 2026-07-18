@@ -30,7 +30,6 @@ final class ADBTVAppMetadataTests: XCTestCase {
         )
         XCTAssertFalse(try XCTUnwrap(propertyList["NSCameraUsageDescription"] as? String).isEmpty)
         XCTAssertFalse(try XCTUnwrap(propertyList["NSLocalNetworkUsageDescription"] as? String).isEmpty)
-        XCTAssertFalse(try XCTUnwrap(propertyList["NSPhotoLibraryAddUsageDescription"] as? String).isEmpty)
         XCTAssertNotNil(propertyList["UILaunchScreen"] as? [String: Any])
         XCTAssertEqual(propertyList["UIRequiresFullScreen"] as? Bool, true)
         XCTAssertEqual(
