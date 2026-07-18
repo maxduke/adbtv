@@ -7,6 +7,10 @@ on:
       - main
       - protocol-spike
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -14,6 +18,7 @@ jobs:
   test:
     name: SwiftPM Tests
     runs-on: macos-15
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository
@@ -28,6 +33,7 @@ jobs:
   ios-simulator-build:
     name: iOS Simulator Build
     runs-on: macos-15
+    timeout-minutes: 15
 
     steps:
       - name: Check out repository

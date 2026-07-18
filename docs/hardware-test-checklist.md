@@ -138,6 +138,22 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Confirm each attempt uses a distinct UUID-named temporary APK and that its exact path is removed after success and failure.
 - [ ] Confirm no persistent install-history screen or record is created.
 
+## Device Tools
+
+- [ ] Open **Tools**, refresh Device Information, and confirm model, Android/API version, resolution, storage, uptime, and build identity match the TV.
+- [ ] Capture a screenshot and confirm its orientation, dimensions, colors, and visible TV content are correct.
+- [ ] Use Share to save the captured screenshot to Files and Photos; confirm both copies open correctly.
+- [ ] Capture a second screenshot and confirm the preview replaces the first without retaining history.
+- [ ] Run `getprop ro.build.version.release` and confirm the output and exit code are shown.
+- [ ] Run a command that exits nonzero and confirm its output and nonzero exit code remain visible without being reported as success.
+- [ ] Run a command that produces no output and confirm the completed state remains understandable.
+- [ ] Run a command with enough multiline output to scroll horizontally and vertically without resizing or clipping the surrounding layout.
+- [ ] Start a slow shell command, cancel it, and immediately run another command without a late result replacing it.
+- [ ] Select each built-in shell command, confirm it fills the editable command field, and run it successfully.
+- [ ] Make the TV unreachable during Device Information, screenshot, and shell operations; confirm each failure is bounded and exposes copyable Technical Details.
+- [ ] Start each Device Tools operation and confirm the tool picker, back navigation, and other device operations remain unavailable while its visible Cancel button works.
+- [ ] Confirm shell commands and output are not saved after leaving the device or relaunching ADB TV.
+
 ## Permission And Network Failures
 
 - [ ] In a self-signed build, confirm launch does not start Bonjour or present a Local Network prompt solely for discovery.
