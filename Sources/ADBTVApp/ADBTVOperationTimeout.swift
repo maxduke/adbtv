@@ -11,6 +11,7 @@ enum ADBTVTimedOperation: String, Equatable, Sendable {
     case deviceInformation
     case screenshot
     case shellCommand
+    case cacheCleanup
     case apkInstallation
     case apkStagingCleanup
 }
@@ -81,6 +82,7 @@ enum ADBTVOperationTimeoutPolicy {
     static let deviceInformation = ADBTVOperationTimeout(seconds: 45)
     static let screenshot = ADBTVOperationTimeout(seconds: 30)
     static let shellCommand = ADBTVOperationTimeout(seconds: 60)
+    static let cacheCleanup = ADBTVOperationTimeout(seconds: 2 * 60)
     static let apkInstallation = ADBTVOperationTimeout(seconds: 15 * 60)
     static let apkStagingCleanup = ADBTVOperationTimeout(seconds: 45)
 }

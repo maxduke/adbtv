@@ -24,6 +24,11 @@ final class ADBTVDeviceToolsViewStateTests: XCTestCase {
         state.cancel()
         XCTAssertNil(state.activeOperation)
         XCTAssertEqual(state.screenshotStatus, .idle)
+
+        state.start(.cacheCleanup(desiredFreeByteCount: 1_000_000))
+        XCTAssertEqual(state.cacheCleanupStatus, .running)
+        state.cancel()
+        XCTAssertEqual(state.cacheCleanupStatus, .idle)
     }
 
     func testStateDoesNotCarryResultsToAnotherDevice() {

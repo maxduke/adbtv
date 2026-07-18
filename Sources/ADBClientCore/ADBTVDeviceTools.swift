@@ -82,6 +82,17 @@ public struct ADBTVDeviceTools<Session: ADBDeviceToolsSession>: Sendable {
         return result
     }
 
+    public mutating func trimCaches(desiredFreeByteCount: Int64) async throws {
+        guard desiredFreeByteCount > 0 else {
+            throw ADBTVDeviceToolsError.invalidDesiredFreeByteCount(desiredFreeByteCount)
+        }
+        let invocation = try ADBCheckedShellInvocation(
+            command: ADBShellCommand("pm trim-caches \(desiredFreeByteCount)")
+        )
+        let output = try await session.runShellCommand(invocation.shellCommand)
+        _ = try invocation.validatedOutput(from: output)
+    }
+
     private mutating func bestEffortValue<Value>(
         command: String,
         parse: (ADBShellOutput) -> Value?
@@ -244,6 +255,7 @@ public struct ADBTVScreenshot: Equatable, Sendable {
 }
 
 public enum ADBTVDeviceToolsError: Error, Equatable, Sendable {
+    case invalidDesiredFreeByteCount(Int64)
     case emptyShellCommand
     case shellCommandTooLarge(maximumByteCount: Int)
     case shellOutputTooLarge(maximumByteCount: Int)

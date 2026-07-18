@@ -11,12 +11,14 @@ import AppKit
 
 enum ADBTVDeviceToolOperation: Equatable, Sendable {
     case information
+    case cacheCleanup(desiredFreeByteCount: Int64)
     case screenshot
     case shell(command: String)
 
     var operationName: String {
         switch self {
         case .information: "loadDeviceInformation"
+        case .cacheCleanup: "trimAppCaches"
         case .screenshot: "captureScreenshot"
         case .shell: "runShellCommand"
         }
@@ -25,6 +27,7 @@ enum ADBTVDeviceToolOperation: Equatable, Sendable {
     var failureMessage: String {
         switch self {
         case .information: "Could not load device information."
+        case .cacheCleanup: "Could not clean app caches."
         case .screenshot: "Could not capture the TV screen."
         case .shell: "Could not run the shell command."
         }
@@ -33,6 +36,7 @@ enum ADBTVDeviceToolOperation: Equatable, Sendable {
 
 enum ADBTVDeviceToolResult: Equatable, Sendable {
     case information(ADBTVDeviceInformation)
+    case cacheCleanup(ADBTVDeviceInformation)
     case screenshot(ADBTVScreenshot)
     case shell(ADBCheckedShellResult)
 }
@@ -43,6 +47,7 @@ struct ADBTVDeviceToolsViewState: Equatable {
     var screenshot: ADBTVScreenshot?
     var shellResult: ADBCheckedShellResult?
     var informationStatus = ADBTVDeviceInformationStatus.idle
+    var cacheCleanupStatus = ADBTVCacheCleanupStatus.idle
     var screenshotStatus = ADBTVScreenshotStatus.idle
     var shellStatus = ADBTVShellStatus.idle
     var activeOperation: ADBTVDeviceToolOperation?
@@ -60,6 +65,8 @@ struct ADBTVDeviceToolsViewState: Equatable {
         switch operation {
         case .information:
             informationStatus = .loading
+        case .cacheCleanup:
+            cacheCleanupStatus = .running
         case .screenshot:
             screenshotStatus = .capturing
         case .shell:
@@ -74,6 +81,10 @@ struct ADBTVDeviceToolsViewState: Equatable {
         case .information(let value):
             information = value
             informationStatus = .ready
+        case .cacheCleanup(let value):
+            information = value
+            informationStatus = .ready
+            cacheCleanupStatus = .finished
         case .screenshot(let value):
             screenshot = value
             screenshotStatus = .ready
@@ -92,6 +103,11 @@ struct ADBTVDeviceToolsViewState: Equatable {
         switch operation {
         case .information:
             informationStatus = .failed(
+                userMessage: userMessage,
+                diagnosticDetail: diagnosticDetail
+            )
+        case .cacheCleanup:
+            cacheCleanupStatus = .failed(
                 userMessage: userMessage,
                 diagnosticDetail: diagnosticDetail
             )
@@ -116,6 +132,8 @@ struct ADBTVDeviceToolsViewState: Equatable {
         switch activeOperation {
         case .information:
             informationStatus = information == nil ? .idle : .ready
+        case .cacheCleanup:
+            cacheCleanupStatus = .idle
         case .screenshot:
             screenshotStatus = screenshot == nil ? .idle : .ready
         case .shell:
@@ -172,6 +190,13 @@ enum ADBTVScreenshotStatus: Equatable {
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 }
 
+enum ADBTVCacheCleanupStatus: Equatable {
+    case idle
+    case running
+    case finished
+    case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
+}
+
 enum ADBTVShellStatus: Equatable {
     case idle
     case running
@@ -199,14 +224,19 @@ struct ADBTVDeviceToolsPanel: View {
     var loadInformation: () -> Void
     var captureScreenshot: () -> Void
     var runShellCommand: (String) -> Void
+    var openFiles: () -> Void
+    var cleanCaches: () -> Void
     var cancel: () -> Void
 
     @State private var shellCommand = ProcessInfo.processInfo.arguments.contains("--ui-tools")
         ? "getprop ro.build.version.release"
         : ""
+    @State private var isCacheCleanupConfirmationPresented = false
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             informationSection
+            Divider()
+            storageManagementSection
             Divider()
             screenshotSection
             Divider()
@@ -215,6 +245,94 @@ struct ADBTVDeviceToolsPanel: View {
         .onAppear {
             if state.informationStatus == .idle {
                 loadInformation()
+            }
+        }
+        .alert("Clear App Caches?", isPresented: $isCacheCleanupConfirmationPresented) {
+            Button("Clear Caches", role: .destructive) { cleanCaches() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Android will remove temporary app data. Apps may load more slowly the next time they open.")
+        }
+    }
+
+    private var storageManagementSection: some View {
+        VStack(spacing: 16) {
+            filesSection
+            Divider()
+            cacheCleanupSection
+        }
+    }
+
+    private var filesSection: some View {
+        Button(action: openFiles) {
+            HStack(spacing: 12) {
+                Image(systemName: "folder.fill")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Files")
+                        .font(.headline)
+                    Text("Browse shared storage")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(deviceOperationInProgress)
+        .accessibilityHint("Opens shared storage on the Android TV")
+    }
+
+    private var cacheCleanupSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "internaldrive")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Storage Cleanup")
+                        .font(.headline)
+                    Text("Remove temporary app caches")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+
+                if state.cacheCleanupStatus == .running {
+                    ProgressView()
+                    Button(action: cancel) {
+                        Label("Cancel Cache Cleanup", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                } else {
+                    Button {
+                        isCacheCleanupConfirmationPresented = true
+                    } label: {
+                        Label("Clear App Caches", systemImage: "trash")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(deviceOperationInProgress)
+                }
+            }
+
+            switch state.cacheCleanupStatus {
+            case .finished:
+                Label("App caches cleaned.", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.green)
+            case .failed(let userMessage, let diagnosticDetail):
+                failureView(userMessage, diagnosticDetail: diagnosticDetail)
+            case .idle, .running:
+                EmptyView()
             }
         }
     }

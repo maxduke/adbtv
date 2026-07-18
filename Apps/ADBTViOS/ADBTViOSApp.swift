@@ -46,6 +46,13 @@ struct ADBTViOSApp: App {
                 bonjourDiscoveryAvailable: false,
                 initiallyPresentsInstalledApps: true
             )
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-files") {
+            ADBTVRootView(
+                model: .preview,
+                automaticallyStartsDiscovery: false,
+                bonjourDiscoveryAvailable: false,
+                initiallyPresentsDeviceTools: true
+            )
         } else if ProcessInfo.processInfo.arguments.contains("--ui-tools") {
             ADBTVRootView(
                 model: .preview,

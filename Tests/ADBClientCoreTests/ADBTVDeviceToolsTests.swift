@@ -116,6 +116,27 @@ final class ADBTVDeviceToolsTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testRequestsSystemCacheTrimToDesiredFreeSpace() async throws {
+        var tools = ADBTVDeviceTools(session: FakeDeviceToolsSession())
+
+        try await tools.trimCaches(desiredFreeByteCount: 32_000_000_000)
+
+        XCTAssertEqual(tools.session.shellCommands.last, "pm trim-caches 32000000000")
+    }
+
+    func testRejectsInvalidCacheTrimTarget() async {
+        var tools = ADBTVDeviceTools(session: FakeDeviceToolsSession())
+
+        do {
+            try await tools.trimCaches(desiredFreeByteCount: 0)
+            XCTFail("Expected an invalid cache trim target.")
+        } catch let error as ADBTVDeviceToolsError {
+            XCTAssertEqual(error, .invalidDesiredFreeByteCount(0))
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }
 
 private struct FakeDeviceToolsSession: ADBDeviceToolsSession {
@@ -124,6 +145,7 @@ private struct FakeDeviceToolsSession: ADBDeviceToolsSession {
     var serviceOutput: [UInt8]
     private(set) var connectIdentities: [String] = []
     private(set) var services: [String] = []
+    private(set) var shellCommands: [String] = []
 
     init(
         shellOutputs: [String: String] = basicPropertyOutputs,
@@ -142,6 +164,7 @@ private struct FakeDeviceToolsSession: ADBDeviceToolsSession {
 
     mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput {
         let original = try originalCommand(from: command.rawValue)
+        shellCommands.append(original)
         if failingCommands.contains(original) {
             throw TestError.failedCommand
         }

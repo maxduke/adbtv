@@ -254,6 +254,14 @@ public struct ADBTVRootView: View {
                     runShellCommand: { command in
                         runDeviceTool(.shell(command: command), on: device)
                     },
+                    cleanCaches: {
+                        let desiredFreeByteCount = deviceToolsState.information?
+                            .storage?.totalByteCount ?? 1_000_000_000_000
+                        runDeviceTool(
+                            .cacheCleanup(desiredFreeByteCount: desiredFreeByteCount),
+                            on: device
+                        )
+                    },
                     cancelDeviceToolOperation: cancelDeviceToolOperation
                 )
                 .id(device.id)
@@ -1669,6 +1677,11 @@ public struct ADBTVRootView: View {
             switch operation {
             case .information:
                 return .information(try await tools.loadInformation(systemIdentity: "host::adbtv"))
+            case .cacheCleanup(let desiredFreeByteCount):
+                try await tools.trimCaches(desiredFreeByteCount: desiredFreeByteCount)
+                return .cacheCleanup(
+                    try await tools.loadInformation(systemIdentity: "host::adbtv")
+                )
             case .screenshot:
                 return .screenshot(try await tools.captureScreenshot())
             case .shell(let command):
@@ -1680,6 +1693,11 @@ public struct ADBTVRootView: View {
         case .information:
             return try await ADBTVOperationTimeoutPolicy.deviceInformation.run(
                 operation: .deviceInformation,
+                work
+            )
+        case .cacheCleanup:
+            return try await ADBTVOperationTimeoutPolicy.cacheCleanup.run(
+                operation: .cacheCleanup,
                 work
             )
         case .screenshot:
@@ -3090,6 +3108,7 @@ private struct DeviceDetailView: View {
     var loadDeviceInformation: () -> Void
     var captureScreenshot: () -> Void
     var runShellCommand: (String) -> Void
+    var cleanCaches: () -> Void
     var cancelDeviceToolOperation: () -> Void
 
     @State private var selectedTool = ProcessInfo.processInfo.arguments.contains("--ui-install")
@@ -3099,6 +3118,7 @@ private struct DeviceDetailView: View {
             : ProcessInfo.processInfo.arguments.contains("--ui-tools")
                 ? DeviceTool.tools
                 : DeviceTool.remote
+    @State private var isFileBrowserPresented = ProcessInfo.processInfo.arguments.contains("--ui-files")
 
     var body: some View {
         ScrollView {
@@ -3133,6 +3153,9 @@ private struct DeviceDetailView: View {
             .padding()
         }
         .navigationTitle(device.displayName)
+        .navigationDestination(isPresented: $isFileBrowserPresented) {
+            ADBTVFileBrowserView(device: device)
+        }
 #if os(iOS)
         .navigationBarBackButtonHidden(deviceOperationInProgress)
         .navigationBarTitleDisplayMode(.inline)
@@ -3187,6 +3210,8 @@ private struct DeviceDetailView: View {
             loadInformation: loadDeviceInformation,
             captureScreenshot: captureScreenshot,
             runShellCommand: runShellCommand,
+            openFiles: { isFileBrowserPresented = true },
+            cleanCaches: cleanCaches,
             cancel: cancelDeviceToolOperation
         )
     }
