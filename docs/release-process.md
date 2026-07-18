@@ -34,7 +34,6 @@ The **iOS Draft Release** workflow:
 - rejects a tag whose version differs from the built app;
 - builds and validates the unsigned device app;
 - creates the IPA and SHA-256 sidecar;
-- uploads both as workflow artifacts;
 - creates or updates a draft GitHub release.
 
 Inspect the draft release and its generated notes before publishing it. Publishing remains a manual action.

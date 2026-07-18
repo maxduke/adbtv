@@ -1,14 +1,11 @@
 name: iOS UI Snapshots
 
 on:
-  pull_request:
-    paths:
-      - ".github/workflows/ios-ui-snapshots.yml"
-      - "ADBTV.xcodeproj/**"
-      - "Apps/ADBTViOS/**"
-      - "Package.swift"
-      - "Sources/**"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -133,4 +130,4 @@ jobs:
           name: ADBTV-ui-snapshots
           path: build/ui-snapshots/screenshots/*.png
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3

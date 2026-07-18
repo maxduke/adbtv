@@ -10,9 +10,9 @@ Version [0.3.0](https://github.com/maxduke/adbtv/releases/tag/v0.3.0) is release
 - `ADBTVApp`: SwiftUI app shell for saved devices, APK install sources, install state, and Android TV remote actions.
 - `ADBTV.xcodeproj`: iOS app target that hosts the SwiftUI shell.
 
-GitHub Actions runs Swift package tests, an iOS simulator build, unsigned IPA packaging,
-Android input-helper tests and packaging, and deterministic portrait iPhone/iPad layout
-snapshots in light and dark appearance.
+GitHub Actions runs Swift package tests and an iOS simulator build for pull requests.
+Unsigned IPA packaging and deterministic portrait iPhone/iPad layout snapshots are manual
+release-candidate checks; release tags package the final IPA automatically.
 
 Current direction:
 
