@@ -1,11 +1,11 @@
-package com.maxduke.adbtv.helper.v2;
+package com.maxduke.adbtv.helper.v3;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 
 public final class TextCommitReceiver extends BroadcastReceiver {
-    static final String ACTION_COMMIT_TEXT = "com.maxduke.adbtv.helper.v2.COMMIT_TEXT";
+    static final String ACTION_COMMIT_TEXT = "com.maxduke.adbtv.helper.v3.COMMIT_TEXT";
     static final String EXTRA_TEXT_BASE64 = "text_base64";
 
     @Override

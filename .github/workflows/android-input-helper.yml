@@ -6,6 +6,7 @@ on:
       - "LICENSE"
       - "Android/ADBTVInput/**"
       - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
+      - "Sources/ADBClientCore/ADBTVInstalledAppManager.swift"
       - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
       - ".github/workflows/android-input-helper.yml"
   push:
@@ -16,6 +17,7 @@ on:
       - "LICENSE"
       - "Android/ADBTVInput/**"
       - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
+      - "Sources/ADBClientCore/ADBTVInstalledAppManager.swift"
       - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
       - ".github/workflows/android-input-helper.yml"
   workflow_dispatch:
@@ -69,8 +71,8 @@ jobs:
           for apk in \
             Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
             Apps/ADBTViOS/Resources/ADBTVInput.apk; do
-            test "$(apkanalyzer manifest application-id "$apk")" = "com.maxduke.adbtv.helper.v2"
-            test "$(apkanalyzer manifest version-code "$apk")" = "2"
+            test "$(apkanalyzer manifest application-id "$apk")" = "com.maxduke.adbtv.helper.v3"
+            test "$(apkanalyzer manifest version-code "$apk")" = "3"
           done
 
       - name: Verify bundled helper payload
