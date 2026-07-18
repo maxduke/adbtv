@@ -291,7 +291,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
             installDraft.status = .cancelled
         case .remoteAction, .remoteText:
             remoteStatus = .idle
-        case .installedApps:
+        case .installedApps, .deviceTools:
             break
         }
     }
@@ -327,6 +327,35 @@ public struct ADBTVAppModel: Equatable, Sendable {
         }
         activeDeviceOperation = nil
         return true
+    }
+
+    @discardableResult
+    public mutating func startDeviceToolsOperation(
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard selectedDeviceID == deviceID, activeDeviceOperation == nil else {
+            return false
+        }
+        activeDeviceOperation = .deviceTools(deviceID: deviceID)
+        return true
+    }
+
+    @discardableResult
+    public mutating func finishDeviceToolsOperation(
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        guard activeDeviceOperation == .deviceTools(deviceID: deviceID) else {
+            return false
+        }
+        activeDeviceOperation = nil
+        return true
+    }
+
+    @discardableResult
+    public mutating func cancelDeviceToolsOperation(
+        on deviceID: ADBTVDeviceSummary.ID
+    ) -> Bool {
+        finishDeviceToolsOperation(on: deviceID)
     }
 
     @discardableResult
@@ -979,13 +1008,15 @@ public enum ADBTVActiveDeviceOperation: Equatable, Sendable {
     case remoteAction(deviceID: ADBTVDeviceSummary.ID, action: ADBTVRemoteAction)
     case remoteText(deviceID: ADBTVDeviceSummary.ID)
     case installedApps(deviceID: ADBTVDeviceSummary.ID)
+    case deviceTools(deviceID: ADBTVDeviceSummary.ID)
 
     public var deviceID: ADBTVDeviceSummary.ID {
         switch self {
         case .install(let deviceID),
              .remoteAction(let deviceID, _),
              .remoteText(let deviceID),
-             .installedApps(let deviceID):
+             .installedApps(let deviceID),
+             .deviceTools(let deviceID):
             return deviceID
         }
     }

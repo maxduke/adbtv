@@ -122,6 +122,50 @@ final class ADBDeviceSessionTests: XCTestCase {
         }
     }
 
+    func testRunServiceCapturesCoalescedBinaryOutput() async throws {
+        let payload: [UInt8] = [0, 1, 2, 255]
+        let inboundChunk = try [
+            ADBPacket(command: .okay, arg0: 42, arg1: 1),
+            ADBPacket(command: .write, arg0: 42, arg1: 1, payload: payload),
+            ADBPacket(command: .close, arg0: 42, arg1: 1)
+        ].reduce(into: [UInt8]()) { bytes, packet in
+            bytes.append(contentsOf: try packet.encoded())
+        }
+        let transport = InMemoryADBByteTransport(inboundChunks: [inboundChunk])
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState())),
+            transport: transport
+        )
+
+        let output = try await session.runService(
+            "exec:screencap -p",
+            maximumOutputByteCount: 16
+        )
+
+        XCTAssertEqual(output.bytes, payload)
+        let sentPackets = try await transport.sentChunks().map { try $0.decodedPacket() }
+        XCTAssertEqual(sentPackets.first?.payload, Array("exec:screencap -p".utf8) + [0])
+        XCTAssertEqual(sentPackets.last, ADBPacket(command: .okay, arg0: 1, arg1: 42))
+    }
+
+    func testRunServiceRejectsOutputOverLimit() async throws {
+        let transport = InMemoryADBByteTransport(inboundChunks: [
+            try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded(),
+            try ADBPacket(command: .write, arg0: 42, arg1: 1, payload: [1, 2, 3, 4]).encoded()
+        ])
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState())),
+            transport: transport
+        )
+
+        do {
+            _ = try await session.runService("exec:large-output", maximumOutputByteCount: 3)
+            XCTFail("Expected oversized service output to fail.")
+        } catch let error as ADBDeviceSessionError {
+            XCTAssertEqual(error, .serviceOutputTooLarge(maximumByteCount: 3))
+        }
+    }
+
     func testPushFileHandlesResponseCoalescedWithFinalWriteAcknowledgement() async throws {
         let remotePath = try ADBRemotePath("/data/local/tmp/adbtv/app.apk")
         let plan = try ADBSyncPushPlan(

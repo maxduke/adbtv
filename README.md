@@ -4,15 +4,15 @@ ADB TV is a native SwiftUI iOS app for managing Android TV devices over Wireless
 
 ## Status
 
-Version [0.2.0](https://github.com/maxduke/adbtv/releases/tag/v0.2.0) is released. Version 0.3.0 is in release preparation with the following Swift package and native SwiftUI iOS app features:
+Version [0.4.0](https://github.com/maxduke/adbtv/releases/tag/v0.4.0) is the current release with the following Swift package and native SwiftUI iOS app features:
 
 - `ADBClientCore`: native ADB packet, stream, shell, sync, remote-control, and APK install foundations.
 - `ADBTVApp`: SwiftUI app shell for saved devices, APK install sources, install state, and Android TV remote actions.
 - `ADBTV.xcodeproj`: iOS app target that hosts the SwiftUI shell.
 
-GitHub Actions runs Swift package tests, an iOS simulator build, unsigned IPA packaging,
-Android input-helper tests and packaging, and deterministic portrait iPhone/iPad layout
-snapshots in light and dark appearance.
+GitHub Actions runs Swift package tests and an iOS simulator build for pull requests.
+Unsigned IPA packaging and deterministic portrait iPhone/iPad layout snapshots are manual
+release-candidate checks; release tags package the final IPA automatically.
 
 Current direction:
 
@@ -69,15 +69,13 @@ Implemented so far:
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - searchable user-installed app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, Android TV launch, confirmed uninstall, and checked command diagnostics;
+- structured device information for Android version, display resolution, storage, uptime, and build identity;
+- bounded binary-safe Android TV screenshots with PNG validation, preview, and native sharing;
+- bounded one-shot ADB shell commands with read-only diagnostic presets, cancellation, timeout, copyable output, and preserved exit status;
 - unsigned IPA packaging in GitHub Actions;
 - packaged ADB TV and BoringSSL license notices with an in-app About surface;
 - repository-owned app icon and accent-color assets with packaged-product validation;
 - adaptive system launch-screen configuration for iPhone and iPad.
-
-Still in progress:
-
-- real-device validation of pairing, reconnect, remote actions, and APK install;
-- real-device validation of QR camera framing and permission behavior.
 
 ## Planning Docs
 

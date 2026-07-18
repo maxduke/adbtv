@@ -31,6 +31,9 @@ public struct ADBTVRootView: View {
     @State private var installedAppDetailsTask: Task<Void, Never>?
     @State private var installedAppDetailsOperationID: UUID?
     @State private var installedAppsState = ADBTVInstalledAppsViewState()
+    @State private var deviceToolsTask: Task<Void, Never>?
+    @State private var deviceToolsOperationID: UUID?
+    @State private var deviceToolsState = ADBTVDeviceToolsViewState()
     @State private var pairingTask: Task<Void, Never>?
     @State private var deviceConnectionTask: Task<Void, Never>?
     @State private var deviceConnectionState = ADBTVSavedDeviceConnectionState.idle
@@ -76,7 +79,8 @@ public struct ADBTVRootView: View {
         initiallyPresentsAbout: Bool = false,
         initiallyPresentsConnectionRepair: Bool = false,
         initiallyPresentsDeviceRename: Bool = false,
-        initiallyPresentsInstalledApps: Bool = false
+        initiallyPresentsInstalledApps: Bool = false,
+        initiallyPresentsDeviceTools: Bool = false
     ) {
         self.deviceStore = deviceStore
         self.bonjourCapability = bonjourDiscoveryAvailable.map {
@@ -95,6 +99,11 @@ public struct ADBTVRootView: View {
         )
         if initiallyPresentsInstalledApps, let deviceID = model.devices.first?.id {
             self._installedAppsState = State(
+                initialValue: .preview(deviceID: deviceID)
+            )
+        }
+        if initiallyPresentsDeviceTools, let deviceID = model.devices.first?.id {
+            self._deviceToolsState = State(
                 initialValue: .preview(deviceID: deviceID)
             )
         }
@@ -206,6 +215,7 @@ public struct ADBTVRootView: View {
                     canSendRemoteText: model.canSendRemoteText,
                     deviceOperationInProgress: model.activeDeviceOperation != nil,
                     installedAppsState: installedAppsState.forDevice(device.id),
+                    deviceToolsState: deviceToolsState.forDevice(device.id),
                     repair: { repairingDevice = device },
                     rename: { renamingDevice = device },
                     chooseAPK: {
@@ -234,7 +244,17 @@ public struct ADBTVRootView: View {
                     uninstallInstalledApp: { package in
                         runInstalledAppCommand(.uninstall(package), on: device)
                     },
-                    cancelInstalledAppOperation: cancelInstalledAppOperation
+                    cancelInstalledAppOperation: cancelInstalledAppOperation,
+                    loadDeviceInformation: {
+                        runDeviceTool(.information, on: device)
+                    },
+                    captureScreenshot: {
+                        runDeviceTool(.screenshot, on: device)
+                    },
+                    runShellCommand: { command in
+                        runDeviceTool(.shell(command: command), on: device)
+                    },
+                    cancelDeviceToolOperation: cancelDeviceToolOperation
                 )
                 .id(device.id)
             } else {
@@ -380,6 +400,8 @@ public struct ADBTVRootView: View {
             installedAppsOperationID = nil
             installedAppDetailsTask?.cancel()
             installedAppDetailsOperationID = nil
+            deviceToolsTask?.cancel()
+            deviceToolsOperationID = nil
             deviceConnectionTask?.cancel()
             model.cancelActiveDeviceOperation()
             cancelPairing()
@@ -1341,7 +1363,7 @@ public struct ADBTVRootView: View {
             remoteTask?.cancel()
             remoteTask = nil
             model.cancelActiveDeviceOperation()
-        case .install, .installedApps:
+        case .install, .installedApps, .deviceTools:
             return
         }
     }
@@ -1452,6 +1474,99 @@ public struct ADBTVRootView: View {
         }
     }
 
+    private func runDeviceTool(
+        _ operation: ADBTVDeviceToolOperation,
+        on device: ADBTVDeviceSummary
+    ) {
+        guard model.startDeviceToolsOperation(on: device.id) else {
+            return
+        }
+
+        if deviceToolsState.deviceID != device.id {
+            deviceToolsState = ADBTVDeviceToolsViewState(deviceID: device.id)
+        }
+        deviceToolsState.start(operation)
+        let operationID = UUID()
+        deviceToolsOperationID = operationID
+
+        deviceToolsTask = Task {
+            let completion: ADBTVDeviceToolCompletion
+            do {
+                completion = .success(
+                    try await Self.performDeviceTool(operation, on: device)
+                )
+            } catch {
+                guard !Task.isCancelled else {
+                    return
+                }
+                completion = .failure(
+                    operation: operation,
+                    userMessage: operation.failureMessage,
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: String(describing: error),
+                        context: Self.operationDiagnosticContext(
+                            error: error,
+                            base: [
+                                "device": device.connectionDescription,
+                                "operation": operation.operationName
+                            ]
+                        )
+                    )
+                )
+            }
+
+            guard !Task.isCancelled else {
+                return
+            }
+            await MainActor.run {
+                completeDeviceTool(
+                    completion,
+                    operationID: operationID,
+                    on: device
+                )
+            }
+        }
+    }
+
+    private func cancelDeviceToolOperation() {
+        guard case .deviceTools(let deviceID) = model.activeDeviceOperation else {
+            return
+        }
+        deviceToolsTask?.cancel()
+        deviceToolsTask = nil
+        deviceToolsOperationID = nil
+        guard model.cancelDeviceToolsOperation(on: deviceID),
+              deviceToolsState.deviceID == deviceID else {
+            return
+        }
+        deviceToolsState.cancel()
+    }
+
+    private func completeDeviceTool(
+        _ completion: ADBTVDeviceToolCompletion,
+        operationID: UUID,
+        on device: ADBTVDeviceSummary
+    ) {
+        guard deviceToolsOperationID == operationID,
+              deviceToolsState.deviceID == device.id,
+              model.finishDeviceToolsOperation(on: device.id) else {
+            return
+        }
+        deviceToolsTask = nil
+        deviceToolsOperationID = nil
+
+        switch completion {
+        case .success(let result):
+            deviceToolsState.finish(result)
+        case .failure(let operation, let userMessage, let diagnosticDetail):
+            deviceToolsState.fail(
+                operation,
+                userMessage: userMessage,
+                diagnosticDetail: diagnosticDetail
+            )
+        }
+    }
+
     private func startInstalledAppDetailsLoad(
         _ packages: [ADBTVInstalledPackage],
         on device: ADBTVDeviceSummary
@@ -1538,6 +1653,48 @@ public struct ADBTVRootView: View {
         }
 #else
         throw ADBTVInstalledAppOperationError.unsupportedPlatform
+#endif
+    }
+
+    private static func performDeviceTool(
+        _ operation: ADBTVDeviceToolOperation,
+        on device: ADBTVDeviceSummary
+    ) async throws -> ADBTVDeviceToolResult {
+#if canImport(Network) && canImport(Security)
+        let work: @Sendable () async throws -> ADBTVDeviceToolResult = {
+            var connection = try await connectedDevice(for: device)
+            defer { connection.cancel() }
+            var tools = ADBTVDeviceTools(session: connection)
+
+            switch operation {
+            case .information:
+                return .information(try await tools.loadInformation(systemIdentity: "host::adbtv"))
+            case .screenshot:
+                return .screenshot(try await tools.captureScreenshot())
+            case .shell(let command):
+                return .shell(try await tools.runShellCommand(command))
+            }
+        }
+
+        switch operation {
+        case .information:
+            return try await ADBTVOperationTimeoutPolicy.deviceInformation.run(
+                operation: .deviceInformation,
+                work
+            )
+        case .screenshot:
+            return try await ADBTVOperationTimeoutPolicy.screenshot.run(
+                operation: .screenshot,
+                work
+            )
+        case .shell:
+            return try await ADBTVOperationTimeoutPolicy.shellCommand.run(
+                operation: .shellCommand,
+                work
+            )
+        }
+#else
+        throw ADBTVDeviceToolOperationError.unsupportedPlatform
 #endif
     }
 
@@ -1850,6 +2007,19 @@ private enum ADBTVInstalledAppResult: Sendable {
 private enum ADBTVInstalledAppCompletion: Sendable {
     case success(ADBTVInstalledAppResult)
     case failure(userMessage: String, diagnosticDetail: DiagnosticDetail)
+}
+
+private enum ADBTVDeviceToolCompletion: Sendable {
+    case success(ADBTVDeviceToolResult)
+    case failure(
+        operation: ADBTVDeviceToolOperation,
+        userMessage: String,
+        diagnosticDetail: DiagnosticDetail
+    )
+}
+
+private enum ADBTVDeviceToolOperationError: Error {
+    case unsupportedPlatform
 }
 
 private struct ADBTVInstalledAppsViewState: Equatable {
@@ -2903,6 +3073,7 @@ private struct DeviceDetailView: View {
     var canSendRemoteText: Bool
     var deviceOperationInProgress: Bool
     var installedAppsState: ADBTVInstalledAppsViewState
+    var deviceToolsState: ADBTVDeviceToolsViewState
     var repair: () -> Void
     var rename: () -> Void
     var chooseAPK: () -> Void
@@ -2916,12 +3087,18 @@ private struct DeviceDetailView: View {
     var launchInstalledApp: (ADBTVInstalledPackage) -> Void
     var uninstallInstalledApp: (ADBTVInstalledPackage) -> Void
     var cancelInstalledAppOperation: () -> Void
+    var loadDeviceInformation: () -> Void
+    var captureScreenshot: () -> Void
+    var runShellCommand: (String) -> Void
+    var cancelDeviceToolOperation: () -> Void
 
     @State private var selectedTool = ProcessInfo.processInfo.arguments.contains("--ui-install")
         ? DeviceTool.install
         : ProcessInfo.processInfo.arguments.contains("--ui-apps")
             ? DeviceTool.apps
-            : DeviceTool.remote
+            : ProcessInfo.processInfo.arguments.contains("--ui-tools")
+                ? DeviceTool.tools
+                : DeviceTool.remote
 
     var body: some View {
         ScrollView {
@@ -2935,11 +3112,11 @@ private struct DeviceDetailView: View {
 
                 Picker("Device Tool", selection: $selectedTool) {
                     ForEach(DeviceTool.allCases) { tool in
-                        Label(tool.title, systemImage: tool.systemImage)
-                            .tag(tool)
+                        Text(tool.title).tag(tool)
                     }
                 }
                 .pickerStyle(.segmented)
+                .disabled(deviceOperationInProgress)
 
                 switch selectedTool {
                 case .remote:
@@ -2948,6 +3125,8 @@ private struct DeviceDetailView: View {
                     installPanel
                 case .apps:
                     installedAppsPanel
+                case .tools:
+                    deviceToolsPanel
                 }
             }
             .frame(maxWidth: 620, alignment: .leading)
@@ -3001,6 +3180,17 @@ private struct DeviceDetailView: View {
         )
     }
 
+    private var deviceToolsPanel: some View {
+        ADBTVDeviceToolsPanel(
+            state: deviceToolsState,
+            deviceOperationInProgress: deviceOperationInProgress,
+            loadInformation: loadDeviceInformation,
+            captureScreenshot: captureScreenshot,
+            runShellCommand: runShellCommand,
+            cancel: cancelDeviceToolOperation
+        )
+    }
+
     private var unicodeHelperInstallStatus: ADBTVInstallStatus? {
         guard installDraft.selectedPackage?.fileName == ADBTVUnicodeInputHelper.bundledAPKFileName else {
             return nil
@@ -3013,6 +3203,7 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
     case remote
     case install
     case apps
+    case tools
 
     var id: Self { self }
 
@@ -3024,19 +3215,11 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
             return "Install"
         case .apps:
             return "Apps"
+        case .tools:
+            return "Tools"
         }
     }
 
-    var systemImage: String {
-        switch self {
-        case .remote:
-            return "gamecontroller"
-        case .install:
-            return "square.and.arrow.down"
-        case .apps:
-            return "square.grid.2x2"
-        }
-    }
 }
 
 private struct InstalledAppsPanel: View {
@@ -3982,7 +4165,7 @@ private struct RemoteFailureView: View {
     }
 }
 
-private struct DiagnosticDisclosure: View {
+struct DiagnosticDisclosure: View {
     var diagnosticDetail: DiagnosticDetail
 
     var body: some View {

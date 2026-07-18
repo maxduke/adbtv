@@ -573,6 +573,24 @@ final class ADBTVAppModelTests: XCTestCase {
         XCTAssertTrue(model.selectDevice(id: second.id))
     }
 
+    func testDeviceToolsOperationOwnsItsTargetUntilMatchingCompletion() {
+        let first = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
+        let second = ADBTVDeviceSummary(displayName: "Bedroom", host: "192.168.1.51", port: 5555)
+        var model = ADBTVAppModel(devices: [first, second])
+
+        XCTAssertTrue(model.startDeviceToolsOperation(on: first.id))
+        XCTAssertEqual(model.activeDeviceOperation, .deviceTools(deviceID: first.id))
+        XCTAssertFalse(model.selectDevice(id: second.id))
+        XCTAssertFalse(model.startInstalledAppOperation(on: first.id))
+        XCTAssertFalse(model.finishDeviceToolsOperation(on: second.id))
+        XCTAssertFalse(model.cancelDeviceToolsOperation(on: second.id))
+
+        XCTAssertTrue(model.cancelDeviceToolsOperation(on: first.id))
+        XCTAssertNil(model.activeDeviceOperation)
+        XCTAssertFalse(model.finishDeviceToolsOperation(on: first.id))
+        XCTAssertTrue(model.selectDevice(id: second.id))
+    }
+
     func testRemoteOperationRejectsOverlapAndStaleCompletion() {
         let first = ADBTVDeviceSummary(displayName: "Living Room", host: "192.168.1.50", port: 5555)
         let second = ADBTVDeviceSummary(displayName: "Bedroom", host: "192.168.1.51", port: 5555)
