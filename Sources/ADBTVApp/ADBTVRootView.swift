@@ -3116,9 +3116,10 @@ private struct DeviceDetailView: View {
         : ProcessInfo.processInfo.arguments.contains("--ui-apps")
             ? DeviceTool.apps
             : ProcessInfo.processInfo.arguments.contains("--ui-tools")
+                || ProcessInfo.processInfo.arguments.contains("--ui-files")
                 ? DeviceTool.tools
                 : DeviceTool.remote
-    @State private var isFileBrowserPresented = ProcessInfo.processInfo.arguments.contains("--ui-files")
+    @State private var isFileBrowserPresented = false
 
     var body: some View {
         ScrollView {
@@ -3155,6 +3156,11 @@ private struct DeviceDetailView: View {
         .navigationTitle(device.displayName)
         .navigationDestination(isPresented: $isFileBrowserPresented) {
             ADBTVFileBrowserView(device: device)
+        }
+        .task {
+            guard ProcessInfo.processInfo.arguments.contains("--ui-files") else { return }
+            await Task.yield()
+            isFileBrowserPresented = true
         }
 #if os(iOS)
         .navigationBarBackButtonHidden(deviceOperationInProgress)

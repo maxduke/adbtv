@@ -136,6 +136,7 @@ public enum ADBSyncEntryKind: Equatable, Sendable {
 public struct ADBSyncDirectoryEntry: Equatable, Sendable {
     public var name: String
     public var mode: ADBSyncFileMode
+    // ponytail: sync v1 caps file metadata at 4 GiB; add LIST_V2 after validating TV compatibility.
     public var byteCount: UInt32
     public var modificationTime: UInt32
 
