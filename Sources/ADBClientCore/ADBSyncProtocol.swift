@@ -1,5 +1,8 @@
 public enum ADBSyncID: UInt32, Sendable {
+    case listV1 = 0x5453_494c
     case sendV1 = 0x444e_4553
+    case receiveV1 = 0x5643_4552
+    case directoryEntryV1 = 0x544e_4544
     case data = 0x4154_4144
     case done = 0x454e_4f44
     case okay = 0x5941_4b4f
@@ -31,6 +34,14 @@ public struct ADBSyncFrame: Equatable, Sendable {
         return ADBSyncFrame(id: .sendV1, value: UInt32(payload.count), payload: payload)
     }
 
+    public static func listV1(path: ADBRemotePath) throws -> ADBSyncFrame {
+        try pathRequest(id: .listV1, path: path)
+    }
+
+    public static func receiveV1(path: ADBRemotePath) throws -> ADBSyncFrame {
+        try pathRequest(id: .receiveV1, path: path)
+    }
+
     public static func data(_ bytes: [UInt8]) throws -> ADBSyncFrame {
         guard bytes.count <= maxDataByteCount else {
             throw ADBSyncFramingError.dataPayloadTooLarge(bytes.count)
@@ -47,9 +58,17 @@ public struct ADBSyncFrame: Equatable, Sendable {
         ADBSyncFrame(id: .quit, value: 0)
     }
 
+    private static func pathRequest(id: ADBSyncID, path: ADBRemotePath) throws -> ADBSyncFrame {
+        let payload = Array(path.rawValue.utf8)
+        guard payload.count <= maxPathPayloadByteCount else {
+            throw ADBSyncFramingError.pathPayloadTooLarge(payload.count)
+        }
+        return ADBSyncFrame(id: id, value: UInt32(payload.count), payload: payload)
+    }
+
     public func encoded() throws -> [UInt8] {
         switch id {
-        case .sendV1:
+        case .sendV1, .listV1, .receiveV1:
             guard payload.count <= Self.maxPathPayloadByteCount else {
                 throw ADBSyncFramingError.pathPayloadTooLarge(payload.count)
             }
@@ -71,6 +90,8 @@ public struct ADBSyncFrame: Equatable, Sendable {
             guard value == UInt32(payload.count) else {
                 throw ADBSyncFramingError.payloadLengthMismatch(expected: Int(value), actual: payload.count)
             }
+        case .directoryEntryV1:
+            throw ADBSyncFramingError.unexpectedRequestID(id)
         }
 
         var bytes: [UInt8] = []
@@ -89,6 +110,45 @@ public struct ADBSyncFileMode: Equatable, Sendable {
 
     public init(rawValue: UInt32) {
         self.rawValue = rawValue
+    }
+
+    public var kind: ADBSyncEntryKind {
+        switch rawValue & 0o170000 {
+        case 0o040000:
+            return .directory
+        case 0o100000:
+            return .file
+        case 0o120000:
+            return .symbolicLink
+        default:
+            return .other
+        }
+    }
+}
+
+public enum ADBSyncEntryKind: Equatable, Sendable {
+    case directory
+    case file
+    case symbolicLink
+    case other
+}
+
+public struct ADBSyncDirectoryEntry: Equatable, Sendable {
+    public var name: String
+    public var mode: ADBSyncFileMode
+    public var byteCount: UInt32
+    public var modificationTime: UInt32
+
+    public init(
+        name: String,
+        mode: ADBSyncFileMode,
+        byteCount: UInt32,
+        modificationTime: UInt32
+    ) {
+        self.name = name
+        self.mode = mode
+        self.byteCount = byteCount
+        self.modificationTime = modificationTime
     }
 }
 
@@ -143,6 +203,167 @@ public struct ADBSyncResponseDecoder: Sendable {
 
     public var bufferedByteCount: Int {
         buffer.count
+    }
+}
+
+public enum ADBSyncDirectoryResponse: Equatable, Sendable {
+    case entry(ADBSyncDirectoryEntry)
+    case done
+    case fail(message: String)
+}
+
+public struct ADBSyncDirectoryResponseDecoder: Sendable {
+    private static let entryHeaderByteCount = 20
+    private static let maximumNameByteCount = ADBSyncFrame.maxPathPayloadByteCount
+    private static let maximumMessageByteCount = 64 * 1024
+
+    private var buffer: [UInt8] = []
+
+    public init() {}
+
+    public mutating func append(_ bytes: [UInt8]) throws -> [ADBSyncDirectoryResponse] {
+        buffer.append(contentsOf: bytes)
+        var responses: [ADBSyncDirectoryResponse] = []
+
+        while buffer.count >= 4 {
+            let rawID = buffer.readLittleEndianUInt32(at: 0)
+            guard let id = ADBSyncID(rawValue: rawID) else {
+                throw ADBSyncFramingError.unknownID(rawID)
+            }
+
+            switch id {
+            case .directoryEntryV1:
+                guard buffer.count >= Self.entryHeaderByteCount else {
+                    return responses
+                }
+                let nameByteCount = Int(buffer.readLittleEndianUInt32(at: 16))
+                guard nameByteCount <= Self.maximumNameByteCount else {
+                    throw ADBSyncFramingError.directoryEntryNameTooLarge(nameByteCount)
+                }
+                let responseByteCount = Self.entryHeaderByteCount + nameByteCount
+                guard buffer.count >= responseByteCount else {
+                    return responses
+                }
+                let nameBytes = buffer[Self.entryHeaderByteCount ..< responseByteCount]
+                guard !nameBytes.contains(0), !nameBytes.contains(47) else {
+                    throw ADBSyncFramingError.invalidDirectoryEntryName
+                }
+                responses.append(.entry(ADBSyncDirectoryEntry(
+                    name: String(decoding: nameBytes, as: UTF8.self),
+                    mode: ADBSyncFileMode(rawValue: buffer.readLittleEndianUInt32(at: 4)),
+                    byteCount: buffer.readLittleEndianUInt32(at: 8),
+                    modificationTime: buffer.readLittleEndianUInt32(at: 12)
+                )))
+                buffer.removeFirst(responseByteCount)
+
+            case .done:
+                buffer.removeFirst(4)
+                responses.append(.done)
+
+            case .fail:
+                guard let response = try failureResponse(maximumByteCount: Self.maximumMessageByteCount) else {
+                    return responses
+                }
+                responses.append(response)
+
+            default:
+                throw ADBSyncFramingError.unexpectedResponseID(id)
+            }
+        }
+
+        return responses
+    }
+
+    private mutating func failureResponse(
+        maximumByteCount: Int
+    ) throws -> ADBSyncDirectoryResponse? {
+        guard buffer.count >= ADBSyncFrame.headerLength else {
+            return nil
+        }
+        let messageByteCount = Int(buffer.readLittleEndianUInt32(at: 4))
+        guard messageByteCount <= maximumByteCount else {
+            throw ADBSyncFramingError.failureMessageTooLarge(messageByteCount)
+        }
+        let responseByteCount = ADBSyncFrame.headerLength + messageByteCount
+        guard buffer.count >= responseByteCount else {
+            return nil
+        }
+        let message = String(
+            decoding: buffer[ADBSyncFrame.headerLength ..< responseByteCount],
+            as: UTF8.self
+        )
+        buffer.removeFirst(responseByteCount)
+        return .fail(message: message)
+    }
+}
+
+public enum ADBSyncPullResponse: Equatable, Sendable {
+    case data([UInt8])
+    case done
+    case fail(message: String)
+}
+
+public struct ADBSyncPullResponseDecoder: Sendable {
+    private static let maximumMessageByteCount = 64 * 1024
+    private var buffer: [UInt8] = []
+
+    public init() {}
+
+    public mutating func append(_ bytes: [UInt8]) throws -> [ADBSyncPullResponse] {
+        buffer.append(contentsOf: bytes)
+        var responses: [ADBSyncPullResponse] = []
+
+        while buffer.count >= 4 {
+            let rawID = buffer.readLittleEndianUInt32(at: 0)
+            guard let id = ADBSyncID(rawValue: rawID) else {
+                throw ADBSyncFramingError.unknownID(rawID)
+            }
+
+            switch id {
+            case .data:
+                guard buffer.count >= ADBSyncFrame.headerLength else {
+                    return responses
+                }
+                let dataByteCount = Int(buffer.readLittleEndianUInt32(at: 4))
+                guard dataByteCount <= ADBSyncFrame.maxDataByteCount else {
+                    throw ADBSyncFramingError.dataPayloadTooLarge(dataByteCount)
+                }
+                let responseByteCount = ADBSyncFrame.headerLength + dataByteCount
+                guard buffer.count >= responseByteCount else {
+                    return responses
+                }
+                responses.append(.data(Array(buffer[ADBSyncFrame.headerLength ..< responseByteCount])))
+                buffer.removeFirst(responseByteCount)
+
+            case .done:
+                buffer.removeFirst(4)
+                responses.append(.done)
+
+            case .fail:
+                guard buffer.count >= ADBSyncFrame.headerLength else {
+                    return responses
+                }
+                let messageByteCount = Int(buffer.readLittleEndianUInt32(at: 4))
+                guard messageByteCount <= Self.maximumMessageByteCount else {
+                    throw ADBSyncFramingError.failureMessageTooLarge(messageByteCount)
+                }
+                let responseByteCount = ADBSyncFrame.headerLength + messageByteCount
+                guard buffer.count >= responseByteCount else {
+                    return responses
+                }
+                let message = String(
+                    decoding: buffer[ADBSyncFrame.headerLength ..< responseByteCount],
+                    as: UTF8.self
+                )
+                responses.append(.fail(message: message))
+                buffer.removeFirst(responseByteCount)
+
+            default:
+                throw ADBSyncFramingError.unexpectedResponseID(id)
+            }
+        }
+
+        return responses
     }
 }
 
@@ -231,6 +452,14 @@ public enum ADBSyncPushEvent: Equatable, Sendable {
 
 public typealias ADBSyncPushEventHandler = @Sendable (ADBSyncPushEvent) async -> Void
 
+public enum ADBSyncPullEvent: Equatable, Sendable {
+    case started(remotePath: ADBRemotePath, totalByteCount: Int64?)
+    case progress(receivedByteCount: Int64, totalByteCount: Int64?)
+    case completed(receivedByteCount: Int64)
+}
+
+public typealias ADBSyncPullEventHandler = @Sendable (ADBSyncPullEvent) async -> Void
+
 public enum ADBSyncFramingError: Error, Equatable, Sendable {
     case pathPayloadTooLarge(Int)
     case dataPayloadTooLarge(Int)
@@ -238,9 +467,20 @@ public enum ADBSyncFramingError: Error, Equatable, Sendable {
     case unexpectedPayload(id: ADBSyncID)
     case unknownID(UInt32)
     case unexpectedResponseID(ADBSyncID)
+    case unexpectedRequestID(ADBSyncID)
+    case directoryEntryNameTooLarge(Int)
+    case invalidDirectoryEntryName
+    case failureMessageTooLarge(Int)
 }
 
 public enum ADBSyncPushPlanError: Error, Equatable, Sendable {
     case negativeTotalByteCount
     case totalByteCountMismatch(expected: Int, actual: Int)
+}
+
+public enum ADBSyncTransferError: Error, Equatable, Sendable {
+    case remoteFailure(String)
+    case localFileSizeUnavailable
+    case localFileSizeMismatch(expected: Int, actual: Int)
+    case couldNotCreateLocalFile
 }

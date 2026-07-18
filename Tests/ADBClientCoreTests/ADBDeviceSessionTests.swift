@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import ADBClientCore
 
@@ -143,7 +144,8 @@ final class ADBDeviceSessionTests: XCTestCase {
         )
 
         XCTAssertEqual(output.bytes, payload)
-        let sentPackets = try await transport.sentChunks().map { try $0.decodedPacket() }
+        let sentChunks = await transport.sentChunks()
+        let sentPackets = try sentChunks.map { try $0.decodedPacket() }
         XCTAssertEqual(sentPackets.first?.payload, Array("exec:screencap -p".utf8) + [0])
         XCTAssertEqual(sentPackets.last, ADBPacket(command: .okay, arg0: 1, arg1: 42))
     }
@@ -336,6 +338,97 @@ final class ADBDeviceSessionTests: XCTestCase {
         )
     }
 
+    func testListDirectoryDecodesEntriesAndFiltersDotEntries() async throws {
+        let path = ADBRemotePath.sharedStorageDirectory
+        let response = syncDirectoryEntry(name: ".", mode: 0o040755)
+            + syncDirectoryEntry(name: "Movies", mode: 0o040755, size: 4_096)
+            + syncDirectoryEntry(name: "video.mp4", mode: 0o100644, size: 42)
+            + syncDoneResponse()
+        let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
+            writeChunkCount: 1,
+            responsePayload: response,
+            coalesceResponseWithFinalWriteAcknowledgement: true
+        ))
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: 1024))),
+            transport: transport
+        )
+
+        let entries = try await session.listDirectory(path)
+        let sentPackets = try await transport.sentChunks().map { try $0.decodedPacket() }
+        let writePackets = sentPackets.filter { $0.command == .write }
+
+        XCTAssertEqual(entries.map(\.name), ["Movies", "video.mp4"])
+        XCTAssertEqual(entries.map(\.mode.kind), [.directory, .file])
+        XCTAssertEqual(writePackets.first?.payload, try ADBSyncFrame.listV1(path: path).encoded())
+        XCTAssertEqual(writePackets.last?.payload, try ADBSyncFrame.quit().encoded())
+    }
+
+    func testPullFileStreamsResponsesToDisk() async throws {
+        let remotePath = try ADBRemotePath("/sdcard/Download/video.txt")
+        let contents = Array("streamed file".utf8)
+        let response = try ADBSyncFrame.data(contents).encoded() + syncDoneResponse()
+        let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
+            writeChunkCount: 1,
+            responsePayload: response,
+            coalesceResponseWithFinalWriteAcknowledgement: true
+        ))
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: 1024))),
+            transport: transport
+        )
+        let destination = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: destination) }
+        let recorder = SyncPullEventRecorder()
+
+        let byteCount = try await session.pullFile(
+            remotePath,
+            to: destination,
+            expectedByteCount: Int64(contents.count),
+            eventHandler: { event in await recorder.record(event) }
+        )
+
+        XCTAssertEqual(byteCount, Int64(contents.count))
+        XCTAssertEqual(try Data(contentsOf: destination), Data(contents))
+        let recordedEvents = await recorder.recordedEvents()
+        XCTAssertEqual(recordedEvents, [
+            .started(remotePath: remotePath, totalByteCount: Int64(contents.count)),
+            .progress(
+                receivedByteCount: Int64(contents.count),
+                totalByteCount: Int64(contents.count)
+            ),
+            .completed(receivedByteCount: Int64(contents.count))
+        ])
+    }
+
+    func testPushFileStreamsLocalURLInPackedWrites() async throws {
+        let remotePath = try ADBRemotePath("/sdcard/Download/video.txt")
+        let contents = Array("streamed file".utf8)
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try Data(contents).write(to: source)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let plan = try ADBSyncPushPlan(remotePath: remotePath, totalByteCount: contents.count)
+        let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
+            writeChunkCount: 1,
+            responsePayload: ADBSyncFrame(id: .okay, value: 0).encoded(),
+            coalesceResponseWithFinalWriteAcknowledgement: true
+        ))
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: 1024))),
+            transport: transport
+        )
+
+        let events = try await session.pushFile(from: source, plan: plan)
+        let sentChunks = await transport.sentChunks()
+        let sentPackets = try sentChunks.map { try $0.decodedPacket() }
+        let transferPayload = sentPackets.filter { $0.command == .write }.dropLast().flatMap(\.payload)
+
+        XCTAssertEqual(transferPayload, try plan.encode(contents: contents).encodedBytes())
+        XCTAssertEqual(events.last, .completed)
+    }
+
     func testTransportSessionOutputExtractsConnectedDeviceAndFinishedShellOutput() throws {
         let connectedOutput = try ADBTransportSessionOutput(driverOutput: ADBClientDriverOutput(
             actions: [
@@ -414,6 +507,29 @@ final class ADBDeviceSessionTests: XCTestCase {
         }
         return chunks
     }
+
+    private func syncDirectoryEntry(
+        name: String,
+        mode: UInt32,
+        size: UInt32 = 0,
+        modificationTime: UInt32 = 1_700_000_000
+    ) -> [UInt8] {
+        let nameBytes = Array(name.utf8)
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.directoryEntryV1.rawValue)
+        bytes.appendLittleEndian(mode)
+        bytes.appendLittleEndian(size)
+        bytes.appendLittleEndian(modificationTime)
+        bytes.appendLittleEndian(UInt32(nameBytes.count))
+        bytes.append(contentsOf: nameBytes)
+        return bytes
+    }
+
+    private func syncDoneResponse() -> [UInt8] {
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.done.rawValue)
+        return bytes
+    }
 }
 
 private actor SyncPushEventRecorder {
@@ -424,6 +540,18 @@ private actor SyncPushEventRecorder {
     }
 
     func recordedEvents() -> [ADBSyncPushEvent] {
+        events
+    }
+}
+
+private actor SyncPullEventRecorder {
+    private var events: [ADBSyncPullEvent] = []
+
+    func record(_ event: ADBSyncPullEvent) {
+        events.append(event)
+    }
+
+    func recordedEvents() -> [ADBSyncPullEvent] {
         events
     }
 }

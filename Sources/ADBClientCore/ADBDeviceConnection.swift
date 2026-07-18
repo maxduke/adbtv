@@ -1,5 +1,6 @@
 #if canImport(Network)
 import Dispatch
+import Foundation
 @preconcurrency import Network
 #if canImport(Security)
 import Security
@@ -188,6 +189,41 @@ public struct ADBDeviceConnection: Sendable {
         return try await session.runService(
             service,
             maximumOutputByteCount: maximumOutputByteCount
+        )
+    }
+
+    public mutating func listDirectory(
+        _ path: ADBRemotePath
+    ) async throws -> [ADBSyncDirectoryEntry] {
+        start()
+        return try await session.listDirectory(path)
+    }
+
+    public mutating func pullFile(
+        _ remotePath: ADBRemotePath,
+        to localURL: URL,
+        expectedByteCount: Int64? = nil,
+        eventHandler: @escaping ADBSyncPullEventHandler = { _ in }
+    ) async throws -> Int64 {
+        start()
+        return try await session.pullFile(
+            remotePath,
+            to: localURL,
+            expectedByteCount: expectedByteCount,
+            eventHandler: eventHandler
+        )
+    }
+
+    public mutating func pushFile(
+        from localURL: URL,
+        plan: ADBSyncPushPlan,
+        eventHandler: @escaping ADBSyncPushEventHandler = { _ in }
+    ) async throws -> [ADBSyncPushEvent] {
+        start()
+        return try await session.pushFile(
+            from: localURL,
+            plan: plan,
+            eventHandler: eventHandler
         )
     }
 

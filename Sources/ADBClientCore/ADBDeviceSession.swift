@@ -1,3 +1,5 @@
+import Foundation
+
 public struct ADBDeviceSession: Sendable {
     public private(set) var transportSession: ADBTransportSession
 
@@ -151,6 +153,251 @@ public struct ADBDeviceSession: Sendable {
         return events
     }
 
+    public mutating func listDirectory(
+        _ path: ADBRemotePath
+    ) async throws -> [ADBSyncDirectoryEntry] {
+        let startOutput = try await transportSession.startService("sync:")
+        let localID = try startOutput.startedStreamLocalID(service: "sync:")
+        try await waitForStreamReady(localID: localID, service: "sync:")
+
+        do {
+            let request = try ADBSyncFrame.listV1(path: path).encoded()
+            _ = try await transportSession.writeStream(localID: localID, payload: request)
+            var outputs = try await waitForStreamWritable(localID: localID)
+            var decoder = ADBSyncDirectoryResponseDecoder()
+            var entries: [ADBSyncDirectoryEntry] = []
+            var isDone = false
+
+            while !isDone {
+                try Task.checkCancellation()
+                for output in outputs {
+                    for payload in syncPayloads(in: output, localID: localID) {
+                        for response in try decoder.append(payload) {
+                            switch response {
+                            case .entry(let entry) where entry.name != "." && entry.name != "..":
+                                entries.append(entry)
+                            case .entry:
+                                continue
+                            case .done:
+                                isDone = true
+                            case .fail(let message):
+                                throw ADBSyncTransferError.remoteFailure(message)
+                            }
+                        }
+                    }
+                }
+
+                guard !isDone else {
+                    break
+                }
+                guard let output = try await transportSession.receiveNext() else {
+                    throw ADBDeviceSessionError.transportClosedBeforeSyncCompletion(localID: localID)
+                }
+                if output.containsEvent(where: { $0.localStreamID == localID && $0.isStreamClosed }) {
+                    throw ADBDeviceSessionError.streamClosedBeforeSyncCompletion(localID: localID)
+                }
+                outputs = [output]
+            }
+
+            try await finishSyncStreamIfOpen(localID: localID)
+            return entries
+        } catch {
+            try? await finishSyncStreamIfOpen(localID: localID)
+            throw error
+        }
+    }
+
+    public mutating func pullFile(
+        _ remotePath: ADBRemotePath,
+        to localURL: URL,
+        expectedByteCount: Int64? = nil,
+        eventHandler: @escaping ADBSyncPullEventHandler = { _ in }
+    ) async throws -> Int64 {
+        try? FileManager.default.removeItem(at: localURL)
+        guard FileManager.default.createFile(atPath: localURL.path, contents: nil) else {
+            throw ADBSyncTransferError.couldNotCreateLocalFile
+        }
+
+        let fileHandle = try FileHandle(forWritingTo: localURL)
+        var completed = false
+        defer {
+            try? fileHandle.close()
+            if !completed {
+                try? FileManager.default.removeItem(at: localURL)
+            }
+        }
+
+        let startOutput = try await transportSession.startService("sync:")
+        let localID = try startOutput.startedStreamLocalID(service: "sync:")
+        try await waitForStreamReady(localID: localID, service: "sync:")
+        await eventHandler(.started(remotePath: remotePath, totalByteCount: expectedByteCount))
+
+        do {
+            let request = try ADBSyncFrame.receiveV1(path: remotePath).encoded()
+            _ = try await transportSession.writeStream(localID: localID, payload: request)
+            var outputs = try await waitForStreamWritable(localID: localID)
+            var decoder = ADBSyncPullResponseDecoder()
+            var receivedByteCount: Int64 = 0
+            var isDone = false
+
+            while !isDone {
+                try Task.checkCancellation()
+                for output in outputs {
+                    for payload in syncPayloads(in: output, localID: localID) {
+                        for response in try decoder.append(payload) {
+                            switch response {
+                            case .data(let bytes):
+                                try fileHandle.write(contentsOf: Data(bytes))
+                                receivedByteCount += Int64(bytes.count)
+                                await eventHandler(.progress(
+                                    receivedByteCount: receivedByteCount,
+                                    totalByteCount: expectedByteCount
+                                ))
+                            case .done:
+                                isDone = true
+                            case .fail(let message):
+                                throw ADBSyncTransferError.remoteFailure(message)
+                            }
+                        }
+                    }
+                }
+
+                guard !isDone else {
+                    break
+                }
+                guard let output = try await transportSession.receiveNext() else {
+                    throw ADBDeviceSessionError.transportClosedBeforeSyncCompletion(localID: localID)
+                }
+                if output.containsEvent(where: { $0.localStreamID == localID && $0.isStreamClosed }) {
+                    throw ADBDeviceSessionError.streamClosedBeforeSyncCompletion(localID: localID)
+                }
+                outputs = [output]
+            }
+
+            try fileHandle.close()
+            try await finishSyncStreamIfOpen(localID: localID)
+            completed = true
+            await eventHandler(.completed(receivedByteCount: receivedByteCount))
+            return receivedByteCount
+        } catch {
+            try? await finishSyncStreamIfOpen(localID: localID)
+            throw error
+        }
+    }
+
+    public mutating func pushFile(
+        from localURL: URL,
+        plan: ADBSyncPushPlan,
+        eventHandler: @escaping ADBSyncPushEventHandler = { _ in }
+    ) async throws -> [ADBSyncPushEvent] {
+        guard let fileSize = try localURL.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
+            throw ADBSyncTransferError.localFileSizeUnavailable
+        }
+        let expectedTotal = plan.totalByteCount ?? fileSize
+        guard expectedTotal == fileSize else {
+            throw ADBSyncTransferError.localFileSizeMismatch(expected: expectedTotal, actual: fileSize)
+        }
+
+        let fileHandle = try FileHandle(forReadingFrom: localURL)
+        defer { try? fileHandle.close() }
+
+        let startOutput = try await transportSession.startService("sync:")
+        let localID = try startOutput.startedStreamLocalID(service: "sync:")
+        try await waitForStreamReady(localID: localID, service: "sync:")
+
+        do {
+            let maxPayloadByteCount = try streamWritePayloadByteCount()
+            var pendingBytes = try ADBSyncFrame.sendV1(
+                path: plan.remotePath,
+                mode: plan.mode
+            ).encoded()
+            var sentByteCount = 0
+            var reportedByteCount = 0
+            var responseDecoder = ADBSyncResponseDecoder()
+            var bufferedResponse: ADBSyncResponse?
+            var events: [ADBSyncPushEvent] = [
+                .started(remotePath: plan.remotePath, totalByteCount: expectedTotal)
+            ]
+            await eventHandler(events[0])
+
+            while let data = try fileHandle.read(upToCount: ADBSyncFrame.maxDataByteCount), !data.isEmpty {
+                try Task.checkCancellation()
+                let frameBytes = try ADBSyncFrame.data(Array(data)).encoded()
+                if !pendingBytes.isEmpty,
+                   pendingBytes.count + frameBytes.count > maxPayloadByteCount {
+                    let outputs = try await writeSyncBytes(pendingBytes, localID: localID)
+                    if bufferedResponse == nil {
+                        bufferedResponse = try firstSyncResponse(
+                            in: outputs,
+                            localID: localID,
+                            decoder: &responseDecoder
+                        )
+                    }
+                    pendingBytes.removeAll(keepingCapacity: true)
+                    if sentByteCount > reportedByteCount {
+                        let progress = ADBSyncPushEvent.progress(
+                            sentByteCount: sentByteCount,
+                            totalByteCount: expectedTotal
+                        )
+                        events.append(progress)
+                        await eventHandler(progress)
+                        reportedByteCount = sentByteCount
+                    }
+                }
+                pendingBytes.append(contentsOf: frameBytes)
+                sentByteCount += data.count
+            }
+
+            pendingBytes.append(contentsOf: try ADBSyncFrame.done(
+                modificationTime: plan.modificationTime
+            ).encoded())
+            let outputs = try await writeSyncBytes(pendingBytes, localID: localID)
+            if bufferedResponse == nil {
+                bufferedResponse = try firstSyncResponse(
+                    in: outputs,
+                    localID: localID,
+                    decoder: &responseDecoder
+                )
+            }
+            if sentByteCount > reportedByteCount {
+                let progress = ADBSyncPushEvent.progress(
+                    sentByteCount: sentByteCount,
+                    totalByteCount: expectedTotal
+                )
+                events.append(progress)
+                await eventHandler(progress)
+            }
+            let finished = ADBSyncPushEvent.finishedSending(
+                sentByteCount: sentByteCount,
+                totalByteCount: expectedTotal
+            )
+            events.append(finished)
+            await eventHandler(finished)
+
+            let response: ADBSyncResponse
+            if let bufferedResponse {
+                response = bufferedResponse
+            } else {
+                response = try await waitForSyncResponse(
+                    localID: localID,
+                    decoder: &responseDecoder
+                )
+            }
+            let responseEvent = ADBSyncPushEvent.responseEvent(response)
+            events.append(responseEvent)
+            await eventHandler(responseEvent)
+            try await finishSyncStreamIfOpen(localID: localID)
+
+            if case .fail(let message) = response {
+                throw ADBSyncTransferError.remoteFailure(message)
+            }
+            return events
+        } catch {
+            try? await finishSyncStreamIfOpen(localID: localID)
+            throw error
+        }
+    }
+
     public mutating func receiveNext() async throws -> ADBTransportSessionOutput? {
         try await transportSession.receiveNext()
     }
@@ -162,6 +409,54 @@ public struct ADBDeviceSession: Sendable {
         }
 
         return min(Int(maxData), ADBSyncPushBatcher.maximumBatchByteCount)
+    }
+
+    private mutating func writeSyncBytes(
+        _ bytes: [UInt8],
+        localID: UInt32
+    ) async throws -> [ADBTransportSessionOutput] {
+        let maximumByteCount = try streamWritePayloadByteCount()
+        var outputs: [ADBTransportSessionOutput] = []
+        var offset = 0
+
+        while offset < bytes.count {
+            let endOffset = min(offset + maximumByteCount, bytes.count)
+            _ = try await transportSession.writeStream(
+                localID: localID,
+                payload: Array(bytes[offset ..< endOffset])
+            )
+            outputs.append(contentsOf: try await waitForStreamWritable(localID: localID))
+            offset = endOffset
+        }
+        return outputs
+    }
+
+    private func firstSyncResponse(
+        in outputs: [ADBTransportSessionOutput],
+        localID: UInt32,
+        decoder: inout ADBSyncResponseDecoder
+    ) throws -> ADBSyncResponse? {
+        for output in outputs {
+            for payload in syncPayloads(in: output, localID: localID) {
+                if let response = try decoder.append(payload).first {
+                    return response
+                }
+            }
+        }
+        return nil
+    }
+
+    private func syncPayloads(
+        in output: ADBTransportSessionOutput,
+        localID: UInt32
+    ) -> [[UInt8]] {
+        output.events.compactMap { event in
+            guard case .streamData(let eventLocalID, _, let payload) = event,
+                  eventLocalID == localID else {
+                return nil
+            }
+            return payload
+        }
     }
 
     private mutating func waitForStreamReady(localID: UInt32, service: String) async throws {
@@ -413,6 +708,8 @@ public enum ADBDeviceSessionError: Error, Equatable, Sendable {
     case streamClosedBeforeWritable(localID: UInt32)
     case transportClosedBeforeSyncResponse(localID: UInt32)
     case streamClosedBeforeSyncResponse(localID: UInt32)
+    case transportClosedBeforeSyncCompletion(localID: UInt32)
+    case streamClosedBeforeSyncCompletion(localID: UInt32)
     case emptyService
     case serviceContainsNullByte
     case invalidMaximumOutputByteCount(Int)

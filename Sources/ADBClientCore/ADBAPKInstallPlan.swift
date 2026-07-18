@@ -95,6 +95,7 @@ public enum ADBInstallPackageError: Error, Equatable, Sendable {
 
 public struct ADBRemotePath: Equatable, Sendable {
     public static let temporaryInstallDirectory = ADBRemotePath(unchecked: "/data/local/tmp/adbtv")
+    public static let sharedStorageDirectory = ADBRemotePath(unchecked: "/sdcard")
 
     public var rawValue: String
 
@@ -121,6 +122,10 @@ public struct ADBRemotePath: Equatable, Sendable {
     public func appendingPathComponent(_ component: String) throws -> ADBRemotePath {
         guard !component.isEmpty else {
             throw ADBRemotePathError.emptyPathComponent
+        }
+
+        guard component != "." && component != ".." else {
+            throw ADBRemotePathError.relativePathComponent
         }
 
         guard !component.contains("/") && !component.contains("\\") else {
@@ -158,6 +163,7 @@ public enum ADBRemotePathError: Error, Equatable, Sendable {
     case containsNullByte
     case containsNewline
     case emptyPathComponent
+    case relativePathComponent
     case pathSeparatorInComponent
 }
 
