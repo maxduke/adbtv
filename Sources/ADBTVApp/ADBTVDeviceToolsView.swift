@@ -1,6 +1,8 @@
 import ADBClientCore
+import CoreTransferable
 import Foundation
 import SwiftUI
+import UniformTypeIdentifiers
 #if os(iOS)
 import UIKit
 #elseif os(macOS)
@@ -309,7 +311,7 @@ struct ADBTVDeviceToolsPanel: View {
                 if let screenshot = state.screenshot,
                    let image = platformImage(from: screenshot.pngData) {
                     ShareLink(
-                        item: screenshot.pngData,
+                        item: ADBTVScreenshotShareItem(pngData: screenshot.pngData),
                         preview: SharePreview("Android TV Screenshot", image: image)
                     ) {
                         Label("Share Screenshot", systemImage: "square.and.arrow.up")
@@ -557,5 +559,19 @@ struct ADBTVDeviceToolsPanel: View {
 #else
         nil
 #endif
+    }
+}
+
+private struct ADBTVScreenshotShareItem: Transferable {
+    var pngData: Data
+
+    var suggestedFilename: String? {
+        "ADB-TV-Screenshot.png"
+    }
+
+    static var transferRepresentation: some TransferRepresentation {
+        DataRepresentation(exportedContentType: .png) { item in
+            item.pngData
+        }
     }
 }
