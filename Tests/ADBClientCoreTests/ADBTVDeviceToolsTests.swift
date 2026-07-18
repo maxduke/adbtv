@@ -67,7 +67,7 @@ final class ADBTVDeviceToolsTests: XCTestCase {
     }
 
     func testRunsOneShotShellAndPreservesNonzeroExitStatus() async throws {
-        let shellOutput = "permission denied\n\n(ADBCheckedShellInvocation.exitStatusMarker)1\n"
+        let shellOutput = "permission denied\n\n\(ADBCheckedShellInvocation.exitStatusMarker)1\n"
         var tools = ADBTVDeviceTools(session: FakeDeviceToolsSession(
             serviceOutput: Array(shellOutput.utf8)
         ))
@@ -157,7 +157,7 @@ private let basicPropertyOutputs: [String: String] = [
 
 private func checkedOutput(_ value: String, exitCode: Int = 0) -> ADBShellOutput {
     ADBShellOutput(bytes: Array(
-        (value + "\n(ADBCheckedShellInvocation.exitStatusMarker)\(exitCode)\n").utf8
+        (value + "\n\(ADBCheckedShellInvocation.exitStatusMarker)\(exitCode)\n").utf8
     ))
 }
 
