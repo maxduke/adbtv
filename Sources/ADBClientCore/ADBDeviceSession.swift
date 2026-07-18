@@ -49,6 +49,59 @@ public struct ADBDeviceSession: Sendable {
         }
     }
 
+    public mutating func runService(
+        _ service: String,
+        maximumOutputByteCount: Int
+    ) async throws -> ADBServiceOutput {
+        guard !service.isEmpty else {
+            throw ADBDeviceSessionError.emptyService
+        }
+        guard !service.utf8.contains(0) else {
+            throw ADBDeviceSessionError.serviceContainsNullByte
+        }
+        guard maximumOutputByteCount > 0 else {
+            throw ADBDeviceSessionError.invalidMaximumOutputByteCount(maximumOutputByteCount)
+        }
+
+        let startOutput = try await transportSession.startService(service)
+        let localID = try startOutput.startedStreamLocalID(service: "rawService")
+        var isReady = false
+        var bytes: [UInt8] = []
+
+        while true {
+            guard let output = try await transportSession.receiveNext() else {
+                throw ADBDeviceSessionError.transportClosedBeforeServiceFinished
+            }
+
+            for event in output.events {
+                switch event {
+                case .streamReady(let eventLocalID, _) where eventLocalID == localID:
+                    isReady = true
+
+                case .streamData(let eventLocalID, _, let payload) where eventLocalID == localID:
+                    guard isReady else {
+                        throw ADBDeviceSessionError.serviceDataBeforeReady(localID: localID)
+                    }
+                    guard payload.count <= maximumOutputByteCount - bytes.count else {
+                        throw ADBDeviceSessionError.serviceOutputTooLarge(
+                            maximumByteCount: maximumOutputByteCount
+                        )
+                    }
+                    bytes.append(contentsOf: payload)
+
+                case .streamClosed(let eventLocalID, _) where eventLocalID == localID:
+                    guard isReady else {
+                        throw ADBDeviceSessionError.streamClosedBeforeReady(localID: localID)
+                    }
+                    return ADBServiceOutput(bytes: bytes)
+
+                default:
+                    continue
+                }
+            }
+        }
+    }
+
     public mutating func pushFile(
         contents: [UInt8],
         plan: ADBSyncPushPlan,
@@ -337,6 +390,18 @@ public struct ADBConnectedDevice: Equatable, Sendable {
     }
 }
 
+public struct ADBServiceOutput: Equatable, Sendable {
+    public var bytes: [UInt8]
+
+    public init(bytes: [UInt8]) {
+        self.bytes = bytes
+    }
+
+    public var utf8String: String {
+        String(decoding: bytes, as: UTF8.self)
+    }
+}
+
 public enum ADBDeviceSessionError: Error, Equatable, Sendable {
     case transportClosedBeforeConnection
     case transportClosedBeforeShellCommandFinished(command: String)
@@ -348,6 +413,12 @@ public enum ADBDeviceSessionError: Error, Equatable, Sendable {
     case streamClosedBeforeWritable(localID: UInt32)
     case transportClosedBeforeSyncResponse(localID: UInt32)
     case streamClosedBeforeSyncResponse(localID: UInt32)
+    case emptyService
+    case serviceContainsNullByte
+    case invalidMaximumOutputByteCount(Int)
+    case transportClosedBeforeServiceFinished
+    case serviceDataBeforeReady(localID: UInt32)
+    case serviceOutputTooLarge(maximumByteCount: Int)
 }
 
 public extension ADBTransportSessionOutput {

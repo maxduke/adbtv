@@ -180,6 +180,17 @@ public struct ADBDeviceConnection: Sendable {
         return try await session.runShellCommand(command)
     }
 
+    public mutating func runService(
+        _ service: String,
+        maximumOutputByteCount: Int
+    ) async throws -> ADBServiceOutput {
+        start()
+        return try await session.runService(
+            service,
+            maximumOutputByteCount: maximumOutputByteCount
+        )
+    }
+
     public mutating func installAPK(
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
