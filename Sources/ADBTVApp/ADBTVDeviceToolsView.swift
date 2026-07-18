@@ -420,14 +420,14 @@ struct ADBTVDeviceToolsPanel: View {
                 }
             }
 
-            ScrollView(.horizontal) {
+            ScrollView([.horizontal, .vertical]) {
                 Text(shellOutputText)
                     .font(.footnote.monospaced())
                     .textSelection(.enabled)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(minWidth: 1, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, minHeight: 96, maxHeight: 240, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160, alignment: .topLeading)
         }
         .padding(12)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))

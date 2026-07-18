@@ -147,6 +147,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Run `getprop ro.build.version.release` and confirm the output and exit code are shown.
 - [ ] Run a command that exits nonzero and confirm its output and nonzero exit code remain visible without being reported as success.
 - [ ] Run a command that produces no output and confirm the completed state remains understandable.
+- [ ] Run a command with enough multiline output to scroll horizontally and vertically without resizing or clipping the surrounding layout.
 - [ ] Start a slow shell command, cancel it, and immediately run another command without a late result replacing it.
 - [ ] Make the TV unreachable during Device Information, screenshot, and shell operations; confirm each failure is bounded and exposes copyable Technical Details.
 - [ ] Start each Device Tools operation and confirm the tool picker, back navigation, and other device operations remain unavailable while its visible Cancel button works.

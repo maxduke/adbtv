@@ -12,7 +12,7 @@ Add a Device Tools mode with three operations:
 
 - load structured Android, display, storage, uptime, and build information;
 - capture `screencap -p` through the raw `exec:` service, cap the response at 32 MiB, and validate the PNG header and dimensions before presentation;
-- run one user-provided shell command to completion, cap command output at 256 KiB, and present its exit status without treating a nonzero status as a transport failure.
+- run one user-provided shell command to completion, cap input at 16 KiB and output at 256 KiB, and present its exit status without treating a nonzero status as a transport failure.
 
 Give each operation a timeout and visible cancellation. Bind it to the selected Managed Device through the existing single-operation owner. Do not persist shell commands, shell output, or screenshots.
 

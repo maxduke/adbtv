@@ -15,6 +15,7 @@ extension ADBDeviceConnection: ADBDeviceToolsSession {}
 
 public struct ADBTVDeviceTools<Session: ADBDeviceToolsSession>: Sendable {
     public static var maximumScreenshotByteCount: Int { 32 * 1024 * 1024 }
+    public static var maximumShellCommandByteCount: Int { 16 * 1024 }
     public static var maximumShellOutputByteCount: Int { 256 * 1024 }
 
     public private(set) var session: Session
@@ -58,6 +59,11 @@ public struct ADBTVDeviceTools<Session: ADBDeviceToolsSession>: Sendable {
     public mutating func runShellCommand(_ rawCommand: String) async throws -> ADBCheckedShellResult {
         guard !rawCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ADBTVDeviceToolsError.emptyShellCommand
+        }
+        guard rawCommand.utf8.count <= Self.maximumShellCommandByteCount else {
+            throw ADBTVDeviceToolsError.shellCommandTooLarge(
+                maximumByteCount: Self.maximumShellCommandByteCount
+            )
         }
 
         let invocation = try ADBCheckedShellInvocation(
@@ -239,6 +245,7 @@ public struct ADBTVScreenshot: Equatable, Sendable {
 
 public enum ADBTVDeviceToolsError: Error, Equatable, Sendable {
     case emptyShellCommand
+    case shellCommandTooLarge(maximumByteCount: Int)
     case shellOutputTooLarge(maximumByteCount: Int)
     case screenshotTooLarge(Int)
     case invalidScreenshotPNG

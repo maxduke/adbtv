@@ -92,6 +92,30 @@ final class ADBTVDeviceToolsTests: XCTestCase {
             XCTFail("Unexpected error: \(error)")
         }
     }
+
+    func testRejectsOversizedShellCommandBeforeOpeningService() async {
+        var tools = ADBTVDeviceTools(session: FakeDeviceToolsSession())
+        let oversizedCommand = String(
+            repeating: "a",
+            count: ADBTVDeviceTools<FakeDeviceToolsSession>.maximumShellCommandByteCount + 1
+        )
+
+        do {
+            _ = try await tools.runShellCommand(oversizedCommand)
+            XCTFail("Expected an oversized command failure.")
+        } catch let error as ADBTVDeviceToolsError {
+            XCTAssertEqual(
+                error,
+                .shellCommandTooLarge(
+                    maximumByteCount: ADBTVDeviceTools<FakeDeviceToolsSession>
+                        .maximumShellCommandByteCount
+                )
+            )
+            XCTAssertTrue(tools.session.services.isEmpty)
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
 }
 
 private struct FakeDeviceToolsSession: ADBDeviceToolsSession {
