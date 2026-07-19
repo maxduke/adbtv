@@ -3213,7 +3213,7 @@ private struct DeviceDetailView: View {
         : ProcessInfo.processInfo.arguments.contains("--ui-tools")
             ? DeviceTool.tools
             : DeviceTool.remote
-    @State private var isInstallExpanded = ProcessInfo.processInfo.arguments.contains("--ui-install")
+    @State private var isInstallerPresented = ProcessInfo.processInfo.arguments.contains("--ui-install")
     @State private var isFileBrowserPresented = false
 
     var body: some View {
@@ -3250,6 +3250,9 @@ private struct DeviceDetailView: View {
         .navigationDestination(isPresented: $isFileBrowserPresented) {
             ADBTVFileBrowserView(device: device)
         }
+        .navigationDestination(isPresented: $isInstallerPresented) {
+            installerView
+        }
 #if os(iOS)
         .navigationBarBackButtonHidden(deviceOperationInProgress)
         .navigationBarTitleDisplayMode(.inline)
@@ -3271,40 +3274,45 @@ private struct DeviceDetailView: View {
     }
 
     private var appsPanel: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if isInstallExpanded {
-                APKInstallPanel(
-                    installDraft: installDraft,
-                    installURLString: installURLString,
-                    canInstall: canInstall,
-                    deviceOperationInProgress: deviceOperationInProgress,
-                    chooseAPK: chooseAPK,
-                    install: install,
-                    cancelInstall: cancelInstall,
-                    close: { isInstallExpanded = false }
-                )
-                Divider()
-            }
-
-            InstalledAppsPanel(
-                state: installedAppsState,
-                deviceOperationInProgress: deviceOperationInProgress,
-                showInstaller: { isInstallExpanded = true },
-                refresh: loadInstalledApps,
-                installHelper: {
-                    isInstallExpanded = true
-                    installUnicodeInputHelper()
-                },
-                launch: launchInstalledApp,
-                uninstall: uninstallInstalledApp,
-                cancel: cancelInstalledAppOperation
-            )
-        }
+        InstalledAppsPanel(
+            state: installedAppsState,
+            deviceOperationInProgress: deviceOperationInProgress,
+            showInstaller: { isInstallerPresented = true },
+            refresh: loadInstalledApps,
+            installHelper: {
+                isInstallerPresented = true
+                installUnicodeInputHelper()
+            },
+            launch: launchInstalledApp,
+            uninstall: uninstallInstalledApp,
+            cancel: cancelInstalledAppOperation
+        )
         .onChange(of: installDraft.status) { _, status in
             if status == .succeeded {
                 loadInstalledApps()
             }
         }
+    }
+
+    private var installerView: some View {
+        ScrollView {
+            APKInstallPanel(
+                installDraft: installDraft,
+                installURLString: installURLString,
+                canInstall: canInstall,
+                deviceOperationInProgress: deviceOperationInProgress,
+                chooseAPK: chooseAPK,
+                install: install,
+                cancelInstall: cancelInstall
+            )
+            .frame(maxWidth: 520, alignment: .leading)
+            .padding()
+        }
+        .navigationTitle("Install App")
+#if os(iOS)
+        .navigationBarBackButtonHidden(installDraft.status.isRunning)
+        .navigationBarTitleDisplayMode(.inline)
+#endif
     }
 
     private var deviceToolsPanel: some View {
@@ -3776,23 +3784,9 @@ private struct APKInstallPanel: View {
     var chooseAPK: () -> Void
     var install: () -> Void
     var cancelInstall: () -> Void
-    var close: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Install App")
-                    .font(.title2.bold())
-                Spacer()
-                Button(action: close) {
-                    Label("Close Installer", systemImage: "xmark")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.bordered)
-                .disabled(installDraft.status.isRunning)
-                .help("Close Installer")
-            }
-
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
                     chooseButton
