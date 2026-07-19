@@ -3771,8 +3771,8 @@ private struct InstalledAppDetailsView: View {
                         confirmsForceStop = true
                     } label: {
                         Label("Force Stop", systemImage: "stop.circle")
+                            .foregroundStyle(.red)
                     }
-                    .tint(.red)
                     .disabled(actionsDisabled)
 
                     if allowsUninstall {
@@ -3780,8 +3780,8 @@ private struct InstalledAppDetailsView: View {
                             confirmsUninstall = true
                         } label: {
                             Label("Uninstall App", systemImage: "trash")
+                                .foregroundStyle(.red)
                         }
-                        .tint(.red)
                         .disabled(actionsDisabled)
                     }
                 }
