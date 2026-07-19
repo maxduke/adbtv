@@ -59,21 +59,24 @@ mDNS discovery may vary across Android TV versions, routers, VLANs, guest networ
 **Fallback**:
 For self-signed builds or networks that block mDNS, keep discovery best-effort and make Manual Connection prominent.
 
-## Risk 4: APK Installation Scope
+## Risk 4: App Installation Scope
 
 **Risk**:
-APK Installation can expand quickly: single APK, split APKs, install sessions, package conflicts, storage limits, and device-side prompts all behave differently.
+App installation can expand quickly: single APK, split APKs, install sessions, package conflicts, storage limits, and device-side prompts all behave differently.
 
 **Mitigation**:
-- Support only one `.apk` Install Package in the initial version.
+- Keep the hardware-proven single `.apk` path unchanged.
+- Support `.apkm` as the only initial split format; leave `.apks` and `.xapk` unsupported until hardware evidence justifies their different schemas.
 - Validate file extension and basic APK structure before transfer.
-- Split APK formats remain out of scope until single APK installation is reliable.
+- Treat APKM as an untrusted ZIP: reject unsafe or duplicate paths, cap entry count and compressed and uncompressed sizes, require exactly one `base.apk` plus at least one split, and validate every APK.
 - Model installation as phases: download, validate, transfer, install, result.
 - Report ordered byte progress for URL download and ADB transfer, with indeterminate download progress when the server does not advertise a length.
 - Limit both URL and Files packages to 512 MiB before retaining them in memory.
 - Generate ADB sync frames lazily and cap transport batches at 1 MiB so transfer framing does not duplicate the full package in memory.
 - Give each install attempt a UUID-named remote staging path and verify that exact path is absent after checked cleanup.
 - On cancellation or timeout after package preparation, close the active transport and use a bounded fresh connection to remove the exact staged path before releasing operation ownership.
+- Install all APKM entries in one Package Manager session, commit only after every split is written, and abandon the session on failure or cancellation with a bounded fresh-connection retry when needed.
+- Remove extracted APKM files after every success, failure, cancellation, or timeout; do not create APKM remote staging files.
 - Download and structurally validate the package before opening the ADB connection.
 - Reject non-success HTTP responses and clearly non-package text, JSON, or XML content types before device work.
 
@@ -155,9 +158,10 @@ Do not start a polished app UI until:
 - One shell stream returns a real device property.
 - failures produce User Error and Diagnostic Detail.
 
-Do not call APK Installation complete until:
+Do not call App Installation complete until:
 
 - Files picker install works for a known-good `.apk`.
 - URL Install works over HTTPS.
 - HTTP URL Install behavior is explicit and understandable.
 - failure cases include copyable Diagnostic Detail.
+- a known-good APKM installs from Files and URL, cancellation leaves no pending Package Manager session, and malformed or incompatible bundles fail with copyable Diagnostic Detail.

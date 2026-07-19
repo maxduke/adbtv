@@ -99,6 +99,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Installed Apps
 
 - [ ] Open **Apps** and confirm user-installed package identifiers load in sorted order without system packages.
+- [ ] Switch to **System Apps**, confirm system package identifiers replace the user list, and switch back without stale rows or metadata.
+- [ ] Open a system app and confirm Details and Launch remain available while Uninstall is absent from both the row menu and details screen.
 - [ ] Search by a partial package identifier and confirm the list filters without another device request.
 - [ ] Install the bundled Android helper from the **Apps** toolbar, confirm the Install panel exposes progress and cancellation, refresh **Apps**, and confirm names and real icons appear for Android TV and sideloaded apps.
 - [ ] Open app details and confirm version, version code, installed/updated dates, and **APK Size** are sensible; confirm APK Size is not presented as app data or cache usage.
@@ -109,6 +111,10 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Test a TV with a large third-party app library and confirm bounded metadata loading does not block package actions or navigation.
 - [ ] Launch an Android TV app and confirm its Leanback activity opens.
 - [ ] Launch a phone-style app without a Leanback activity and confirm the standard launcher fallback opens it, or a clear error with Technical Details appears.
+- [ ] Force stop a user app from its row menu, confirm playback and background activity stop without removing app data, then launch it again.
+- [ ] With the current helper installed, refresh Apps and confirm Force Stop shows as **Stopped** and is disabled only for packages Android reports as stopped; launch one and confirm the action becomes available again.
+- [ ] Open a system app's details, confirm Force Stop requires the stronger system warning, and cancel without affecting the TV.
+- [ ] Force stop a disposable system app from details, confirm the operation is bounded, and confirm Android can launch or restart it afterward.
 - [ ] Cancel the uninstall confirmation and confirm the package remains installed.
 - [ ] Confirm uninstall for a disposable package, verify its app data is removed, and confirm the row disappears.
 - [ ] Refresh after installing an app outside ADB TV and confirm the new package appears.
@@ -118,13 +124,16 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] After an operation fails because the TV is offline, return to the device list and confirm the same saved device can be opened again.
 - [ ] Start an Apps operation and confirm back navigation, device switching, Remote, Install, rename, and connection updates stay unavailable until it completes.
 
-## APK Installation
+## App Installation
 
 - [ ] Install a known-good signed single APK selected from Files.
+- [ ] Install a known-good APKM containing a base APK and device-compatible splits from Files, then launch the installed app.
+- [ ] Install a known-good APKM from a direct HTTPS URL.
 - [ ] Observe determinate byte progress during a known-length URL download and ADB transfer.
 - [ ] Download from a server without `Content-Length` and confirm indeterminate progress shows received bytes.
 - [ ] Cancel during download or transfer, confirm **Cancelling and cleaning up** appears before **Installation cancelled**, then retry the same source successfully.
 - [ ] Make the TV unreachable during cancellation cleanup and confirm the operation ends with cleanup-specific Technical Details.
+- [ ] Cancel an APKM transfer, retry it immediately, and confirm the retry succeeds without a conflicting or abandoned Package Manager session.
 - [ ] Install the same package again and confirm replacement succeeds.
 - [ ] Install a known-good APK from a direct HTTPS URL.
 - [ ] Enter an HTTP URL and confirm the insecure-transport warning appears before install.
@@ -133,9 +142,12 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Install from a local HTTP server when local-network permission is granted.
 - [ ] Return an HTTP error or HTML response from an APK URL and confirm download-specific Diagnostic Detail appears before the app connects to the TV.
 - [ ] Attempt a package advertised above 512 MiB and confirm it is rejected before buffering or connecting to the TV.
-- [ ] Select a renamed non-APK file and confirm validation fails before transfer.
+- [ ] Select a file other than APK or APKM and confirm validation fails before transfer.
+- [ ] Select malformed APKM bundles with a missing base APK, no split APK, or an invalid contained APK and confirm each is rejected before connecting to the TV.
+- [ ] Install an APKM with splits incompatible with the TV and confirm Package Manager detail is shown without partially replacing the installed app.
 - [ ] Test an invalid signature or incompatible APK and confirm Package Manager detail is shown.
 - [ ] Confirm each attempt uses a distinct UUID-named temporary APK and that its exact path is removed after success and failure.
+- [ ] Confirm APKM installation does not create files under `/data/local/tmp/adbtv` and that cancellation or failure does not block a later install.
 - [ ] Confirm no persistent install-history screen or record is created.
 
 ## Device Tools
@@ -144,6 +156,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Capture a screenshot and confirm its orientation, dimensions, colors, and visible TV content are correct.
 - [ ] Use Share to save the captured screenshot to Files and Photos; confirm both copies open correctly.
 - [ ] Capture a second screenshot and confirm the preview replaces the first without retaining history.
+- [ ] Open DRM-protected content, capture a screenshot, and confirm a protected-content/device-blocked message appears with Technical Details instead of `invalidScreenshotPNG` as the user-facing error.
 - [ ] Run `getprop ro.build.version.release` and confirm the output and exit code are shown.
 - [ ] Run a command that exits nonzero and confirm its output and nonzero exit code remain visible without being reported as success.
 - [ ] Run a command that produces no output and confirm the completed state remains understandable.

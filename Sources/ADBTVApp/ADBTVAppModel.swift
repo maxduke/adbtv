@@ -47,7 +47,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
 
     public var canInstallSelectedPackage: Bool {
         selectedDevice != nil
-            && installDraft.canBuildInstallPlan
+            && installDraft.canPrepareInstallPackage
             && activeDeviceOperation == nil
     }
 
@@ -148,25 +148,25 @@ public struct ADBTVAppModel: Equatable, Sendable {
     public mutating func selectPackage(fileName: String, byteCount: Int64?) {
         installDraft.selectedPackage = ADBTVInstallPackageDraft(fileName: fileName, byteCount: byteCount)
         installDraft.urlString = ""
-        installDraft.status = .ready
+        installDraft.status = installDraft.canPrepareInstallPackage ? .ready : .idle
     }
 
     public mutating func selectPackage(fileURL: URL, byteCount: Int64?) {
         installDraft.selectedPackage = ADBTVInstallPackageDraft(fileURL: fileURL, byteCount: byteCount)
         installDraft.urlString = ""
-        installDraft.status = .ready
+        installDraft.status = installDraft.canPrepareInstallPackage ? .ready : .idle
     }
 
     public mutating func setInstallURLString(_ value: String) {
         installDraft.urlString = value
         installDraft.selectedPackage = nil
-        installDraft.status = installDraft.canBuildInstallPlan ? .ready : .idle
+        installDraft.status = installDraft.canPrepareInstallPackage ? .ready : .idle
     }
 
     @discardableResult
     public mutating func startInstall(on deviceID: ADBTVDeviceSummary.ID) -> Bool {
         guard selectedDeviceID == deviceID,
-              installDraft.canBuildInstallPlan,
+              installDraft.canPrepareInstallPackage,
               activeDeviceOperation == nil else {
             return false
         }
@@ -198,6 +198,8 @@ public struct ADBTVAppModel: Equatable, Sendable {
             )
         case .installer(let event):
             installDraft.status = ADBTVInstallStatus(event: event)
+        case .packageSession(let event):
+            installDraft.status = ADBTVInstallStatus(event: event)
         }
         return true
     }
@@ -216,7 +218,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
             installDraft.status = .succeeded
         case .failure(let message):
             installDraft.status = .failed(
-                userMessage: "APK install failed.",
+                userMessage: "App install failed.",
                 diagnosticDetail: DiagnosticDetail(
                     summary: message,
                     context: ["phase": "installPackage"]
@@ -667,7 +669,7 @@ public extension ADBTVAppModel {
         ],
         installDraft: ADBTVInstallDraft(
             selectedPackage: ADBTVInstallPackageDraft(
-                fileURL: URL(fileURLWithPath: "/tmp/3.8.4-1-complete-armeabi-v7a.apk"),
+                fileURL: URL(fileURLWithPath: "/tmp/streaming-bundle.apkm"),
                 byteCount: 78_334_696
             ),
             status: .ready
@@ -851,23 +853,16 @@ public struct ADBTVInstallDraft: Equatable, Sendable {
         self.status = status
     }
 
-    public var canBuildInstallPlan: Bool {
-        if let selectedPackage {
-            return (try? ADBInstallPackage(
-                fileName: selectedPackage.fileName,
-                byteCount: selectedPackage.byteCount
-            )) != nil
-        }
+    public var packageKind: ADBTVInstallPackageKind? {
+        ADBTVInstallPackageKind(fileName: selectedPackage?.fileName ?? urlFileName)
+    }
 
-        guard let urlFileName else {
-            return false
-        }
-
-        return (try? ADBInstallPackage(fileName: urlFileName)) != nil
+    public var canPrepareInstallPackage: Bool {
+        packageKind != nil && (selectedPackage?.byteCount.map { $0 >= 0 } ?? true)
     }
 
     public func installPlan() throws -> ADBAPKInstallPlan {
-        guard let selectedPackage else {
+        guard let selectedPackage, packageKind == .singleAPK else {
             throw ADBTVInstallDraftError.missingPackage
         }
 
@@ -901,6 +896,25 @@ public struct ADBTVInstallDraft: Equatable, Sendable {
 
     public var usesInsecureHTTP: Bool {
         validatedURL?.scheme?.lowercased() == "http"
+    }
+}
+
+public enum ADBTVInstallPackageKind: Equatable, Sendable {
+    case singleAPK
+    case apkm
+
+    public init?(fileName: String?) {
+        guard let fileName else {
+            return nil
+        }
+        switch (fileName as NSString).pathExtension.lowercased() {
+        case "apk":
+            self = .singleAPK
+        case "apkm":
+            self = .apkm
+        default:
+            return nil
+        }
     }
 }
 
@@ -952,7 +966,7 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
                 self = .running(.transferPackage)
             case .failed(let message):
                 self = .failed(
-                    userMessage: "APK transfer failed.",
+                    userMessage: "Package transfer failed.",
                     diagnosticDetail: DiagnosticDetail(
                         summary: message,
                         context: ["phase": "transferPackage"]
@@ -965,13 +979,42 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
                 self = .running(.cleanup)
             case .failure(let message):
                 self = .failed(
-                    userMessage: "APK install failed.",
+                    userMessage: "App install failed.",
                     diagnosticDetail: DiagnosticDetail(
                         summary: message,
                         context: ["phase": "installPackage"]
                     )
                 )
             }
+        }
+    }
+
+    public init(event: ADBPackageSessionInstallEvent) {
+        switch event {
+        case .sessionCreated:
+            self = .running(.transferPackage)
+        case .transferProgress(_, let sentByteCount, let totalByteCount):
+            self = .transferring(
+                sentByteCount: Int(sentByteCount),
+                totalByteCount: Int(totalByteCount)
+            )
+        case .committing:
+            self = .running(.installPackage)
+        case .installResult(let result):
+            switch result {
+            case .success:
+                self = .running(.cleanup)
+            case .failure(let message):
+                self = .failed(
+                    userMessage: "App install failed.",
+                    diagnosticDetail: DiagnosticDetail(
+                        summary: message,
+                        context: ["phase": "installPackage"]
+                    )
+                )
+            }
+        case .abandoning:
+            self = .running(.cleanup)
         }
     }
 

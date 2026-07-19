@@ -26,6 +26,20 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         }
     }
 
+    func testListRequestsSystemPackages() async throws {
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("package:com.android.tv.settings\n")
+        ])
+
+        let packages = try await ADBTVInstalledAppManager().list(
+            scope: .system,
+            using: &session
+        )
+
+        XCTAssertEqual(packages.map(\.packageName), ["com.android.tv.settings"])
+        XCTAssertTrue(session.commands[0].hasPrefix("pm list packages -s; "))
+    }
+
     func testPackageNameRejectsShellMetacharacters() {
         XCTAssertThrowsError(try ADBTVInstalledPackage(packageName: "com.example;reboot")) {
             XCTAssertEqual(
@@ -45,6 +59,19 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertTrue(session.commands[0].contains("|| monkey"))
         XCTAssertTrue(session.commands[0].contains("android.intent.category.LAUNCHER"))
         XCTAssertTrue(session.commands[0].contains("'com.example.player'"))
+    }
+
+    func testForceStopTargetsCurrentUserAndValidatedPackage() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [checkedOutput("")])
+
+        try await ADBTVInstalledAppManager().forceStop(package, using: &session)
+
+        XCTAssertTrue(
+            session.commands[0].hasPrefix(
+                "am force-stop --user current 'com.example.player'; "
+            )
+        )
     }
 
     func testUninstallRequiresSuccessOutput() async throws {
@@ -71,6 +98,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             "versionCode":20401,
             "firstInstallTime":1704067200000,
             "lastUpdateTime":1711929600000,
+            "stopped":true,
             "apkBytes":52428800,
             "png":"\(validPNG.base64EncodedString())"
           },
@@ -90,8 +118,10 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertEqual(details["com.example.player"]?.versionName, "2.4.1")
         XCTAssertEqual(details["com.example.player"]?.versionCode, 20_401)
         XCTAssertEqual(details["com.example.player"]?.apkByteCount, 52_428_800)
+        XCTAssertEqual(details["com.example.player"]?.isStopped, true)
         XCTAssertEqual(details["com.example.player"]?.icon?.pngData, validPNG)
         XCTAssertEqual(details["com.example.invalid"]?.displayName, "Invalid Icon")
+        XCTAssertNil(details["com.example.invalid"]?.isStopped)
         XCTAssertNil(details["com.example.invalid"]?.icon)
         XCTAssertNil(details["com.unrequested.app"])
         XCTAssertTrue(session.commands[0].contains("content://com.maxduke.adbtv.helper.v3.apps/apps"))

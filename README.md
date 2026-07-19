@@ -4,7 +4,7 @@ ADB TV is a native SwiftUI iOS app for managing Android TV devices over Wireless
 
 ## Status
 
-Version [0.5.0](https://github.com/maxduke/adbtv/releases/tag/v0.5.0) is the current release with the following Swift package and native SwiftUI iOS app features:
+Version [0.6.0](https://github.com/maxduke/adbtv/releases/tag/v0.6.0) is the current release with the following Swift package and native SwiftUI iOS app features:
 
 - `ADBClientCore`: native ADB packet, stream, shell, sync, remote-control, and APK install foundations.
 - `ADBTVApp`: SwiftUI app shell for saved devices, APK install sources, install state, and Android TV remote actions.
@@ -25,7 +25,7 @@ Current direction:
 - target-bound device operations that prevent cross-device status or endpoint confusion;
 - synced ADB identity through iCloud Keychain;
 - structured actions instead of raw shell in the first version;
-- APK installation from Files or HTTP/HTTPS URL.
+- APK and APKM installation from Files or HTTP/HTTPS URL.
 
 Implemented so far:
 
@@ -34,15 +34,17 @@ Implemented so far:
 - checked saved-device reconnect before Remote or Install tools are shown, with a bounded retry surface for unreachable TVs;
 - verified connection repair for unreachable saved devices, with atomic endpoint replacement and duplicate protection;
 - resilient Device Library loading that preserves legacy records, recovers valid entries from partial corruption, and reports rejected data without rewriting it;
-- APK source selection from the iOS Files picker;
-- APK source entry from a direct HTTP or HTTPS URL;
-- an explicit insecure-transport warning for HTTP APK sources;
+- APK or APKM source selection from the iOS Files picker;
+- APK or APKM source entry from a direct HTTP or HTTPS URL;
+- an explicit insecure-transport warning for HTTP app-package sources;
 - ordered URL download progress with known-length and indeterminate presentation;
 - bounded 512 MiB package loading for URL and Files sources, with response validation;
 - redirect-aware APK downloads that reject unsupported schemes and HTTPS-to-HTTP transport downgrades;
 - structural APK validation as a ZIP archive containing a root `AndroidManifest.xml` before transfer;
 - package preparation and validation before opening the Android TV connection;
 - single-APK install orchestration through the native ADB client;
+- bounded APKM extraction with safe paths, structural validation of every APK, and temporary-file cleanup;
+- atomic APKM split installation through Android Package Manager sessions, with cancellation-safe session abandonment and no remote staging files;
 - live URL download and acknowledged APK transfer progress with byte counts in the install UI;
 - lazy ADB sync framing with at most one 1 MiB transfer batch beyond the selected APK in memory;
 - explicit APK-install cancellation that retains operation ownership through bounded fresh-connection staging cleanup, with cleanup failures exposed before same-source retry;
@@ -68,9 +70,9 @@ Implemented so far:
 - cancellable remote reconnect/action progress with an eight-second failure bound;
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
-- searchable user-installed app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, Android TV launch, confirmed uninstall, and checked command diagnostics;
+- searchable user and system app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, launch, force stop, user-app uninstall, and checked command diagnostics;
 - structured device information for Android version, display resolution, storage, uptime, and build identity;
-- bounded binary-safe Android TV screenshots with PNG validation, preview, and native sharing;
+- bounded binary-safe Android TV screenshots with PNG validation, preview, native sharing, and clear protected-content/device-blocked failures;
 - bounded one-shot ADB shell commands with read-only diagnostic presets, cancellation, timeout, copyable output, and preserved exit status;
 - unsigned IPA packaging in GitHub Actions;
 - packaged ADB TV and BoringSSL license notices with an in-app About surface;
@@ -144,7 +146,7 @@ The repository contains `ADBClientCore`, `ADBTVApp`, and the source for the opti
 
 ASCII remote text uses Android's built-in `input text` command with checked exit status. Chinese and other non-ASCII text uses the optional bundled ADB TV Input helper because Android's built-in command cannot generate characters absent from the TV's virtual key map. Enter Unicode text, install the helper from the Remote panel once, focus a TV text field, and send again. The app temporarily selects the helper for each send and restores the previous TV keyboard afterward.
 
-The same helper returns installed-app names, versions, install/update dates, summed APK size, and icons through a shell-only provider. APK size covers the base and split APK files, not app data or cache. When the helper is missing, the Apps list remains fully functional and falls back to package identifiers and generic icons. Install the versioned v3 helper from the Apps toolbar or Remote panel; Unicode input continues to support v2 during migration.
+The same helper returns installed-app names, versions, install/update dates, summed APK size, icons, and Android's stopped state through a shell-only provider. APK size covers the base and split APK files, not app data or cache. When the helper is missing, the Apps list remains fully functional and falls back to package identifiers, generic icons, and an available Force Stop action. Install the versioned v3 helper from the Apps toolbar or Remote panel; Unicode input continues to support v2 during migration.
 
 ## License
 

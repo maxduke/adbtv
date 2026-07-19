@@ -1,13 +1,18 @@
 import ADBClientCore
 import Foundation
 
-public protocol ADBTVAPKInstallConnection: Sendable {
+public protocol ADBTVInstallConnection: Sendable {
     mutating func installAPK(
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32,
         eventHandler: @escaping ADBAPKInstallEventHandler
     ) async throws -> ADBAPKInstallReport
+
+    mutating func installAPKM(
+        files: [ADBPackageSessionFile],
+        eventHandler: @escaping ADBPackageSessionInstallEventHandler
+    ) async throws -> ADBAPKInstallResult
 }
 
 public struct ADBTVInstallDownloadProgress: Equatable, Sendable {
@@ -23,6 +28,7 @@ public struct ADBTVInstallDownloadProgress: Equatable, Sendable {
 public enum ADBTVInstallEvent: Equatable, Sendable {
     case download(ADBTVInstallDownloadProgress)
     case installer(ADBAPKInstallEvent)
+    case packageSession(ADBPackageSessionInstallEvent)
 }
 
 public typealias ADBTVInstallEventHandler = @Sendable (ADBTVInstallEvent) async -> Void
@@ -34,17 +40,33 @@ public enum ADBTVInstallPackageLimits {
     public static let maximumByteCount: Int64 = 512 * 1024 * 1024
 }
 
-public struct ADBTVPreparedInstallPackage: Equatable, Sendable {
-    public var contents: [UInt8]
-    public var plan: ADBAPKInstallPlan
+public enum ADBTVPreparedInstallPackage: Equatable, Sendable {
+    case singleAPK(contents: [UInt8], plan: ADBAPKInstallPlan)
+    case apkm(ADBTVPreparedAPKM)
 
-    public init(contents: [UInt8], plan: ADBAPKInstallPlan) {
-        self.contents = contents
-        self.plan = plan
+    public var singleAPKPlan: ADBAPKInstallPlan? {
+        guard case .singleAPK(_, let plan) = self else {
+            return nil
+        }
+        return plan
+    }
+
+    public func removeTemporaryFiles() throws {
+        if case .apkm(let preparedAPKM) = self {
+            try preparedAPKM.removeTemporaryFiles()
+        }
     }
 }
 
-public extension ADBTVAPKInstallConnection {
+public struct ADBTVInstallReport: Equatable, Sendable {
+    public let result: ADBAPKInstallResult
+
+    public init(result: ADBAPKInstallResult) {
+        self.result = result
+    }
+}
+
+public extension ADBTVInstallConnection {
     mutating func installAPK(
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
@@ -60,7 +82,7 @@ public extension ADBTVAPKInstallConnection {
 }
 
 #if canImport(Network)
-extension ADBDeviceConnection: ADBTVAPKInstallConnection {
+extension ADBDeviceConnection: ADBTVInstallConnection {
     public mutating func installAPK(
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
@@ -75,6 +97,17 @@ extension ADBDeviceConnection: ADBTVAPKInstallConnection {
             eventHandler: eventHandler
         )
     }
+
+    public mutating func installAPKM(
+        files: [ADBPackageSessionFile],
+        eventHandler: @escaping ADBPackageSessionInstallEventHandler
+    ) async throws -> ADBAPKInstallResult {
+        try await ADBPackageSessionInstaller().install(
+            files: files,
+            using: &self,
+            eventHandler: eventHandler
+        )
+    }
 }
 #endif
 
@@ -85,6 +118,7 @@ public struct ADBTVInstallOperation: Sendable {
         @escaping ADBTVInstallDownloadProgressHandler
     ) async throws -> ADBTVDownloadedPackage
     public var modificationTime: @Sendable () -> UInt32
+    public var extractAPKM: @Sendable (URL) throws -> ADBTVPreparedAPKM
 
     public init(
         readFile: @escaping @Sendable (URL) throws -> [UInt8] = {
@@ -101,22 +135,27 @@ public struct ADBTVInstallOperation: Sendable {
         },
         modificationTime: @escaping @Sendable () -> UInt32 = {
             UInt32(Date().timeIntervalSince1970)
+        },
+        extractAPKM: @escaping @Sendable (URL) throws -> ADBTVPreparedAPKM = {
+            try ADBTVAPKMExtractor().extract(from: $0)
         }
     ) {
         self.readFile = readFile
         self.downloadPackage = downloadPackage
         self.modificationTime = modificationTime
+        self.extractAPKM = extractAPKM
     }
 
-    public func installSelectedPackage<Connection: ADBTVAPKInstallConnection>(
+    public func installSelectedPackage<Connection: ADBTVInstallConnection>(
         from model: ADBTVAppModel,
         using connection: inout Connection,
         eventHandler: @escaping ADBTVInstallEventHandler = { _ in }
-    ) async throws -> ADBAPKInstallReport {
+    ) async throws -> ADBTVInstallReport {
         let package = try await prepareSelectedPackage(
             from: model,
             eventHandler: eventHandler
         )
+        defer { try? package.removeTemporaryFiles() }
         return try await installPreparedPackage(
             package,
             using: &connection,
@@ -136,24 +175,38 @@ public struct ADBTVInstallOperation: Sendable {
             from: model.installDraft,
             eventHandler: eventHandler
         )
-        try ADBAPKValidator().validate(contents: package.contents)
+        if case .singleAPK(let contents, _) = package {
+            try ADBAPKValidator().validate(contents: contents)
+        }
         await eventHandler(.installer(.phaseFinished(.validatePackage)))
         return package
     }
 
-    public func installPreparedPackage<Connection: ADBTVAPKInstallConnection>(
+    public func installPreparedPackage<Connection: ADBTVInstallConnection>(
         _ package: ADBTVPreparedInstallPackage,
         using connection: inout Connection,
         eventHandler: @escaping ADBTVInstallEventHandler = { _ in }
-    ) async throws -> ADBAPKInstallReport {
-        return try await connection.installAPK(
-            contents: package.contents,
-            plan: package.plan,
-            modificationTime: modificationTime(),
-            eventHandler: { event in
-                await eventHandler(.installer(event))
-            }
-        )
+    ) async throws -> ADBTVInstallReport {
+        switch package {
+        case .singleAPK(let contents, let plan):
+            let report = try await connection.installAPK(
+                contents: contents,
+                plan: plan,
+                modificationTime: modificationTime(),
+                eventHandler: { event in
+                    await eventHandler(.installer(event))
+                }
+            )
+            return ADBTVInstallReport(result: report.result)
+        case .apkm(let preparedAPKM):
+            let result = try await connection.installAPKM(
+                files: preparedAPKM.files,
+                eventHandler: { event in
+                    await eventHandler(.packageSession(event))
+                }
+            )
+            return ADBTVInstallReport(result: result)
+        }
     }
 
     private func installPayload(
@@ -166,10 +219,17 @@ public struct ADBTVInstallOperation: Sendable {
             }
 
             await eventHandler(.installer(.phaseStarted(.validatePackage)))
-            return try ADBTVPreparedInstallPackage(
-                contents: readFile(fileURL),
-                plan: draft.installPlan()
-            )
+            switch draft.packageKind {
+            case .singleAPK:
+                return .singleAPK(
+                    contents: try readFile(fileURL),
+                    plan: try draft.installPlan()
+                )
+            case .apkm:
+                return .apkm(try extractAPKM(fileURL))
+            case nil:
+                throw ADBTVInstallOperationError.unsupportedPackage(selectedPackage.fileName)
+            }
         }
 
         guard let url = draft.validatedURL,
@@ -181,13 +241,25 @@ public struct ADBTVInstallOperation: Sendable {
             await eventHandler(.download(progress))
         }
         await eventHandler(.installer(.phaseStarted(.validatePackage)))
-        return try ADBTVPreparedInstallPackage(
-            contents: downloadedPackage.contents,
-            plan: ADBAPKInstallPlan.singleAPK(
-                fileName: downloadedPackage.fileName ?? fileName,
-                byteCount: Int64(downloadedPackage.contents.count)
+        let downloadedFileName = downloadedPackage.fileName ?? fileName
+        switch ADBTVInstallPackageKind(fileName: downloadedFileName) {
+        case .singleAPK:
+            return .singleAPK(
+                contents: downloadedPackage.contents,
+                plan: try ADBAPKInstallPlan.singleAPK(
+                    fileName: downloadedFileName,
+                    byteCount: Int64(downloadedPackage.contents.count)
+                )
             )
-        )
+        case .apkm:
+            let temporaryArchiveURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ADBTV-\(UUID().uuidString).apkm")
+            try Data(downloadedPackage.contents).write(to: temporaryArchiveURL, options: .atomic)
+            defer { try? FileManager.default.removeItem(at: temporaryArchiveURL) }
+            return .apkm(try extractAPKM(temporaryArchiveURL))
+        case nil:
+            throw ADBTVInstallOperationError.unsupportedPackage(downloadedFileName)
+        }
     }
 }
 
@@ -454,7 +526,7 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
 
         receivedResponse = true
         totalByteCount = expectedByteCount
-        responseFileName = adbTVAPKFileName(from: response.suggestedFilename)
+        responseFileName = adbTVInstallPackageFileName(from: response.suggestedFilename)
         if let expectedByteCount,
            let capacity = Int(exactly: expectedByteCount) {
             contents.reserveCapacity(capacity)
@@ -511,7 +583,9 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
         } else {
             result = .success(ADBTVDownloadedPackage(
                 contents: contents,
-                fileName: responseFileName ?? adbTVAPKFileName(from: sourceURL.lastPathComponent)
+                fileName: responseFileName ?? adbTVInstallPackageFileName(
+                    from: sourceURL.lastPathComponent
+                )
             ))
         }
 
@@ -543,12 +617,12 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
     }
 }
 
-private func adbTVAPKFileName(from value: String?) -> String? {
+private func adbTVInstallPackageFileName(from value: String?) -> String? {
     guard let value, !value.isEmpty else {
         return nil
     }
     let decodedValue = value.removingPercentEncoding ?? value
-    return decodedValue.lowercased().hasSuffix(".apk") ? decodedValue : nil
+    return ADBTVInstallPackageKind(fileName: decodedValue) == nil ? nil : decodedValue
 }
 
 private func adbTVIsClearlyNotAPK(mimeType: String) -> Bool {
@@ -564,5 +638,6 @@ public enum ADBTVInstallOperationError: Error, Equatable, Sendable {
     case missingDevice
     case missingPackage
     case missingPackageFile
+    case unsupportedPackage(String)
     case unsupportedPlatform
 }

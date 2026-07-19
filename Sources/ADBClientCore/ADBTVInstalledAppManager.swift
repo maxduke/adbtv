@@ -1,5 +1,10 @@
 import Foundation
 
+public enum ADBTVInstalledAppScope: String, CaseIterable, Hashable, Sendable {
+    case user
+    case system
+}
+
 public struct ADBTVInstalledPackage: Hashable, Identifiable, Sendable {
     public var id: String { packageName }
     public let packageName: String
@@ -73,6 +78,7 @@ public struct ADBTVInstalledAppDetails: Equatable, Sendable {
     public let lastUpdateDate: Date?
     public let apkByteCount: Int64?
     public let icon: ADBTVInstalledAppIcon?
+    public var isStopped: Bool?
 
     public init(
         displayName: String? = nil,
@@ -81,7 +87,8 @@ public struct ADBTVInstalledAppDetails: Equatable, Sendable {
         firstInstallTimeMilliseconds: Int64? = nil,
         lastUpdateTimeMilliseconds: Int64? = nil,
         apkByteCount: Int64? = nil,
-        icon: ADBTVInstalledAppIcon? = nil
+        icon: ADBTVInstalledAppIcon? = nil,
+        isStopped: Bool? = nil
     ) {
         self.displayName = Self.validatedText(displayName)
         self.versionName = Self.validatedText(versionName)
@@ -90,6 +97,7 @@ public struct ADBTVInstalledAppDetails: Equatable, Sendable {
         self.lastUpdateDate = Self.date(milliseconds: lastUpdateTimeMilliseconds)
         self.apkByteCount = apkByteCount.flatMap { $0 > 0 ? $0 : nil }
         self.icon = icon
+        self.isStopped = isStopped
     }
 
     private static func validatedText(_ value: String?) -> String? {
@@ -122,10 +130,12 @@ public struct ADBTVInstalledAppManager: Sendable {
     public init() {}
 
     public func list<Session: ADBShellCommandRunningSession>(
+        scope: ADBTVInstalledAppScope = .user,
         using session: inout Session
     ) async throws -> [ADBTVInstalledPackage] {
+        let flag = scope == .user ? "-3" : "-s"
         let invocation = try ADBCheckedShellInvocation(
-            command: ADBShellCommand("pm list packages -3")
+            command: ADBShellCommand("pm list packages \(flag)")
         )
         let output = try await session.runShellCommand(invocation.shellCommand)
         return try Self.parsePackages(invocation.validatedOutput(from: output))
@@ -141,6 +151,19 @@ public struct ADBTVInstalledAppManager: Sendable {
                     + "-c android.intent.category.LEANBACK_LAUNCHER 1 >/dev/null 2>&1 "
                     + "|| monkey -p \(package.shellEscaped) "
                     + "-c android.intent.category.LAUNCHER 1"
+            )
+        )
+        let output = try await session.runShellCommand(invocation.shellCommand)
+        _ = try invocation.validatedOutput(from: output)
+    }
+
+    public func forceStop<Session: ADBShellCommandRunningSession>(
+        _ package: ADBTVInstalledPackage,
+        using session: inout Session
+    ) async throws {
+        let invocation = try ADBCheckedShellInvocation(
+            command: ADBShellCommand(
+                "am force-stop --user current \(package.shellEscaped)"
             )
         )
         let output = try await session.runShellCommand(invocation.shellCommand)
@@ -167,7 +190,7 @@ public struct ADBTVInstalledAppManager: Sendable {
         for packages: [ADBTVInstalledPackage],
         using session: inout Session
     ) async -> [String: ADBTVInstalledAppDetails] {
-        // ponytail: cap helper work; raise only if real TV libraries exceed 128 user apps.
+        // ponytail: cap helper work; raise only if real TV package lists need more metadata.
         let packages = Array(packages.prefix(Self.maximumDetailsCount))
         var details: [String: ADBTVInstalledAppDetails] = [:]
 
@@ -215,7 +238,8 @@ public struct ADBTVInstalledAppManager: Sendable {
                 firstInstallTimeMilliseconds: item.firstInstallTime,
                 lastUpdateTimeMilliseconds: item.lastUpdateTime,
                 apkByteCount: item.apkBytes,
-                icon: icon
+                icon: icon,
+                isStopped: item.stopped
             )
         }
         return details
@@ -247,6 +271,7 @@ private struct DetailsResponse: Decodable {
     let lastUpdateTime: Int64?
     let apkBytes: Int64?
     let png: String?
+    let stopped: Bool?
 }
 
 public enum ADBTVInstalledAppError: Error, Equatable, Sendable {

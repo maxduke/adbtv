@@ -60,6 +60,26 @@ final class ADBTVDeviceToolsTests: XCTestCase {
         XCTAssertEqual(tools.session.services, ["exec:screencap -p"])
     }
 
+    func testReportsRejectedScreenshotOutputWithoutTreatingItAsPNG() async {
+        let response = Array("capture blocked\n".utf8)
+        var tools = ADBTVDeviceTools(session: FakeDeviceToolsSession(serviceOutput: response))
+
+        do {
+            _ = try await tools.captureScreenshot()
+            XCTFail("Expected screenshot rejection.")
+        } catch let error as ADBTVDeviceToolsError {
+            XCTAssertEqual(
+                error,
+                .screenshotUnavailable(
+                    outputByteCount: response.count,
+                    deviceMessage: "capture blocked"
+                )
+            )
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testRejectsInvalidScreenshotData() {
         XCTAssertThrowsError(try ADBTVScreenshot(pngData: Data("not a png".utf8))) { error in
             XCTAssertEqual(error as? ADBTVDeviceToolsError, .invalidScreenshotPNG)

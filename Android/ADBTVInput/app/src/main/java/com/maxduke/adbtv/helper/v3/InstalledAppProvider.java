@@ -92,6 +92,7 @@ public final class InstalledAppProvider extends ContentProvider {
                 item.put("versionCode", packageInfo.getLongVersionCode());
                 item.put("firstInstallTime", packageInfo.firstInstallTime);
                 item.put("lastUpdateTime", packageInfo.lastUpdateTime);
+                item.put("stopped", (applicationInfo.flags & ApplicationInfo.FLAG_STOPPED) != 0);
                 item.put("apkBytes", apkByteCount(
                         applicationInfo.sourceDir,
                         applicationInfo.splitSourceDirs

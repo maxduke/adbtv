@@ -69,8 +69,24 @@ A user-provided HTTP or HTTPS URL that the app downloads as an Install Package.
 _Avoid_: Feed, repository URL
 
 **Install Package**:
-The Android package artifact selected for APK Installation. The initial version treats a single `.apk` file as the supported Install Package.
+The Android package artifact selected for APK Installation. It is either a Single APK or an APKM Bundle.
 _Avoid_: APK when referring to split package formats
+
+**Single APK**:
+One Android application package that Android can install directly.
+_Avoid_: APKM Bundle, Split APK Set
+
+**APKM Bundle**:
+An APKMirror archive containing one base APK and the Split APKs that together form one application.
+_Avoid_: APK, generic ZIP archive
+
+**Split APK Set**:
+One base APK and one or more Split APKs that must be installed atomically as one application.
+_Avoid_: Multiple apps
+
+**Installed App**:
+An application currently installed for the user on a Managed Device.
+_Avoid_: Install Package
 
 **Operation Progress**:
 User-visible status for a running ADB Operation, ideally including progress when the underlying operation can report it.
