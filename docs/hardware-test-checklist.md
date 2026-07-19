@@ -112,6 +112,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Launch an Android TV app and confirm its Leanback activity opens.
 - [ ] Launch a phone-style app without a Leanback activity and confirm the standard launcher fallback opens it, or a clear error with Technical Details appears.
 - [ ] Force stop a user app from its row menu, confirm playback and background activity stop without removing app data, then launch it again.
+- [ ] With the current helper installed, refresh Apps and confirm Force Stop shows as **Stopped** and is disabled only for packages Android reports as stopped; launch one and confirm the action becomes available again.
 - [ ] Open a system app's details, confirm Force Stop requires the stronger system warning, and cancel without affecting the TV.
 - [ ] Force stop a disposable system app from details, confirm the operation is bounded, and confirm Android can launch or restart it afterward.
 - [ ] Cancel the uninstall confirmation and confirm the package remains installed.

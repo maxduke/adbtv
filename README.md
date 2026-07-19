@@ -146,7 +146,7 @@ The repository contains `ADBClientCore`, `ADBTVApp`, and the source for the opti
 
 ASCII remote text uses Android's built-in `input text` command with checked exit status. Chinese and other non-ASCII text uses the optional bundled ADB TV Input helper because Android's built-in command cannot generate characters absent from the TV's virtual key map. Enter Unicode text, install the helper from the Remote panel once, focus a TV text field, and send again. The app temporarily selects the helper for each send and restores the previous TV keyboard afterward.
 
-The same helper returns installed-app names, versions, install/update dates, summed APK size, and icons through a shell-only provider. APK size covers the base and split APK files, not app data or cache. When the helper is missing, the Apps list remains fully functional and falls back to package identifiers and generic icons. Install the versioned v3 helper from the Apps toolbar or Remote panel; Unicode input continues to support v2 during migration.
+The same helper returns installed-app names, versions, install/update dates, summed APK size, icons, and Android's stopped state through a shell-only provider. APK size covers the base and split APK files, not app data or cache. When the helper is missing, the Apps list remains fully functional and falls back to package identifiers, generic icons, and an available Force Stop action. Install the versioned v3 helper from the Apps toolbar or Remote panel; Unicode input continues to support v2 during migration.
 
 ## License
 

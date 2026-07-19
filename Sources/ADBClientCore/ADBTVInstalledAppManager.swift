@@ -78,6 +78,7 @@ public struct ADBTVInstalledAppDetails: Equatable, Sendable {
     public let lastUpdateDate: Date?
     public let apkByteCount: Int64?
     public let icon: ADBTVInstalledAppIcon?
+    public var isStopped: Bool?
 
     public init(
         displayName: String? = nil,
@@ -86,7 +87,8 @@ public struct ADBTVInstalledAppDetails: Equatable, Sendable {
         firstInstallTimeMilliseconds: Int64? = nil,
         lastUpdateTimeMilliseconds: Int64? = nil,
         apkByteCount: Int64? = nil,
-        icon: ADBTVInstalledAppIcon? = nil
+        icon: ADBTVInstalledAppIcon? = nil,
+        isStopped: Bool? = nil
     ) {
         self.displayName = Self.validatedText(displayName)
         self.versionName = Self.validatedText(versionName)
@@ -95,6 +97,7 @@ public struct ADBTVInstalledAppDetails: Equatable, Sendable {
         self.lastUpdateDate = Self.date(milliseconds: lastUpdateTimeMilliseconds)
         self.apkByteCount = apkByteCount.flatMap { $0 > 0 ? $0 : nil }
         self.icon = icon
+        self.isStopped = isStopped
     }
 
     private static func validatedText(_ value: String?) -> String? {
@@ -235,7 +238,8 @@ public struct ADBTVInstalledAppManager: Sendable {
                 firstInstallTimeMilliseconds: item.firstInstallTime,
                 lastUpdateTimeMilliseconds: item.lastUpdateTime,
                 apkByteCount: item.apkBytes,
-                icon: icon
+                icon: icon,
+                isStopped: item.stopped
             )
         }
         return details
@@ -267,6 +271,7 @@ private struct DetailsResponse: Decodable {
     let lastUpdateTime: Int64?
     let apkBytes: Int64?
     let png: String?
+    let stopped: Bool?
 }
 
 public enum ADBTVInstalledAppError: Error, Equatable, Sendable {

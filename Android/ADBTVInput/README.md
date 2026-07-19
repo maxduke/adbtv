@@ -8,7 +8,7 @@ ADB TV Helper is the optional Android component used for Chinese and other Unico
 
 The explicit text receiver requires `android.permission.DUMP`, so ordinary Android applications cannot invoke it. ADB TV calls it through the authenticated ADB shell, temporarily selects this IME, commits UTF-8 text to the focused input connection, and restores the previous IME.
 
-The app provider is protected by the same shell-only permission. It uses Android's `PackageManager` to return bounded labels, versions, install/update timestamps, summed base/split APK bytes, and rendered icons. Package visibility is required because the helper must inspect arbitrary sideloaded applications; metadata never leaves the authenticated ADB connection. APK bytes do not include app data or cache.
+The app provider is protected by the same shell-only permission. It uses Android's `PackageManager` to return bounded labels, versions, install/update timestamps, stopped state, summed base/split APK bytes, and rendered icons. Package visibility is required because the helper must inspect arbitrary sideloaded applications; metadata never leaves the authenticated ADB connection. APK bytes do not include app data or cache.
 
 GitHub Actions builds and tests this module with JDK 17, Gradle 9.1.0, Android Gradle Plugin 9.0.1, and Android SDK 36. The resulting debug-signed APK is copied to `Apps/ADBTViOS/Resources/ADBTVInput.apk` and committed so a clean Xcode checkout can package the complete iOS app without requiring an Android toolchain.
 

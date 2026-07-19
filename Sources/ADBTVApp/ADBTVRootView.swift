@@ -1559,10 +1559,18 @@ public struct ADBTVRootView: View {
             installedAppsState.status = .ready(message: nil)
             startInstalledAppDetailsLoad(packages, on: device)
         case .success(.launched(let package)):
+            installedAppsState.details[package.packageName]?.isStopped = false
             installedAppsState.status = .ready(
                 message: "Launched \(package.packageName)."
             )
         case .success(.stopped(let package)):
+            if installedAppsState.details[package.packageName] == nil {
+                installedAppsState.details[package.packageName] = ADBTVInstalledAppDetails(
+                    isStopped: true
+                )
+            } else {
+                installedAppsState.details[package.packageName]?.isStopped = true
+            }
             let name = installedAppsState.details[package.packageName]?.displayName
                 ?? package.packageName
             installedAppsState.status = .ready(message: "Stopped \(name).")
@@ -3647,9 +3655,17 @@ private struct InstalledAppsPanel: View {
                     Button(role: .destructive) {
                         pendingForceStop = package
                     } label: {
-                        Label("Force Stop", systemImage: "stop.circle")
+                        Label(
+                            details?.isStopped == true ? "Stopped" : "Force Stop",
+                            systemImage: details?.isStopped == true
+                                ? "stop.circle.fill" : "stop.circle"
+                        )
                     }
-                    .disabled(deviceOperationInProgress || state.status.isBusy)
+                    .disabled(
+                        deviceOperationInProgress
+                            || state.status.isBusy
+                            || details?.isStopped == true
+                    )
 
                     Divider()
 
@@ -3770,10 +3786,14 @@ private struct InstalledAppDetailsView: View {
                     Button(role: .destructive) {
                         confirmsForceStop = true
                     } label: {
-                        Label("Force Stop", systemImage: "stop.circle")
+                        Label(
+                            details?.isStopped == true ? "Stopped" : "Force Stop",
+                            systemImage: details?.isStopped == true
+                                ? "stop.circle.fill" : "stop.circle"
+                        )
                             .foregroundStyle(.red)
                     }
-                    .disabled(actionsDisabled)
+                    .disabled(actionsDisabled || details?.isStopped == true)
 
                     if allowsUninstall {
                         Button(role: .destructive) {
