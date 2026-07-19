@@ -192,87 +192,89 @@ public struct ADBTVRootView: View {
                 }
             }
         } detail: {
-            if let stateDevice = deviceConnectionState.device {
-                let connectionDevice = model.devices.first(where: { $0.id == stateDevice.id })
-                    ?? stateDevice
-                SavedDeviceConnectionView(
-                    device: connectionDevice,
-                    state: deviceConnectionState,
-                    retry: { selectSavedDevice(id: connectionDevice.id) },
-                    repair: { repairingDevice = connectionDevice },
-                    rename: { renamingDevice = connectionDevice }
-                )
-            } else if let device = model.selectedDevice, initiallyPresentsFileBrowser {
-                ADBTVFileBrowserView(device: device)
-            } else if let device = model.selectedDevice {
-                DeviceDetailView(
-                    device: device,
-                    installDraft: model.installDraft,
-                    installURLString: Binding(
-                        get: { model.installDraft.urlString },
-                        set: { model.setInstallURLString($0) }
-                    ),
-                    remoteStatus: model.remoteStatus,
-                    remoteTextString: Binding(
-                        get: { model.remoteTextString },
-                        set: { model.setRemoteTextString($0) }
-                    ),
-                    canInstall: model.canInstallSelectedPackage,
-                    canSendRemoteText: model.canSendRemoteText,
-                    deviceOperationInProgress: model.activeDeviceOperation != nil,
-                    installedAppsState: installedAppsState.forDevice(device.id),
-                    deviceToolsState: deviceToolsState.forDevice(device.id),
-                    repair: { repairingDevice = device },
-                    rename: { renamingDevice = device },
-                    chooseAPK: {
-                        isFileImporterPresented = true
-                    },
-                    install: {
-                        startInstall(for: device)
-                    },
-                    cancelInstall: cancelInstall,
-                    sendRemoteAction: { action in
-                        sendRemoteAction(action, to: device)
-                    },
-                    sendRemoteText: {
-                        sendRemoteText(to: device)
-                    },
-                    cancelRemoteOperation: cancelRemoteOperation,
-                    installUnicodeInputHelper: {
-                        installUnicodeInputHelper(on: device)
-                    },
-                    loadInstalledApps: {
-                        runInstalledAppCommand(.list, on: device)
-                    },
-                    launchInstalledApp: { package in
-                        runInstalledAppCommand(.launch(package), on: device)
-                    },
-                    uninstallInstalledApp: { package in
-                        runInstalledAppCommand(.uninstall(package), on: device)
-                    },
-                    cancelInstalledAppOperation: cancelInstalledAppOperation,
-                    loadDeviceInformation: {
-                        runDeviceTool(.information, on: device)
-                    },
-                    captureScreenshot: {
-                        runDeviceTool(.screenshot, on: device)
-                    },
-                    runShellCommand: { command in
-                        runDeviceTool(.shell(command: command), on: device)
-                    },
-                    cleanCaches: {
-                        let desiredFreeByteCount = deviceToolsState.information?
-                            .storage?.totalByteCount ?? 1_000_000_000_000
-                        runDeviceTool(
-                            .cacheCleanup(desiredFreeByteCount: desiredFreeByteCount),
-                            on: device
-                        )
-                    },
-                    cancelDeviceToolOperation: cancelDeviceToolOperation
-                )
-                .id(device.id)
-            } else {
-                ContentUnavailableView("Select a Device", systemImage: "tv.and.hifispeaker.fill")
+            NavigationStack {
+                if let stateDevice = deviceConnectionState.device {
+                    let connectionDevice = model.devices.first(where: { $0.id == stateDevice.id })
+                        ?? stateDevice
+                    SavedDeviceConnectionView(
+                        device: connectionDevice,
+                        state: deviceConnectionState,
+                        retry: { selectSavedDevice(id: connectionDevice.id) },
+                        repair: { repairingDevice = connectionDevice },
+                        rename: { renamingDevice = connectionDevice }
+                    )
+                } else if let device = model.selectedDevice, initiallyPresentsFileBrowser {
+                    ADBTVFileBrowserView(device: device)
+                } else if let device = model.selectedDevice {
+                    DeviceDetailView(
+                        device: device,
+                        installDraft: model.installDraft,
+                        installURLString: Binding(
+                            get: { model.installDraft.urlString },
+                            set: { model.setInstallURLString($0) }
+                        ),
+                        remoteStatus: model.remoteStatus,
+                        remoteTextString: Binding(
+                            get: { model.remoteTextString },
+                            set: { model.setRemoteTextString($0) }
+                        ),
+                        canInstall: model.canInstallSelectedPackage,
+                        canSendRemoteText: model.canSendRemoteText,
+                        deviceOperationInProgress: model.activeDeviceOperation != nil,
+                        installedAppsState: installedAppsState.forDevice(device.id),
+                        deviceToolsState: deviceToolsState.forDevice(device.id),
+                        repair: { repairingDevice = device },
+                        rename: { renamingDevice = device },
+                        chooseAPK: {
+                            isFileImporterPresented = true
+                        },
+                        install: {
+                            startInstall(for: device)
+                        },
+                        cancelInstall: cancelInstall,
+                        sendRemoteAction: { action in
+                            sendRemoteAction(action, to: device)
+                        },
+                        sendRemoteText: {
+                            sendRemoteText(to: device)
+                        },
+                        cancelRemoteOperation: cancelRemoteOperation,
+                        installUnicodeInputHelper: {
+                            installUnicodeInputHelper(on: device)
+                        },
+                        loadInstalledApps: {
+                            runInstalledAppCommand(.list, on: device)
+                        },
+                        launchInstalledApp: { package in
+                            runInstalledAppCommand(.launch(package), on: device)
+                        },
+                        uninstallInstalledApp: { package in
+                            runInstalledAppCommand(.uninstall(package), on: device)
+                        },
+                        cancelInstalledAppOperation: cancelInstalledAppOperation,
+                        loadDeviceInformation: {
+                            runDeviceTool(.information, on: device)
+                        },
+                        captureScreenshot: {
+                            runDeviceTool(.screenshot, on: device)
+                        },
+                        runShellCommand: { command in
+                            runDeviceTool(.shell(command: command), on: device)
+                        },
+                        cleanCaches: {
+                            let desiredFreeByteCount = deviceToolsState.information?
+                                .storage?.totalByteCount ?? 1_000_000_000_000
+                            runDeviceTool(
+                                .cacheCleanup(desiredFreeByteCount: desiredFreeByteCount),
+                                on: device
+                            )
+                        },
+                        cancelDeviceToolOperation: cancelDeviceToolOperation
+                    )
+                    .id(device.id)
+                } else {
+                    ContentUnavailableView("Select a Device", systemImage: "tv.and.hifispeaker.fill")
+                }
             }
         }
         .sheet(isPresented: $isAddDevicePresented) {

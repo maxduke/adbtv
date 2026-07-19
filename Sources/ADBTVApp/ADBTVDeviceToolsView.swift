@@ -232,11 +232,14 @@ struct ADBTVDeviceToolsPanel: View {
         ? "getprop ro.build.version.release"
         : ""
     @State private var isCacheCleanupConfirmationPresented = false
+    @State private var isInformationExpanded = false
+    @State private var isShellExpanded = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
-            informationSection
-            Divider()
+        VStack(alignment: .leading, spacing: 20) {
             storageManagementSection
+            Divider()
+            informationSection
             Divider()
             screenshotSection
             Divider()
@@ -339,25 +342,45 @@ struct ADBTVDeviceToolsPanel: View {
 
     private var informationSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeader(
-                "Device Information",
-                systemImage: "info.circle",
-                actionLabel: "Refresh Device Information",
-                actionImage: "arrow.clockwise",
-                action: loadInformation,
-                disabled: deviceOperationInProgress
-            )
+            HStack(spacing: 10) {
+                Button {
+                    isInformationExpanded.toggle()
+                } label: {
+                    HStack {
+                        Label("Device Information", systemImage: "info.circle")
+                            .font(.headline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .rotationEffect(.degrees(isInformationExpanded ? 90 : 0))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(isInformationExpanded ? "Expanded" : "Collapsed")
 
-            switch state.informationStatus {
-            case .loading:
-                progressRow("Loading device information")
-            case .failed(let userMessage, let diagnosticDetail):
-                failureView(userMessage, diagnosticDetail: diagnosticDetail)
-            case .idle, .ready:
-                if let information = state.information {
-                    informationContent(information)
-                } else {
-                    ContentUnavailableView("No Device Information", systemImage: "info.circle")
+                Button(action: loadInformation) {
+                    Label("Refresh Device Information", systemImage: "arrow.clockwise")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .disabled(deviceOperationInProgress)
+                .help("Refresh Device Information")
+            }
+
+            if isInformationExpanded {
+                switch state.informationStatus {
+                case .loading:
+                    progressRow("Loading device information")
+                case .failed(let userMessage, let diagnosticDetail):
+                    failureView(userMessage, diagnosticDetail: diagnosticDetail)
+                case .idle, .ready:
+                    if let information = state.information {
+                        informationContent(information)
+                    } else {
+                        ContentUnavailableView("No Device Information", systemImage: "info.circle")
+                    }
                 }
             }
         }
@@ -436,7 +459,7 @@ struct ADBTVDeviceToolsPanel: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
                 Label("Screenshot", systemImage: "photo")
-                    .font(.title2.bold())
+                    .font(.headline)
                 Spacer()
 
                 if let screenshot = state.screenshot,
@@ -462,7 +485,9 @@ struct ADBTVDeviceToolsPanel: View {
                 .help("Capture Screenshot")
             }
 
-            screenshotPreview
+            if state.screenshot != nil {
+                screenshotPreview
+            }
 
             switch state.screenshotStatus {
             case .capturing:
@@ -502,14 +527,29 @@ struct ADBTVDeviceToolsPanel: View {
 
     private var shellSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("ADB Shell", systemImage: "terminal")
-                    .font(.title2.bold())
-                Spacer()
+            HStack(spacing: 10) {
+                Button {
+                    isShellExpanded.toggle()
+                } label: {
+                    HStack {
+                        Label("ADB Shell", systemImage: "terminal")
+                            .font(.headline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .rotationEffect(.degrees(isShellExpanded ? 90 : 0))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityValue(isShellExpanded ? "Expanded" : "Collapsed")
+
                 Menu {
                     ForEach(ADBTVShellPreset.all) { preset in
                         Button {
                             shellCommand = preset.command
+                            isShellExpanded = true
                         } label: {
                             Label(preset.title, systemImage: "terminal")
                         }
@@ -522,30 +562,34 @@ struct ADBTVDeviceToolsPanel: View {
                 .help("Built-in Commands")
             }
 
-            HStack(alignment: .bottom, spacing: 10) {
-                shellCommandField
+            if isShellExpanded {
+                HStack(alignment: .bottom, spacing: 10) {
+                    shellCommandField
 
-                Button(action: runShell) {
-                    Label("Run Command", systemImage: "play.fill")
-                        .labelStyle(.iconOnly)
+                    Button(action: runShell) {
+                        Label("Run Command", systemImage: "play.fill")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        deviceOperationInProgress
+                            || shellCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+                    .help("Run Command")
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(
-                    deviceOperationInProgress
-                        || shellCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                )
-                .help("Run Command")
-            }
 
-            shellOutput
+                if state.shellResult != nil {
+                    shellOutput
+                }
 
-            switch state.shellStatus {
-            case .running:
-                progressRow("Running shell command")
-            case .failed(let userMessage, let diagnosticDetail):
-                failureView(userMessage, diagnosticDetail: diagnosticDetail)
-            case .idle, .finished:
-                EmptyView()
+                switch state.shellStatus {
+                case .running:
+                    progressRow("Running shell command")
+                case .failed(let userMessage, let diagnosticDetail):
+                    failureView(userMessage, diagnosticDetail: diagnosticDetail)
+                case .idle, .finished:
+                    EmptyView()
+                }
             }
         }
     }
@@ -602,28 +646,6 @@ struct ADBTVDeviceToolsPanel: View {
             .autocorrectionDisabled()
             .onSubmit(runShell)
 #endif
-    }
-
-    private func sectionHeader(
-        _ title: String,
-        systemImage: String,
-        actionLabel: String,
-        actionImage: String,
-        action: @escaping () -> Void,
-        disabled: Bool
-    ) -> some View {
-        HStack {
-            Label(title, systemImage: systemImage)
-                .font(.title2.bold())
-            Spacer()
-            Button(action: action) {
-                Label(actionLabel, systemImage: actionImage)
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.bordered)
-            .disabled(disabled)
-            .help(actionLabel)
-        }
     }
 
     private func progressRow(_ title: String) -> some View {
