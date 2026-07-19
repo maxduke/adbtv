@@ -1173,14 +1173,12 @@ public struct ADBTVRootView: View {
             let packageSessionCleanupError = await cleanupRecorder
                 .recordedPackageSessionCleanupError()
             if Task.isCancelled {
-                let cleanupError: String?
-                if let preparedPlan {
+                var cleanupError = packageSessionCleanupError
+                if cleanupError == nil, let preparedPlan {
                     cleanupError = await cleanupStagedPackageAfterInterruption(
                         plan: preparedPlan,
                         device: device
                     )
-                } else {
-                    cleanupError = nil
                 }
                 throw ADBTVInstallCancellationError(cleanupError: cleanupError)
             }
