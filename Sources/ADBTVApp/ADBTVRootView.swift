@@ -3120,12 +3120,12 @@ private struct DeviceDetailView: View {
     var cancelDeviceToolOperation: () -> Void
 
     @State private var selectedTool = ProcessInfo.processInfo.arguments.contains("--ui-install")
-        ? DeviceTool.install
-        : ProcessInfo.processInfo.arguments.contains("--ui-apps")
-            ? DeviceTool.apps
-            : ProcessInfo.processInfo.arguments.contains("--ui-tools")
-                ? DeviceTool.tools
-                : DeviceTool.remote
+        || ProcessInfo.processInfo.arguments.contains("--ui-apps")
+        ? DeviceTool.apps
+        : ProcessInfo.processInfo.arguments.contains("--ui-tools")
+            ? DeviceTool.tools
+            : DeviceTool.remote
+    @State private var isInstallExpanded = ProcessInfo.processInfo.arguments.contains("--ui-install")
     @State private var isFileBrowserPresented = false
 
     var body: some View {
@@ -3149,10 +3149,8 @@ private struct DeviceDetailView: View {
                 switch selectedTool {
                 case .remote:
                     remotePanel
-                case .install:
-                    installPanel
                 case .apps:
-                    installedAppsPanel
+                    appsPanel
                 case .tools:
                     deviceToolsPanel
                 }
@@ -3170,18 +3168,6 @@ private struct DeviceDetailView: View {
 #endif
     }
 
-    private var installPanel: some View {
-        APKInstallPanel(
-            installDraft: installDraft,
-            installURLString: installURLString,
-            canInstall: canInstall,
-            deviceOperationInProgress: deviceOperationInProgress,
-            chooseAPK: chooseAPK,
-            install: install,
-            cancelInstall: cancelInstall
-        )
-    }
-
     private var remotePanel: some View {
         RemoteActionsPanel(
             status: remoteStatus,
@@ -3196,19 +3182,41 @@ private struct DeviceDetailView: View {
         )
     }
 
-    private var installedAppsPanel: some View {
-        InstalledAppsPanel(
-            state: installedAppsState,
-            deviceOperationInProgress: deviceOperationInProgress,
-            refresh: loadInstalledApps,
-            installHelper: {
-                selectedTool = .install
-                installUnicodeInputHelper()
-            },
-            launch: launchInstalledApp,
-            uninstall: uninstallInstalledApp,
-            cancel: cancelInstalledAppOperation
-        )
+    private var appsPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if isInstallExpanded {
+                APKInstallPanel(
+                    installDraft: installDraft,
+                    installURLString: installURLString,
+                    canInstall: canInstall,
+                    deviceOperationInProgress: deviceOperationInProgress,
+                    chooseAPK: chooseAPK,
+                    install: install,
+                    cancelInstall: cancelInstall,
+                    close: { isInstallExpanded = false }
+                )
+                Divider()
+            }
+
+            InstalledAppsPanel(
+                state: installedAppsState,
+                deviceOperationInProgress: deviceOperationInProgress,
+                showInstaller: { isInstallExpanded = true },
+                refresh: loadInstalledApps,
+                installHelper: {
+                    isInstallExpanded = true
+                    installUnicodeInputHelper()
+                },
+                launch: launchInstalledApp,
+                uninstall: uninstallInstalledApp,
+                cancel: cancelInstalledAppOperation
+            )
+        }
+        .onChange(of: installDraft.status) { _, status in
+            if status == .succeeded {
+                loadInstalledApps()
+            }
+        }
     }
 
     private var deviceToolsPanel: some View {
@@ -3234,7 +3242,6 @@ private struct DeviceDetailView: View {
 
 private enum DeviceTool: String, CaseIterable, Identifiable {
     case remote
-    case install
     case apps
     case tools
 
@@ -3244,8 +3251,6 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
         switch self {
         case .remote:
             return "Remote"
-        case .install:
-            return "Install"
         case .apps:
             return "Apps"
         case .tools:
@@ -3258,6 +3263,7 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
 private struct InstalledAppsPanel: View {
     var state: ADBTVInstalledAppsViewState
     var deviceOperationInProgress: Bool
+    var showInstaller: () -> Void
     var refresh: () -> Void
     var installHelper: () -> Void
     var launch: (ADBTVInstalledPackage) -> Void
@@ -3271,9 +3277,16 @@ private struct InstalledAppsPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("User Apps")
+                Text("Installed Apps")
                     .font(.title2.bold())
                 Spacer()
+                Button(action: showInstaller) {
+                    Label("Install App", systemImage: "square.and.arrow.down")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .disabled(deviceOperationInProgress || state.status.isBusy)
+                .help("Install App")
                 Button(action: installHelper) {
                     Label("Install Android Helper", systemImage: "arrow.down.app")
                         .labelStyle(.iconOnly)
@@ -3675,11 +3688,22 @@ private struct APKInstallPanel: View {
     var chooseAPK: () -> Void
     var install: () -> Void
     var cancelInstall: () -> Void
+    var close: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Install APK")
-                .font(.title2.bold())
+            HStack {
+                Text("Install App")
+                    .font(.title2.bold())
+                Spacer()
+                Button(action: close) {
+                    Label("Close Installer", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .disabled(installDraft.status.isRunning)
+                .help("Close Installer")
+            }
 
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 12) {
