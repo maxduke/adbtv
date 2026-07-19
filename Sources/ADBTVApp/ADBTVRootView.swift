@@ -1635,8 +1635,10 @@ public struct ADBTVRootView: View {
             startInstalledAppDetailsLoad(packages, on: device)
         case .success(.launched(let package)):
             installedAppsState.details[package.packageName]?.isStopped = false
+            let name = installedAppsState.details[package.packageName]?.displayName
+                ?? package.packageName
             installedAppsState.status = .ready(
-                message: "Launched \(package.packageName)."
+                message: "Launched \(name)."
             )
         case .success(.stopped(let package)):
             if installedAppsState.details[package.packageName] == nil {
@@ -1650,10 +1652,12 @@ public struct ADBTVRootView: View {
                 ?? package.packageName
             installedAppsState.status = .ready(message: "Stopped \(name).")
         case .success(.uninstalled(let package)):
+            let name = installedAppsState.details[package.packageName]?.displayName
+                ?? package.packageName
             installedAppsState.packages.removeAll { $0 == package }
             installedAppsState.details.removeValue(forKey: package.packageName)
             installedAppsState.status = .ready(
-                message: "Uninstalled \(package.packageName)."
+                message: "Uninstalled \(name)."
             )
         case .failure(let userMessage, let diagnosticDetail):
             installedAppsState.status = .failed(
@@ -3647,11 +3651,11 @@ private struct InstalledAppsPanel: View {
         case .loading:
             progressLabel("Loading installed apps", cancel: cancel)
         case .launching(let package):
-            progressLabel("Launching \(package.packageName)", cancel: cancel)
+            progressLabel("Launching \(appTitle(for: package))", cancel: cancel)
         case .stopping(let package):
             progressLabel("Stopping \(appTitle(for: package))", cancel: cancel)
         case .uninstalling(let package):
-            progressLabel("Uninstalling \(package.packageName)", cancel: cancel)
+            progressLabel("Uninstalling \(appTitle(for: package))", cancel: cancel)
         case .ready(let message):
             if let message {
                 Label(message, systemImage: "checkmark.circle.fill")
@@ -3882,6 +3886,9 @@ private struct InstalledAppDetailsView: View {
                 }
             }
             .navigationTitle(details?.displayName ?? "App Details")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
