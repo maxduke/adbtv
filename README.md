@@ -70,7 +70,7 @@ Implemented so far:
 - cancellable remote reconnect/action progress with an eight-second failure bound;
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
-- searchable user-installed app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, Android TV launch, confirmed uninstall, and checked command diagnostics;
+- searchable user and system app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, Android TV launch, user-app uninstall, and checked command diagnostics;
 - structured device information for Android version, display resolution, storage, uptime, and build identity;
 - bounded binary-safe Android TV screenshots with PNG validation, preview, and native sharing;
 - bounded one-shot ADB shell commands with read-only diagnostic presets, cancellation, timeout, copyable output, and preserved exit status;

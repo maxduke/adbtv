@@ -99,6 +99,8 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 ## Installed Apps
 
 - [ ] Open **Apps** and confirm user-installed package identifiers load in sorted order without system packages.
+- [ ] Switch to **System Apps**, confirm system package identifiers replace the user list, and switch back without stale rows or metadata.
+- [ ] Open a system app and confirm Details and Launch remain available while Uninstall is absent from both the row menu and details screen.
 - [ ] Search by a partial package identifier and confirm the list filters without another device request.
 - [ ] Install the bundled Android helper from the **Apps** toolbar, confirm the Install panel exposes progress and cancellation, refresh **Apps**, and confirm names and real icons appear for Android TV and sideloaded apps.
 - [ ] Open app details and confirm version, version code, installed/updated dates, and **APK Size** are sensible; confirm APK Size is not presented as app data or cache usage.

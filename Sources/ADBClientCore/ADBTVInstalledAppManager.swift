@@ -1,5 +1,10 @@
 import Foundation
 
+public enum ADBTVInstalledAppScope: String, CaseIterable, Hashable, Sendable {
+    case user
+    case system
+}
+
 public struct ADBTVInstalledPackage: Hashable, Identifiable, Sendable {
     public var id: String { packageName }
     public let packageName: String
@@ -122,10 +127,12 @@ public struct ADBTVInstalledAppManager: Sendable {
     public init() {}
 
     public func list<Session: ADBShellCommandRunningSession>(
+        scope: ADBTVInstalledAppScope = .user,
         using session: inout Session
     ) async throws -> [ADBTVInstalledPackage] {
+        let flag = scope == .user ? "-3" : "-s"
         let invocation = try ADBCheckedShellInvocation(
-            command: ADBShellCommand("pm list packages -3")
+            command: ADBShellCommand("pm list packages \(flag)")
         )
         let output = try await session.runShellCommand(invocation.shellCommand)
         return try Self.parsePackages(invocation.validatedOutput(from: output))
@@ -167,7 +174,7 @@ public struct ADBTVInstalledAppManager: Sendable {
         for packages: [ADBTVInstalledPackage],
         using session: inout Session
     ) async -> [String: ADBTVInstalledAppDetails] {
-        // ponytail: cap helper work; raise only if real TV libraries exceed 128 user apps.
+        // ponytail: cap helper work; raise only if real TV package lists need more metadata.
         let packages = Array(packages.prefix(Self.maximumDetailsCount))
         var details: [String: ADBTVInstalledAppDetails] = [:]
 

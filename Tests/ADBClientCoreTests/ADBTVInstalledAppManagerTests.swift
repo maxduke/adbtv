@@ -26,6 +26,20 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         }
     }
 
+    func testListRequestsSystemPackages() async throws {
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("package:com.android.tv.settings\n")
+        ])
+
+        let packages = try await ADBTVInstalledAppManager().list(
+            scope: .system,
+            using: &session
+        )
+
+        XCTAssertEqual(packages.map(\.packageName), ["com.android.tv.settings"])
+        XCTAssertTrue(session.commands[0].hasPrefix("pm list packages -s; "))
+    }
+
     func testPackageNameRejectsShellMetacharacters() {
         XCTAssertThrowsError(try ADBTVInstalledPackage(packageName: "com.example;reboot")) {
             XCTAssertEqual(

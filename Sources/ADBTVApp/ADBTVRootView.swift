@@ -242,8 +242,8 @@ public struct ADBTVRootView: View {
                         installUnicodeInputHelper: {
                             installUnicodeInputHelper(on: device)
                         },
-                        loadInstalledApps: {
-                            runInstalledAppCommand(.list, on: device)
+                        loadInstalledApps: { scope in
+                            runInstalledAppCommand(.list(scope), on: device)
                         },
                         launchInstalledApp: { package in
                             runInstalledAppCommand(.launch(package), on: device)
@@ -1474,8 +1474,12 @@ public struct ADBTVRootView: View {
         if installedAppsState.deviceID != device.id {
             installedAppsState = ADBTVInstalledAppsViewState(deviceID: device.id)
         }
-        if case .list = command {
+        if case .list(let scope) = command {
             cancelInstalledAppDetailsLoad()
+            if installedAppsState.scope != scope {
+                installedAppsState.packages = []
+            }
+            installedAppsState.scope = scope
             installedAppsState.details = [:]
         }
         installedAppsState.status = command.inProgressStatus
@@ -1736,8 +1740,8 @@ public struct ADBTVRootView: View {
             let manager = ADBTVInstalledAppManager()
 
             switch command {
-            case .list:
-                return .listed(try await manager.list(using: &connection))
+            case .list(let scope):
+                return .listed(try await manager.list(scope: scope, using: &connection))
             case .launch(let package):
                 try await manager.launch(package, using: &connection)
                 return .launched(package)
@@ -2065,7 +2069,7 @@ private enum RemoteCompletion: Sendable {
 }
 
 private enum ADBTVInstalledAppCommand: Sendable {
-    case list
+    case list(ADBTVInstalledAppScope)
     case launch(ADBTVInstalledPackage)
     case uninstall(ADBTVInstalledPackage)
 
@@ -2082,8 +2086,8 @@ private enum ADBTVInstalledAppCommand: Sendable {
 
     var operationName: String {
         switch self {
-        case .list:
-            return "listInstalledApps"
+        case .list(let scope):
+            return scope == .user ? "listUserApps" : "listSystemApps"
         case .launch:
             return "launchInstalledApp"
         case .uninstall:
@@ -2138,17 +2142,20 @@ private enum ADBTVDeviceToolOperationError: Error {
 
 private struct ADBTVInstalledAppsViewState: Equatable {
     var deviceID: ADBTVDeviceSummary.ID?
+    var scope: ADBTVInstalledAppScope
     var packages: [ADBTVInstalledPackage]
     var details: [String: ADBTVInstalledAppDetails]
     var status: ADBTVInstalledAppsStatus
 
     init(
         deviceID: ADBTVDeviceSummary.ID? = nil,
+        scope: ADBTVInstalledAppScope = .user,
         packages: [ADBTVInstalledPackage] = [],
         details: [String: ADBTVInstalledAppDetails] = [:],
         status: ADBTVInstalledAppsStatus = .idle
     ) {
         self.deviceID = deviceID
+        self.scope = scope
         self.packages = packages
         self.details = details
         self.status = status
@@ -3197,7 +3204,7 @@ private struct DeviceDetailView: View {
     var sendRemoteText: () -> Void
     var cancelRemoteOperation: () -> Void
     var installUnicodeInputHelper: () -> Void
-    var loadInstalledApps: () -> Void
+    var loadInstalledApps: (ADBTVInstalledAppScope) -> Void
     var launchInstalledApp: (ADBTVInstalledPackage) -> Void
     var uninstallInstalledApp: (ADBTVInstalledPackage) -> Void
     var cancelInstalledAppOperation: () -> Void
@@ -3278,7 +3285,7 @@ private struct DeviceDetailView: View {
             state: installedAppsState,
             deviceOperationInProgress: deviceOperationInProgress,
             showInstaller: { isInstallerPresented = true },
-            refresh: loadInstalledApps,
+            load: loadInstalledApps,
             installHelper: {
                 isInstallerPresented = true
                 installUnicodeInputHelper()
@@ -3289,7 +3296,7 @@ private struct DeviceDetailView: View {
         )
         .onChange(of: installDraft.status) { _, status in
             if status == .succeeded {
-                loadInstalledApps()
+                loadInstalledApps(.user)
             }
         }
     }
@@ -3356,11 +3363,21 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
 
 }
 
+private extension ADBTVInstalledAppScope {
+    var displayTitle: String {
+        self == .user ? "User Apps" : "System Apps"
+    }
+
+    var emptyTitle: String {
+        self == .user ? "No User Apps" : "No System Apps"
+    }
+}
+
 private struct InstalledAppsPanel: View {
     var state: ADBTVInstalledAppsViewState
     var deviceOperationInProgress: Bool
     var showInstaller: () -> Void
-    var refresh: () -> Void
+    var load: (ADBTVInstalledAppScope) -> Void
     var installHelper: () -> Void
     var launch: (ADBTVInstalledPackage) -> Void
     var uninstall: (ADBTVInstalledPackage) -> Void
@@ -3390,7 +3407,7 @@ private struct InstalledAppsPanel: View {
                 .buttonStyle(.bordered)
                 .disabled(deviceOperationInProgress || state.status.isBusy)
                 .help("Add App")
-                Button(action: refresh) {
+                Button { load(state.scope) } label: {
                     Label("Refresh Apps", systemImage: "arrow.clockwise")
                         .labelStyle(.iconOnly)
                 }
@@ -3398,6 +3415,17 @@ private struct InstalledAppsPanel: View {
                 .disabled(deviceOperationInProgress || state.status.isBusy)
                 .help("Refresh Apps")
             }
+
+            Picker("App Type", selection: Binding(
+                get: { state.scope },
+                set: load
+            )) {
+                ForEach(ADBTVInstalledAppScope.allCases, id: \.self) { scope in
+                    Text(scope.displayTitle).tag(scope)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(deviceOperationInProgress || state.status.isBusy)
 
             TextField("Search apps or packages", text: $searchText)
                 .autocorrectionDisabled()
@@ -3416,15 +3444,20 @@ private struct InstalledAppsPanel: View {
                 }
             } else if !state.status.isBusy {
                 ContentUnavailableView(
-                    searchText.isEmpty ? "No User Apps" : "No Matching Apps",
+                    searchText.isEmpty ? state.scope.emptyTitle : "No Matching Apps",
                     systemImage: searchText.isEmpty ? "square.grid.2x2" : "magnifyingglass"
                 )
             }
         }
         .onAppear {
             if state.status == .idle {
-                refresh()
+                load(state.scope)
             }
+        }
+        .onChange(of: state.scope) { _, _ in
+            searchText = ""
+            pendingUninstall = nil
+            selectedPackage = nil
         }
         .confirmationDialog(
             "Uninstall app?",
@@ -3446,6 +3479,7 @@ private struct InstalledAppsPanel: View {
                 package: package,
                 details: state.details[package.packageName],
                 actionsDisabled: deviceOperationInProgress || state.status.isBusy,
+                allowsUninstall: state.scope == .user,
                 launch: launch,
                 uninstall: uninstall
             )
@@ -3537,14 +3571,16 @@ private struct InstalledAppsPanel: View {
                 }
                 .disabled(deviceOperationInProgress || state.status.isBusy)
 
-                Divider()
+                if state.scope == .user {
+                    Divider()
 
-                Button(role: .destructive) {
-                    pendingUninstall = package
-                } label: {
-                    Label("Uninstall", systemImage: "trash")
+                    Button(role: .destructive) {
+                        pendingUninstall = package
+                    } label: {
+                        Label("Uninstall", systemImage: "trash")
+                    }
+                    .disabled(deviceOperationInProgress || state.status.isBusy)
                 }
-                .disabled(deviceOperationInProgress || state.status.isBusy)
             } label: {
                 Label("Actions for \(package.packageName)", systemImage: "ellipsis")
                     .labelStyle(.iconOnly)
@@ -3573,6 +3609,7 @@ private struct InstalledAppDetailsView: View {
     var package: ADBTVInstalledPackage
     var details: ADBTVInstalledAppDetails?
     var actionsDisabled: Bool
+    var allowsUninstall: Bool
     var launch: (ADBTVInstalledPackage) -> Void
     var uninstall: (ADBTVInstalledPackage) -> Void
 
@@ -3645,12 +3682,14 @@ private struct InstalledAppDetailsView: View {
                     }
                     .disabled(actionsDisabled)
 
-                    Button(role: .destructive) {
-                        confirmsUninstall = true
-                    } label: {
-                        Label("Uninstall App", systemImage: "trash")
+                    if allowsUninstall {
+                        Button(role: .destructive) {
+                            confirmsUninstall = true
+                        } label: {
+                            Label("Uninstall App", systemImage: "trash")
+                        }
+                        .disabled(actionsDisabled)
                     }
-                    .disabled(actionsDisabled)
                 }
             }
             .navigationTitle(details?.displayName ?? "App Details")
