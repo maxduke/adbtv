@@ -44,6 +44,15 @@ public struct ADBTVAPKMExtractor: Sendable {
             }
         }
 
+        if let archiveByteCount = try? archiveURL.resourceValues(
+            forKeys: [.fileSizeKey]
+        ).fileSize,
+           Int64(archiveByteCount) > maximumUncompressedByteCount {
+            throw ADBTVAPKMExtractionError.packageTooLarge(
+                maximumByteCount: maximumUncompressedByteCount
+            )
+        }
+
         let archive: Archive
         do {
             archive = try Archive(url: archiveURL, accessMode: .read)

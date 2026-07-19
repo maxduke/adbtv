@@ -14,6 +14,7 @@ enum ADBTVTimedOperation: String, Equatable, Sendable {
     case cacheCleanup
     case apkInstallation
     case apkStagingCleanup
+    case packageSessionCleanup
 }
 
 enum ADBTVOperationTimeoutError: Error, Equatable, Sendable {
@@ -85,4 +86,5 @@ enum ADBTVOperationTimeoutPolicy {
     static let cacheCleanup = ADBTVOperationTimeout(seconds: 2 * 60)
     static let apkInstallation = ADBTVOperationTimeout(seconds: 15 * 60)
     static let apkStagingCleanup = ADBTVOperationTimeout(seconds: 45)
+    static let packageSessionCleanup = ADBTVOperationTimeout(seconds: 45)
 }

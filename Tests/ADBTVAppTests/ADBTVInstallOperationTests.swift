@@ -113,6 +113,55 @@ final class ADBTVInstallOperationTests: XCTestCase {
         ])
     }
 
+    func testInstallSelectedAPKMUsesPackageSessionAndRemovesExtractionDirectory() async throws {
+        let archiveURL = URL(fileURLWithPath: "/tmp/app.apkm")
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBTVInstallOperationTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: false)
+        let baseURL = directoryURL.appendingPathComponent("base.apk")
+        let splitURL = directoryURL.appendingPathComponent("split.apk")
+        try Data([1]).write(to: baseURL)
+        try Data([2]).write(to: splitURL)
+        let files = [
+            try ADBPackageSessionFile(fileURL: baseURL, fileName: "base.apk", byteCount: 1),
+            try ADBPackageSessionFile(fileURL: splitURL, fileName: "split_config.en.apk", byteCount: 1)
+        ]
+        let preparedAPKM = ADBTVPreparedAPKM(
+            files: files,
+            temporaryDirectoryURL: directoryURL
+        )
+        let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
+        let model = ADBTVAppModel(
+            devices: [device],
+            installDraft: ADBTVInstallDraft(
+                selectedPackage: ADBTVInstallPackageDraft(fileURL: archiveURL, byteCount: 2)
+            )
+        )
+        var connection = RecordingInstallConnection(result: .success)
+        let operation = ADBTVInstallOperation(extractAPKM: { url in
+            XCTAssertEqual(url, archiveURL)
+            return preparedAPKM
+        })
+        let eventRecorder = InstallOperationEventRecorder()
+
+        let report = try await operation.installSelectedPackage(
+            from: model,
+            using: &connection,
+            eventHandler: { event in await eventRecorder.record(event) }
+        )
+
+        XCTAssertEqual(report.result, .success)
+        XCTAssertEqual(connection.installedSessionFiles, [files])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directoryURL.path))
+        let events = await eventRecorder.recordedEvents()
+        XCTAssertEqual(events, [
+            .installer(.phaseStarted(.validatePackage)),
+            .installer(.phaseFinished(.validatePackage)),
+            .packageSession(.sessionCreated(id: 7)),
+            .packageSession(.installResult(.success))
+        ])
+    }
+
     func testInstallSelectedPackageRejectsMissingDevicePackageAndFileURL() async throws {
         let device = ADBTVDeviceSummary(displayName: "TV", host: "192.168.1.50", port: 5555)
         var connection = RecordingInstallConnection(result: .success)
@@ -188,17 +237,19 @@ final class ADBTVInstallOperationTests: XCTestCase {
     }
 }
 
-private struct RecordingInstallConnection: ADBTVAPKInstallConnection {
+private struct RecordingInstallConnection: ADBTVInstallConnection {
     var result: ADBAPKInstallResult
     private(set) var installedContents: [[UInt8]]
     private(set) var installedPlans: [ADBAPKInstallPlan]
     private(set) var modificationTimes: [UInt32]
+    private(set) var installedSessionFiles: [[ADBPackageSessionFile]]
 
     init(result: ADBAPKInstallResult) {
         self.result = result
         self.installedContents = []
         self.installedPlans = []
         self.modificationTimes = []
+        self.installedSessionFiles = []
     }
 
     mutating func installAPK(
@@ -213,6 +264,16 @@ private struct RecordingInstallConnection: ADBTVAPKInstallConnection {
         let event = ADBAPKInstallEvent.installResult(result)
         await eventHandler(event)
         return ADBAPKInstallReport(plan: plan, result: result, events: [event])
+    }
+
+    mutating func installAPKM(
+        files: [ADBPackageSessionFile],
+        eventHandler: @escaping ADBPackageSessionInstallEventHandler
+    ) async throws -> ADBAPKInstallResult {
+        installedSessionFiles.append(files)
+        await eventHandler(.sessionCreated(id: 7))
+        await eventHandler(.installResult(result))
+        return result
     }
 }
 

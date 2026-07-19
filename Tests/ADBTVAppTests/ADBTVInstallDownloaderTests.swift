@@ -57,6 +57,18 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
         XCTAssertEqual(package.fileName, "Remote App.apk")
     }
 
+    func testDownloadAcceptsSuggestedAPKMFilename() async throws {
+        StubURLProtocol.stub = StubURLResponse(
+            statusCode: 200,
+            headers: ["Content-Disposition": "attachment; filename=\"TV App.apkm\""],
+            chunks: [Data([1])]
+        )
+
+        let package = try await download()
+
+        XCTAssertEqual(package.fileName, "TV App.apkm")
+    }
+
     func testDownloadRejectsHTTPFailureAndClearlyWrongContentType() async {
         StubURLProtocol.stub = StubURLResponse(statusCode: 404, chunks: [Data([1])])
         await XCTAssertThrowsDownloadError({ try await self.download() }, .unacceptableStatusCode(404))

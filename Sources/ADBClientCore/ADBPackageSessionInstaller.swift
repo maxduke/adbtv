@@ -122,10 +122,15 @@ public struct ADBPackageSessionInstaller: Sendable {
             } else {
                 abandonError = nil
             }
+            let pendingSessionID = abandonError == nil ? nil : sessionID
             if error is CancellationError {
-                throw ADBPackageSessionInstallCancellationError(abandonError: abandonError)
+                throw ADBPackageSessionInstallCancellationError(
+                    sessionID: pendingSessionID,
+                    abandonError: abandonError
+                )
             }
             throw ADBPackageSessionInstallError.operationFailed(
+                sessionID: pendingSessionID,
                 underlyingError: String(describing: error),
                 abandonError: abandonError
             )
@@ -184,9 +189,11 @@ public struct ADBPackageSessionInstaller: Sendable {
 }
 
 public struct ADBPackageSessionInstallCancellationError: Error, Equatable, Sendable {
+    public let sessionID: Int?
     public let abandonError: String?
 
-    public init(abandonError: String?) {
+    public init(sessionID: Int?, abandonError: String?) {
+        self.sessionID = sessionID
         self.abandonError = abandonError
     }
 }
@@ -197,5 +204,5 @@ public enum ADBPackageSessionInstallError: Error, Equatable, Sendable {
     case packageSizeOverflow
     case invalidCreateOutput(String)
     case commandFailed(phase: String, fileName: String?, output: String)
-    case operationFailed(underlyingError: String, abandonError: String?)
+    case operationFailed(sessionID: Int?, underlyingError: String, abandonError: String?)
 }

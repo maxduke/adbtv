@@ -53,6 +53,29 @@ final class ADBPackageSessionInstallerTests: XCTestCase {
         ])
     }
 
+    func testRetainsSessionIDWhenAbandonFails() async throws {
+        let files = try makeFiles([("base.apk", 4)])
+        defer { files.forEach { try? FileManager.default.removeItem(at: $0.fileURL) } }
+        var session = PackageSessionRecorder(
+            outputs: [
+                ADBServiceOutput(bytes: Array("Success: created install session [9]\n".utf8)),
+                ADBServiceOutput(bytes: Array("Failure [write]\n".utf8)),
+                ADBServiceOutput(bytes: Array("Failure [abandon]\n".utf8))
+            ]
+        )
+
+        do {
+            _ = try await ADBPackageSessionInstaller().install(files: files, using: &session)
+            XCTFail("Expected split write failure")
+        } catch let error as ADBPackageSessionInstallError {
+            guard case let .operationFailed(sessionID, _, abandonError) = error else {
+                return XCTFail("Expected operationFailed, got \(error)")
+            }
+            XCTAssertEqual(sessionID, 9)
+            XCTAssertNotNil(abandonError)
+        }
+    }
+
     func testParsesCreatedSessionID() throws {
         XCTAssertEqual(
             try ADBPackageSessionInstaller.parseSessionID(

@@ -451,11 +451,11 @@ public struct ADBTVRootView: View {
     private func handlePackageSelection(_ result: Result<URL, Error>) {
         switch result {
         case .success(let url):
-            guard url.pathExtension.lowercased() == "apk" else {
+            guard ADBTVInstallPackageKind(fileName: url.lastPathComponent) != nil else {
                 model.failInstall(
-                    userMessage: "Select an APK file.",
+                    userMessage: "Select an APK or APKM file.",
                     diagnosticDetail: DiagnosticDetail(
-                        summary: "The selected file does not use the .apk extension.",
+                        summary: "The selected file does not use the .apk or .apkm extension.",
                         context: [
                             "fileName": url.lastPathComponent,
                             "source": "documentPicker"
@@ -467,7 +467,7 @@ public struct ADBTVRootView: View {
             model.selectPackage(fileURL: url, byteCount: url.adbTVFileByteCount)
         case .failure(let error):
             model.failInstall(
-                userMessage: "Could not open the selected APK.",
+                userMessage: "Could not open the selected app package.",
                 diagnosticDetail: DiagnosticDetail(
                     summary: String(describing: error),
                     context: ["source": "documentPicker"]
@@ -1130,9 +1130,9 @@ public struct ADBTVRootView: View {
         for device: ADBTVDeviceSummary,
         using installModel: ADBTVAppModel,
         eventHandler: @escaping ADBTVInstallEventHandler
-    ) async throws -> ADBAPKInstallReport {
+    ) async throws -> ADBTVInstallReport {
 #if canImport(Network) && canImport(Security)
-        let planRecorder = ADBTVPreparedInstallPlanRecorder()
+        let cleanupRecorder = ADBTVInstallCleanupRecorder()
         do {
             return try await ADBTVOperationTimeoutPolicy.apkInstallation.run(operation: .apkInstallation) {
                 let operation = ADBTVInstallOperation()
@@ -1140,17 +1140,38 @@ public struct ADBTVRootView: View {
                     from: installModel,
                     eventHandler: eventHandler
                 )
-                await planRecorder.record(package.plan)
+                defer { try? package.removeTemporaryFiles() }
+                await cleanupRecorder.record(plan: package.singleAPKPlan)
                 var connection = try await connectedDevice(for: device)
                 defer { connection.cancel() }
-                return try await operation.installPreparedPackage(
-                    package,
-                    using: &connection,
-                    eventHandler: eventHandler
-                )
+                do {
+                    return try await operation.installPreparedPackage(
+                        package,
+                        using: &connection,
+                        eventHandler: eventHandler
+                    )
+                } catch let error as ADBPackageSessionInstallCancellationError {
+                    let cleanupError = await retryPackageSessionCleanupIfNeeded(
+                        error: error,
+                        device: device
+                    )
+                    await cleanupRecorder.record(packageSessionCleanupError: cleanupError)
+                    throw ADBTVInstallCancellationError(cleanupError: cleanupError)
+                } catch let error as ADBPackageSessionInstallError {
+                    let recoveredError = await retryPackageSessionCleanupIfNeeded(
+                        error: error,
+                        device: device
+                    )
+                    throw recoveredError
+                }
             }
         } catch {
-            let preparedPlan = await planRecorder.recordedPlan()
+            if let cancellationError = error as? ADBTVInstallCancellationError {
+                throw cancellationError
+            }
+            let preparedPlan = await cleanupRecorder.recordedPlan()
+            let packageSessionCleanupError = await cleanupRecorder
+                .recordedPackageSessionCleanupError()
             if Task.isCancelled {
                 let cleanupError: String?
                 if let preparedPlan {
@@ -1163,12 +1184,15 @@ public struct ADBTVRootView: View {
                 }
                 throw ADBTVInstallCancellationError(cleanupError: cleanupError)
             }
-            if let timeoutError = error as? ADBTVOperationTimeoutError,
-               let preparedPlan {
-                if let cleanupError = await cleanupStagedPackageAfterInterruption(
-                    plan: preparedPlan,
-                    device: device
-                ) {
+            if let timeoutError = error as? ADBTVOperationTimeoutError {
+                var cleanupError = packageSessionCleanupError
+                if cleanupError == nil, let preparedPlan {
+                    cleanupError = await cleanupStagedPackageAfterInterruption(
+                        plan: preparedPlan,
+                        device: device
+                    )
+                }
+                if let cleanupError {
                     throw ADBTVInstallTimeoutCleanupError(
                         timeoutError: timeoutError,
                         cleanupError: cleanupError
@@ -1228,6 +1252,58 @@ public struct ADBTVRootView: View {
             }
         }.value
     }
+
+    private static func retryPackageSessionCleanupIfNeeded(
+        error: ADBPackageSessionInstallCancellationError,
+        device: ADBTVDeviceSummary
+    ) async -> String? {
+        guard let sessionID = error.sessionID, error.abandonError != nil else {
+            return error.abandonError
+        }
+        return await cleanupPackageSessionAfterInterruption(id: sessionID, device: device)
+    }
+
+    private static func retryPackageSessionCleanupIfNeeded(
+        error: ADBPackageSessionInstallError,
+        device: ADBTVDeviceSummary
+    ) async -> ADBPackageSessionInstallError {
+        guard case let .operationFailed(sessionID, underlyingError, abandonError) = error,
+              let sessionID,
+              abandonError != nil else {
+            return error
+        }
+        let cleanupError = await cleanupPackageSessionAfterInterruption(
+            id: sessionID,
+            device: device
+        )
+        return .operationFailed(
+            sessionID: cleanupError == nil ? nil : sessionID,
+            underlyingError: underlyingError,
+            abandonError: cleanupError
+        )
+    }
+
+    private static func cleanupPackageSessionAfterInterruption(
+        id: Int,
+        device: ADBTVDeviceSummary
+    ) async -> String? {
+        await Task.detached { () -> String? in
+            do {
+                return try await ADBTVOperationTimeoutPolicy.packageSessionCleanup.run(
+                    operation: .packageSessionCleanup
+                ) {
+                    var connection = try await connectedDevice(for: device)
+                    defer { connection.cancel() }
+                    return await ADBPackageSessionInstaller().abandon(
+                        id: id,
+                        using: &connection
+                    )
+                }
+            } catch {
+                return String(describing: error)
+            }
+        }.value
+    }
 #endif
 
     private static func installCancellationCleanupDiagnosticDetail(
@@ -1249,7 +1325,9 @@ public struct ADBTVRootView: View {
             "device": device.connectionDescription,
             "operation": "installAPK"
         ]
-        if error is ADBAPKValidationError || error is ADBTVInstallFileError {
+        if error is ADBAPKValidationError
+            || error is ADBTVInstallFileError
+            || error is ADBTVAPKMExtractionError {
             context["phase"] = "validatePackage"
         }
         if error is ADBTVInstallDownloadError {
@@ -1276,19 +1354,22 @@ public struct ADBTVRootView: View {
 
     private static func installUserMessage(for error: Error) -> String {
         if error is ADBTVOperationTimeoutError || error is ADBTVInstallTimeoutCleanupError {
-            return "APK installation timed out."
+            return "App installation timed out."
         }
         if error is ADBAPKValidationError {
             return "The selected file is not a valid APK."
         }
+        if error is ADBTVAPKMExtractionError {
+            return "The selected file is not a valid APKM bundle."
+        }
         if error is ADBTVInstallFileError {
-            return "Could not read the selected APK."
+            return "Could not read the selected app package."
         }
         if error is ADBTVInstallDownloadError {
-            return "Could not download APK."
+            return "Could not download the app package."
         }
 
-        return "Could not install APK."
+        return "Could not install the app package."
     }
 
     private func sendRemoteAction(_ action: ADBTVRemoteAction, to device: ADBTVDeviceSummary) {
@@ -1943,7 +2024,7 @@ private enum ADBTVManualDeviceError: Error {
 }
 
 private enum InstallCompletion: Sendable {
-    case success(ADBAPKInstallReport)
+    case success(ADBTVInstallReport)
     case failure(userMessage: String, diagnosticDetail: DiagnosticDetail)
     case cancelled(cleanupFailure: DiagnosticDetail?)
 }
@@ -1957,15 +2038,24 @@ private struct ADBTVInstallTimeoutCleanupError: Error, Sendable {
     var cleanupError: String
 }
 
-private actor ADBTVPreparedInstallPlanRecorder {
+private actor ADBTVInstallCleanupRecorder {
     private var plan: ADBAPKInstallPlan?
+    private var packageSessionCleanupError: String?
 
-    func record(_ plan: ADBAPKInstallPlan) {
+    func record(plan: ADBAPKInstallPlan?) {
         self.plan = plan
+    }
+
+    func record(packageSessionCleanupError: String?) {
+        self.packageSessionCleanupError = packageSessionCleanupError
     }
 
     func recordedPlan() -> ADBAPKInstallPlan? {
         plan
+    }
+
+    func recordedPackageSessionCleanupError() -> String? {
+        packageSessionCleanupError
     }
 }
 
@@ -3731,8 +3821,8 @@ private struct APKInstallPanel: View {
                 .disabled(installDraft.status.isRunning || deviceOperationInProgress)
 
             if !installURLString.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-               !installDraft.canBuildInstallPlan {
-                Label("Enter a direct HTTP or HTTPS APK URL", systemImage: "exclamationmark.triangle")
+               !installDraft.canPrepareInstallPackage {
+                Label("Enter a direct HTTP or HTTPS APK or APKM URL", systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
             }
 
@@ -3776,7 +3866,7 @@ private struct APKInstallPanel: View {
         Button {
             chooseAPK()
         } label: {
-            Label("Choose APK", systemImage: "doc.badge.plus")
+            Label("Choose Package", systemImage: "doc.badge.plus")
         }
         .buttonStyle(.bordered)
         .disabled(installDraft.status.isRunning || deviceOperationInProgress)
@@ -3836,13 +3926,13 @@ private struct InstallStatusView: View {
                         .font(.footnote.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
-                Label("Downloading APK", systemImage: "arrow.down.doc")
+                Label("Downloading package", systemImage: "arrow.down.doc")
                     .foregroundStyle(.secondary)
             }
         case .transferring(let sentByteCount, let totalByteCount):
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(value: transferFraction(sentByteCount, totalByteCount))
-                Label("Transferring APK", systemImage: "arrow.up.doc")
+                Label("Transferring package", systemImage: "arrow.up.doc")
                     .foregroundStyle(.secondary)
                 Text("\(sentByteCount) of \(totalByteCount) bytes")
                     .font(.footnote.monospacedDigit())
@@ -3882,7 +3972,7 @@ private struct InstallStatusView: View {
         case .prepareRemoteDirectory:
             return "Preparing device"
         case .transferPackage:
-            return "Transferring APK"
+            return "Transferring package"
         case .installPackage:
             return "Installing"
         case .cleanup:
