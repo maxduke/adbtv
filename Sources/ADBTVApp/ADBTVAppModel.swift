@@ -669,7 +669,7 @@ public extension ADBTVAppModel {
         ],
         installDraft: ADBTVInstallDraft(
             selectedPackage: ADBTVInstallPackageDraft(
-                fileURL: URL(fileURLWithPath: "/tmp/3.8.4-1-complete-armeabi-v7a.apk"),
+                fileURL: URL(fileURLWithPath: "/tmp/streaming-bundle.apkm"),
                 byteCount: 78_334_696
             ),
             status: .ready

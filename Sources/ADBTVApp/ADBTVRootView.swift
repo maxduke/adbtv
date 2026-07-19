@@ -3370,20 +3370,20 @@ private struct InstalledAppsPanel: View {
                 Text("Installed Apps")
                     .font(.title2.bold())
                 Spacer()
-                Button(action: showInstaller) {
-                    Label("Install App", systemImage: "square.and.arrow.down")
+                Menu {
+                    Button(action: showInstaller) {
+                        Label("Install Package", systemImage: "square.and.arrow.down")
+                    }
+                    Button(action: installHelper) {
+                        Label("Install Android Helper", systemImage: "arrow.down.app")
+                    }
+                } label: {
+                    Label("Add App", systemImage: "plus")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
                 .disabled(deviceOperationInProgress || state.status.isBusy)
-                .help("Install App")
-                Button(action: installHelper) {
-                    Label("Install Android Helper", systemImage: "arrow.down.app")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.bordered)
-                .disabled(deviceOperationInProgress || state.status.isBusy)
-                .help("Install Android Helper")
+                .help("Add App")
                 Button(action: refresh) {
                     Label("Refresh Apps", systemImage: "arrow.clockwise")
                         .labelStyle(.iconOnly)
@@ -3393,7 +3393,7 @@ private struct InstalledAppsPanel: View {
                 .help("Refresh Apps")
             }
 
-            TextField("Search packages", text: $searchText)
+            TextField("Search apps or packages", text: $searchText)
                 .autocorrectionDisabled()
 
             statusContent
@@ -3815,7 +3815,7 @@ private struct APKInstallPanel: View {
                 }
             }
 
-            TextField("https://example.com/app.apk", text: installURLString)
+            TextField("App package URL", text: installURLString)
                 .autocorrectionDisabled()
                 .textFieldStyle(.roundedBorder)
                 .disabled(installDraft.status.isRunning || deviceOperationInProgress)
@@ -3834,13 +3834,6 @@ private struct APKInstallPanel: View {
                 }
                 if let byteCount = package.byteCount {
                     LabeledContent("Size", value: Self.formattedByteCount(byteCount))
-                }
-                if let fileURL = package.fileURL {
-                    LabeledContent("Source") {
-                        Text(fileURL.lastPathComponent)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
                 }
             } else if let url = installDraft.validatedURL {
                 LabeledContent("Source") {

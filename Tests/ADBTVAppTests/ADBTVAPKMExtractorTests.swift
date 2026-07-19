@@ -53,6 +53,49 @@ final class ADBTVAPKMExtractorTests: XCTestCase {
         }
     }
 
+    func testRejectsBundleWithoutSplitAPK() throws {
+        let archiveURL = try makeArchive(entries: [
+            ("base.apk", makeADBTVTestAPK())
+        ])
+        defer { try? FileManager.default.removeItem(at: archiveURL) }
+
+        XCTAssertThrowsError(try ADBTVAPKMExtractor().extract(from: archiveURL)) { error in
+            XCTAssertEqual(error as? ADBTVAPKMExtractionError, .missingSplitAPKs)
+        }
+    }
+
+    func testRejectsUnsafeEntryPathBeforeExtraction() throws {
+        let archiveURL = try makeArchive(entries: [
+            ("base.apk", makeADBTVTestAPK()),
+            ("split.apk", makeADBTVTestAPK()),
+            ("../info.json", Array("{}".utf8))
+        ])
+        defer { try? FileManager.default.removeItem(at: archiveURL) }
+
+        XCTAssertThrowsError(try ADBTVAPKMExtractor().extract(from: archiveURL)) { error in
+            XCTAssertEqual(
+                error as? ADBTVAPKMExtractionError,
+                .unsafeEntryPath("../info.json")
+            )
+        }
+    }
+
+    func testRejectsDuplicateAPKFileNamesAcrossFolders() throws {
+        let archiveURL = try makeArchive(entries: [
+            ("first/base.apk", makeADBTVTestAPK()),
+            ("second/BASE.APK", makeADBTVTestAPK()),
+            ("split.apk", makeADBTVTestAPK())
+        ])
+        defer { try? FileManager.default.removeItem(at: archiveURL) }
+
+        XCTAssertThrowsError(try ADBTVAPKMExtractor().extract(from: archiveURL)) { error in
+            XCTAssertEqual(
+                error as? ADBTVAPKMExtractionError,
+                .duplicateAPKFileName("BASE.APK")
+            )
+        }
+    }
+
     private func makeArchive(entries: [(String, [UInt8])]) throws -> URL {
         let directoryURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
