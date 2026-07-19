@@ -22,6 +22,10 @@ let package = Package(
         .package(
             url: "https://github.com/firebase/boringSSL-SwiftPM.git",
             exact: "0.41.0"
+        ),
+        .package(
+            url: "https://github.com/weichsel/ZIPFoundation.git",
+            exact: "0.9.20"
         )
     ],
     targets: [
@@ -37,7 +41,10 @@ let package = Package(
         ),
         .target(
             name: "ADBTVApp",
-            dependencies: ["ADBClientCore"],
+            dependencies: [
+                "ADBClientCore",
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")
+            ],
             resources: [
                 .copy("Resources/OpenSourceNotices.txt")
             ]
@@ -48,7 +55,10 @@ let package = Package(
         ),
         .testTarget(
             name: "ADBTVAppTests",
-            dependencies: ["ADBTVApp"]
+            dependencies: [
+                "ADBTVApp",
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")
+            ]
         )
     ],
     cxxLanguageStandard: .cxx17

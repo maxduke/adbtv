@@ -23,5 +23,7 @@ final class ADBTVOpenSourceNoticesTests: XCTestCase {
         XCTAssertTrue(notices.contains("BoringSSL SwiftPM 0.41.0"))
         XCTAssertTrue(notices.contains("Apache License\n                           Version 2.0"))
         XCTAssertTrue(notices.contains("Licenses for support code"))
+        XCTAssertTrue(notices.contains("ZIPFoundation 0.9.20"))
+        XCTAssertTrue(notices.contains("Copyright (c) 2017-2025 Thomas Zoechling"))
     }
 }
