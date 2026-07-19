@@ -110,6 +110,12 @@ jobs:
               xcrun simctl io "$udid" screenshot \
                 "$output/$device_name-$appearance-tools-portrait.png"
               xcrun simctl terminate "$udid" com.maxduke.adbtv
+
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-files
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-files-portrait.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
             done
 
             xcrun simctl shutdown "$udid"

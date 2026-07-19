@@ -15,6 +15,7 @@ public struct ADBTVRootView: View {
 
     private let deviceStore: ADBTVDeviceStore
     private let bonjourCapability: ADBTVBonjourCapability
+    private let initiallyPresentsFileBrowser: Bool
 
     @State private var model: ADBTVAppModel
     @State private var isFileImporterPresented = false
@@ -56,6 +57,7 @@ public struct ADBTVRootView: View {
         var initialModel = ADBTVAppModel(devices: loadResult.devices)
         _ = initialModel.selectDevice(id: nil)
         self.deviceStore = deviceStore
+        self.initiallyPresentsFileBrowser = false
         self.bonjourCapability = bonjourDiscoveryAvailable.map {
             ADBTVBonjourCapability(
                 isAvailable: $0,
@@ -80,9 +82,11 @@ public struct ADBTVRootView: View {
         initiallyPresentsConnectionRepair: Bool = false,
         initiallyPresentsDeviceRename: Bool = false,
         initiallyPresentsInstalledApps: Bool = false,
-        initiallyPresentsDeviceTools: Bool = false
+        initiallyPresentsDeviceTools: Bool = false,
+        initiallyPresentsFileBrowser: Bool = false
     ) {
         self.deviceStore = deviceStore
+        self.initiallyPresentsFileBrowser = initiallyPresentsFileBrowser
         self.bonjourCapability = bonjourDiscoveryAvailable.map {
             ADBTVBonjourCapability(
                 isAvailable: $0,
@@ -188,77 +192,89 @@ public struct ADBTVRootView: View {
                 }
             }
         } detail: {
-            if let stateDevice = deviceConnectionState.device {
-                let connectionDevice = model.devices.first(where: { $0.id == stateDevice.id })
-                    ?? stateDevice
-                SavedDeviceConnectionView(
-                    device: connectionDevice,
-                    state: deviceConnectionState,
-                    retry: { selectSavedDevice(id: connectionDevice.id) },
-                    repair: { repairingDevice = connectionDevice },
-                    rename: { renamingDevice = connectionDevice }
-                )
-            } else if let device = model.selectedDevice {
-                DeviceDetailView(
-                    device: device,
-                    installDraft: model.installDraft,
-                    installURLString: Binding(
-                        get: { model.installDraft.urlString },
-                        set: { model.setInstallURLString($0) }
-                    ),
-                    remoteStatus: model.remoteStatus,
-                    remoteTextString: Binding(
-                        get: { model.remoteTextString },
-                        set: { model.setRemoteTextString($0) }
-                    ),
-                    canInstall: model.canInstallSelectedPackage,
-                    canSendRemoteText: model.canSendRemoteText,
-                    deviceOperationInProgress: model.activeDeviceOperation != nil,
-                    installedAppsState: installedAppsState.forDevice(device.id),
-                    deviceToolsState: deviceToolsState.forDevice(device.id),
-                    repair: { repairingDevice = device },
-                    rename: { renamingDevice = device },
-                    chooseAPK: {
-                        isFileImporterPresented = true
-                    },
-                    install: {
-                        startInstall(for: device)
-                    },
-                    cancelInstall: cancelInstall,
-                    sendRemoteAction: { action in
-                        sendRemoteAction(action, to: device)
-                    },
-                    sendRemoteText: {
-                        sendRemoteText(to: device)
-                    },
-                    cancelRemoteOperation: cancelRemoteOperation,
-                    installUnicodeInputHelper: {
-                        installUnicodeInputHelper(on: device)
-                    },
-                    loadInstalledApps: {
-                        runInstalledAppCommand(.list, on: device)
-                    },
-                    launchInstalledApp: { package in
-                        runInstalledAppCommand(.launch(package), on: device)
-                    },
-                    uninstallInstalledApp: { package in
-                        runInstalledAppCommand(.uninstall(package), on: device)
-                    },
-                    cancelInstalledAppOperation: cancelInstalledAppOperation,
-                    loadDeviceInformation: {
-                        runDeviceTool(.information, on: device)
-                    },
-                    captureScreenshot: {
-                        runDeviceTool(.screenshot, on: device)
-                    },
-                    runShellCommand: { command in
-                        runDeviceTool(.shell(command: command), on: device)
-                    },
-                    cancelDeviceToolOperation: cancelDeviceToolOperation
-                )
-                .id(device.id)
-            } else {
-                ContentUnavailableView("Select a Device", systemImage: "tv.and.hifispeaker.fill")
+            NavigationStack {
+                if let stateDevice = deviceConnectionState.device {
+                    let connectionDevice = model.devices.first(where: { $0.id == stateDevice.id })
+                        ?? stateDevice
+                    SavedDeviceConnectionView(
+                        device: connectionDevice,
+                        state: deviceConnectionState,
+                        retry: { selectSavedDevice(id: connectionDevice.id) },
+                        repair: { repairingDevice = connectionDevice },
+                        rename: { renamingDevice = connectionDevice }
+                    )
+                } else if let device = model.selectedDevice, initiallyPresentsFileBrowser {
+                    ADBTVFileBrowserView(device: device)
+                } else if let device = model.selectedDevice {
+                    DeviceDetailView(
+                        device: device,
+                        installDraft: model.installDraft,
+                        installURLString: Binding(
+                            get: { model.installDraft.urlString },
+                            set: { model.setInstallURLString($0) }
+                        ),
+                        remoteStatus: model.remoteStatus,
+                        remoteTextString: Binding(
+                            get: { model.remoteTextString },
+                            set: { model.setRemoteTextString($0) }
+                        ),
+                        canInstall: model.canInstallSelectedPackage,
+                        canSendRemoteText: model.canSendRemoteText,
+                        deviceOperationInProgress: model.activeDeviceOperation != nil,
+                        installedAppsState: installedAppsState.forDevice(device.id),
+                        deviceToolsState: deviceToolsState.forDevice(device.id),
+                        repair: { repairingDevice = device },
+                        rename: { renamingDevice = device },
+                        chooseAPK: {
+                            isFileImporterPresented = true
+                        },
+                        install: {
+                            startInstall(for: device)
+                        },
+                        cancelInstall: cancelInstall,
+                        sendRemoteAction: { action in
+                            sendRemoteAction(action, to: device)
+                        },
+                        sendRemoteText: {
+                            sendRemoteText(to: device)
+                        },
+                        cancelRemoteOperation: cancelRemoteOperation,
+                        installUnicodeInputHelper: {
+                            installUnicodeInputHelper(on: device)
+                        },
+                        loadInstalledApps: {
+                            runInstalledAppCommand(.list, on: device)
+                        },
+                        launchInstalledApp: { package in
+                            runInstalledAppCommand(.launch(package), on: device)
+                        },
+                        uninstallInstalledApp: { package in
+                            runInstalledAppCommand(.uninstall(package), on: device)
+                        },
+                        cancelInstalledAppOperation: cancelInstalledAppOperation,
+                        loadDeviceInformation: {
+                            runDeviceTool(.information, on: device)
+                        },
+                        captureScreenshot: {
+                            runDeviceTool(.screenshot, on: device)
+                        },
+                        runShellCommand: { command in
+                            runDeviceTool(.shell(command: command), on: device)
+                        },
+                        cleanCaches: {
+                            let desiredFreeByteCount = deviceToolsState.information?
+                                .storage?.totalByteCount ?? 1_000_000_000_000
+                            runDeviceTool(
+                                .cacheCleanup(desiredFreeByteCount: desiredFreeByteCount),
+                                on: device
+                            )
+                        },
+                        cancelDeviceToolOperation: cancelDeviceToolOperation
+                    )
+                    .id(device.id)
+                } else {
+                    ContentUnavailableView("Select a Device", systemImage: "tv.and.hifispeaker.fill")
+                }
             }
         }
         .sheet(isPresented: $isAddDevicePresented) {
@@ -1669,6 +1685,11 @@ public struct ADBTVRootView: View {
             switch operation {
             case .information:
                 return .information(try await tools.loadInformation(systemIdentity: "host::adbtv"))
+            case .cacheCleanup(let desiredFreeByteCount):
+                try await tools.trimCaches(desiredFreeByteCount: desiredFreeByteCount)
+                return .cacheCleanup(
+                    try await tools.loadInformation(systemIdentity: "host::adbtv")
+                )
             case .screenshot:
                 return .screenshot(try await tools.captureScreenshot())
             case .shell(let command):
@@ -1680,6 +1701,11 @@ public struct ADBTVRootView: View {
         case .information:
             return try await ADBTVOperationTimeoutPolicy.deviceInformation.run(
                 operation: .deviceInformation,
+                work
+            )
+        case .cacheCleanup:
+            return try await ADBTVOperationTimeoutPolicy.cacheCleanup.run(
+                operation: .cacheCleanup,
                 work
             )
         case .screenshot:
@@ -3090,6 +3116,7 @@ private struct DeviceDetailView: View {
     var loadDeviceInformation: () -> Void
     var captureScreenshot: () -> Void
     var runShellCommand: (String) -> Void
+    var cleanCaches: () -> Void
     var cancelDeviceToolOperation: () -> Void
 
     @State private var selectedTool = ProcessInfo.processInfo.arguments.contains("--ui-install")
@@ -3099,6 +3126,7 @@ private struct DeviceDetailView: View {
             : ProcessInfo.processInfo.arguments.contains("--ui-tools")
                 ? DeviceTool.tools
                 : DeviceTool.remote
+    @State private var isFileBrowserPresented = false
 
     var body: some View {
         ScrollView {
@@ -3133,6 +3161,9 @@ private struct DeviceDetailView: View {
             .padding()
         }
         .navigationTitle(device.displayName)
+        .navigationDestination(isPresented: $isFileBrowserPresented) {
+            ADBTVFileBrowserView(device: device)
+        }
 #if os(iOS)
         .navigationBarBackButtonHidden(deviceOperationInProgress)
         .navigationBarTitleDisplayMode(.inline)
@@ -3187,6 +3218,8 @@ private struct DeviceDetailView: View {
             loadInformation: loadDeviceInformation,
             captureScreenshot: captureScreenshot,
             runShellCommand: runShellCommand,
+            openFiles: { isFileBrowserPresented = true },
+            cleanCaches: cleanCaches,
             cancel: cancelDeviceToolOperation
         )
     }

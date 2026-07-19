@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-struct ADBTVAPKDocumentPicker: UIViewControllerRepresentable {
+struct ADBTVDocumentPicker: UIViewControllerRepresentable {
     typealias Completion = (Result<URL, Error>) -> Void
 
     var completion: Completion
@@ -48,4 +48,6 @@ struct ADBTVAPKDocumentPicker: UIViewControllerRepresentable {
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {}
     }
 }
+
+typealias ADBTVAPKDocumentPicker = ADBTVDocumentPicker
 #endif

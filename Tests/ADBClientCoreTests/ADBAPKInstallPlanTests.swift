@@ -100,6 +100,9 @@ final class ADBAPKInstallPlanTests: XCTestCase {
         XCTAssertThrowsError(try ADBRemotePath("/tmp").appendingPathComponent("nested/app.apk")) { error in
             XCTAssertEqual(error as? ADBRemotePathError, .pathSeparatorInComponent)
         }
+        XCTAssertThrowsError(try ADBRemotePath.sharedStorageDirectory.appendingPathComponent("..")) { error in
+            XCTAssertEqual(error as? ADBRemotePathError, .relativePathComponent)
+        }
     }
 
     func testInstallResultParsesSuccessFailureAndErrors() {

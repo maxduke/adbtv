@@ -11,12 +11,14 @@ import AppKit
 
 enum ADBTVDeviceToolOperation: Equatable, Sendable {
     case information
+    case cacheCleanup(desiredFreeByteCount: Int64)
     case screenshot
     case shell(command: String)
 
     var operationName: String {
         switch self {
         case .information: "loadDeviceInformation"
+        case .cacheCleanup: "trimAppCaches"
         case .screenshot: "captureScreenshot"
         case .shell: "runShellCommand"
         }
@@ -25,6 +27,7 @@ enum ADBTVDeviceToolOperation: Equatable, Sendable {
     var failureMessage: String {
         switch self {
         case .information: "Could not load device information."
+        case .cacheCleanup: "Could not clean app caches."
         case .screenshot: "Could not capture the TV screen."
         case .shell: "Could not run the shell command."
         }
@@ -33,6 +36,7 @@ enum ADBTVDeviceToolOperation: Equatable, Sendable {
 
 enum ADBTVDeviceToolResult: Equatable, Sendable {
     case information(ADBTVDeviceInformation)
+    case cacheCleanup(ADBTVDeviceInformation)
     case screenshot(ADBTVScreenshot)
     case shell(ADBCheckedShellResult)
 }
@@ -43,6 +47,7 @@ struct ADBTVDeviceToolsViewState: Equatable {
     var screenshot: ADBTVScreenshot?
     var shellResult: ADBCheckedShellResult?
     var informationStatus = ADBTVDeviceInformationStatus.idle
+    var cacheCleanupStatus = ADBTVCacheCleanupStatus.idle
     var screenshotStatus = ADBTVScreenshotStatus.idle
     var shellStatus = ADBTVShellStatus.idle
     var activeOperation: ADBTVDeviceToolOperation?
@@ -60,6 +65,8 @@ struct ADBTVDeviceToolsViewState: Equatable {
         switch operation {
         case .information:
             informationStatus = .loading
+        case .cacheCleanup:
+            cacheCleanupStatus = .running
         case .screenshot:
             screenshotStatus = .capturing
         case .shell:
@@ -74,6 +81,10 @@ struct ADBTVDeviceToolsViewState: Equatable {
         case .information(let value):
             information = value
             informationStatus = .ready
+        case .cacheCleanup(let value):
+            information = value
+            informationStatus = .ready
+            cacheCleanupStatus = .finished
         case .screenshot(let value):
             screenshot = value
             screenshotStatus = .ready
@@ -92,6 +103,11 @@ struct ADBTVDeviceToolsViewState: Equatable {
         switch operation {
         case .information:
             informationStatus = .failed(
+                userMessage: userMessage,
+                diagnosticDetail: diagnosticDetail
+            )
+        case .cacheCleanup:
+            cacheCleanupStatus = .failed(
                 userMessage: userMessage,
                 diagnosticDetail: diagnosticDetail
             )
@@ -116,6 +132,8 @@ struct ADBTVDeviceToolsViewState: Equatable {
         switch activeOperation {
         case .information:
             informationStatus = information == nil ? .idle : .ready
+        case .cacheCleanup:
+            cacheCleanupStatus = .idle
         case .screenshot:
             screenshotStatus = screenshot == nil ? .idle : .ready
         case .shell:
@@ -172,6 +190,13 @@ enum ADBTVScreenshotStatus: Equatable {
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 }
 
+enum ADBTVCacheCleanupStatus: Equatable {
+    case idle
+    case running
+    case finished
+    case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
+}
+
 enum ADBTVShellStatus: Equatable {
     case idle
     case running
@@ -199,13 +224,21 @@ struct ADBTVDeviceToolsPanel: View {
     var loadInformation: () -> Void
     var captureScreenshot: () -> Void
     var runShellCommand: (String) -> Void
+    var openFiles: () -> Void
+    var cleanCaches: () -> Void
     var cancel: () -> Void
 
     @State private var shellCommand = ProcessInfo.processInfo.arguments.contains("--ui-tools")
         ? "getprop ro.build.version.release"
         : ""
+    @State private var isCacheCleanupConfirmationPresented = false
+    @State private var isInformationExpanded = false
+    @State private var isShellExpanded = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 28) {
+        VStack(alignment: .leading, spacing: 20) {
+            storageManagementSection
+            Divider()
             informationSection
             Divider()
             screenshotSection
@@ -217,29 +250,140 @@ struct ADBTVDeviceToolsPanel: View {
                 loadInformation()
             }
         }
+        .alert("Clear App Caches?", isPresented: $isCacheCleanupConfirmationPresented) {
+            Button("Clear Caches", role: .destructive) { cleanCaches() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Android will remove temporary app data. Apps may load more slowly the next time they open.")
+        }
+    }
+
+    private var storageManagementSection: some View {
+        VStack(spacing: 16) {
+            filesSection
+            Divider()
+            cacheCleanupSection
+        }
+    }
+
+    private var filesSection: some View {
+        Button(action: openFiles) {
+            HStack(spacing: 12) {
+                Image(systemName: "folder.fill")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Files")
+                        .font(.headline)
+                    Text("Browse shared storage")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(deviceOperationInProgress)
+        .accessibilityHint("Opens shared storage on the Android TV")
+    }
+
+    private var cacheCleanupSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "internaldrive")
+                    .font(.title2)
+                    .foregroundStyle(.orange)
+                    .frame(width: 30)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Storage Cleanup")
+                        .font(.headline)
+                    Text("Remove temporary app caches")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+
+                if state.cacheCleanupStatus == .running {
+                    ProgressView()
+                    Button(action: cancel) {
+                        Label("Cancel Cache Cleanup", systemImage: "xmark")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                } else {
+                    Button {
+                        isCacheCleanupConfirmationPresented = true
+                    } label: {
+                        Label("Clear App Caches", systemImage: "trash")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(deviceOperationInProgress)
+                }
+            }
+
+            switch state.cacheCleanupStatus {
+            case .finished:
+                Label("App caches cleaned.", systemImage: "checkmark.circle.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.green)
+            case .failed(let userMessage, let diagnosticDetail):
+                failureView(userMessage, diagnosticDetail: diagnosticDetail)
+            case .idle, .running:
+                EmptyView()
+            }
+        }
     }
 
     private var informationSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            sectionHeader(
-                "Device Information",
-                systemImage: "info.circle",
-                actionLabel: "Refresh Device Information",
-                actionImage: "arrow.clockwise",
-                action: loadInformation,
-                disabled: deviceOperationInProgress
-            )
+            HStack(spacing: 10) {
+                Button {
+                    isInformationExpanded.toggle()
+                } label: {
+                    HStack {
+                        Label("Device Information", systemImage: "info.circle")
+                            .font(.headline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .rotationEffect(.degrees(isInformationExpanded ? 90 : 0))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(state.informationStatus == .loading)
+                .accessibilityValue(isInformationExpanded ? "Expanded" : "Collapsed")
 
-            switch state.informationStatus {
-            case .loading:
-                progressRow("Loading device information")
-            case .failed(let userMessage, let diagnosticDetail):
-                failureView(userMessage, diagnosticDetail: diagnosticDetail)
-            case .idle, .ready:
-                if let information = state.information {
-                    informationContent(information)
-                } else {
-                    ContentUnavailableView("No Device Information", systemImage: "info.circle")
+                if isInformationExpanded {
+                    Button(action: loadInformation) {
+                        Label("Refresh Device Information", systemImage: "arrow.clockwise")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(deviceOperationInProgress)
+                    .help("Refresh Device Information")
+                }
+            }
+
+            if isInformationExpanded {
+                switch state.informationStatus {
+                case .loading:
+                    progressRow("Loading device information")
+                case .failed(let userMessage, let diagnosticDetail):
+                    failureView(userMessage, diagnosticDetail: diagnosticDetail)
+                case .idle, .ready:
+                    if let information = state.information {
+                        informationContent(information)
+                    } else {
+                        ContentUnavailableView("No Device Information", systemImage: "info.circle")
+                    }
                 }
             }
         }
@@ -318,7 +462,7 @@ struct ADBTVDeviceToolsPanel: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
                 Label("Screenshot", systemImage: "photo")
-                    .font(.title2.bold())
+                    .font(.headline)
                 Spacer()
 
                 if let screenshot = state.screenshot,
@@ -344,7 +488,9 @@ struct ADBTVDeviceToolsPanel: View {
                 .help("Capture Screenshot")
             }
 
-            screenshotPreview
+            if state.screenshot != nil {
+                screenshotPreview
+            }
 
             switch state.screenshotStatus {
             case .capturing:
@@ -384,14 +530,30 @@ struct ADBTVDeviceToolsPanel: View {
 
     private var shellSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("ADB Shell", systemImage: "terminal")
-                    .font(.title2.bold())
-                Spacer()
+            HStack(spacing: 10) {
+                Button {
+                    isShellExpanded.toggle()
+                } label: {
+                    HStack {
+                        Label("ADB Shell", systemImage: "terminal")
+                            .font(.headline)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .rotationEffect(.degrees(isShellExpanded ? 90 : 0))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(state.shellStatus == .running)
+                .accessibilityValue(isShellExpanded ? "Expanded" : "Collapsed")
+
                 Menu {
                     ForEach(ADBTVShellPreset.all) { preset in
                         Button {
                             shellCommand = preset.command
+                            isShellExpanded = true
                         } label: {
                             Label(preset.title, systemImage: "terminal")
                         }
@@ -404,30 +566,34 @@ struct ADBTVDeviceToolsPanel: View {
                 .help("Built-in Commands")
             }
 
-            HStack(alignment: .bottom, spacing: 10) {
-                shellCommandField
+            if isShellExpanded {
+                HStack(alignment: .bottom, spacing: 10) {
+                    shellCommandField
 
-                Button(action: runShell) {
-                    Label("Run Command", systemImage: "play.fill")
-                        .labelStyle(.iconOnly)
+                    Button(action: runShell) {
+                        Label("Run Command", systemImage: "play.fill")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        deviceOperationInProgress
+                            || shellCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    )
+                    .help("Run Command")
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(
-                    deviceOperationInProgress
-                        || shellCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                )
-                .help("Run Command")
-            }
 
-            shellOutput
+                if state.shellResult != nil {
+                    shellOutput
+                }
 
-            switch state.shellStatus {
-            case .running:
-                progressRow("Running shell command")
-            case .failed(let userMessage, let diagnosticDetail):
-                failureView(userMessage, diagnosticDetail: diagnosticDetail)
-            case .idle, .finished:
-                EmptyView()
+                switch state.shellStatus {
+                case .running:
+                    progressRow("Running shell command")
+                case .failed(let userMessage, let diagnosticDetail):
+                    failureView(userMessage, diagnosticDetail: diagnosticDetail)
+                case .idle, .finished:
+                    EmptyView()
+                }
             }
         }
     }
@@ -484,28 +650,6 @@ struct ADBTVDeviceToolsPanel: View {
             .autocorrectionDisabled()
             .onSubmit(runShell)
 #endif
-    }
-
-    private func sectionHeader(
-        _ title: String,
-        systemImage: String,
-        actionLabel: String,
-        actionImage: String,
-        action: @escaping () -> Void,
-        disabled: Bool
-    ) -> some View {
-        HStack {
-            Label(title, systemImage: systemImage)
-                .font(.title2.bold())
-            Spacer()
-            Button(action: action) {
-                Label(actionLabel, systemImage: actionImage)
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.bordered)
-            .disabled(disabled)
-            .help(actionLabel)
-        }
     }
 
     private func progressRow(_ title: String) -> some View {

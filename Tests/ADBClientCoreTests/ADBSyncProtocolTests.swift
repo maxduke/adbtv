@@ -2,6 +2,19 @@ import XCTest
 @testable import ADBClientCore
 
 final class ADBSyncProtocolTests: XCTestCase {
+    func testListAndReceiveRequestsEncodePath() throws {
+        let path = try ADBRemotePath("/sdcard/Download")
+
+        let list = try ADBSyncFrame.listV1(path: path).encoded()
+        let receive = try ADBSyncFrame.receiveV1(path: path).encoded()
+
+        XCTAssertEqual(Array(list[0 ..< 4]), Array("LIST".utf8))
+        XCTAssertEqual(Array(receive[0 ..< 4]), Array("RECV".utf8))
+        XCTAssertEqual(list.readLittleEndianUInt32(at: 4), UInt32(path.rawValue.utf8.count))
+        XCTAssertEqual(Array(list.dropFirst(8)), Array(path.rawValue.utf8))
+        XCTAssertEqual(Array(receive.dropFirst(8)), Array(path.rawValue.utf8))
+    }
+
     func testSendV1FrameEncodesPathAndDecimalMode() throws {
         let path = try ADBRemotePath("/data/local/tmp/adbtv/app.apk")
         let frame = try ADBSyncFrame.sendV1(path: path)
@@ -95,6 +108,103 @@ final class ADBSyncProtocolTests: XCTestCase {
 
         XCTAssertThrowsError(try decoder.append(try ADBSyncFrame.quit().encoded())) { error in
             XCTAssertEqual(error as? ADBSyncFramingError, .unexpectedResponseID(.quit))
+        }
+    }
+
+    func testDirectoryDecoderHandlesFragmentedEntriesAndDone() throws {
+        let name = Array("Movies".utf8)
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.directoryEntryV1.rawValue)
+        bytes.appendLittleEndian(0o040755)
+        bytes.appendLittleEndian(4_096)
+        bytes.appendLittleEndian(1_700_000_000)
+        bytes.appendLittleEndian(UInt32(name.count))
+        bytes.append(contentsOf: name)
+        bytes.appendLittleEndian(ADBSyncID.done.rawValue)
+        bytes.append(contentsOf: repeatElement(0, count: 16))
+        var decoder = ADBSyncDirectoryResponseDecoder()
+
+        XCTAssertEqual(try decoder.append(Array(bytes.prefix(7))), [])
+        XCTAssertEqual(try decoder.append(Array(bytes.dropFirst(7))), [
+            .entry(ADBSyncDirectoryEntry(
+                name: "Movies",
+                mode: ADBSyncFileMode(rawValue: 0o040755),
+                byteCount: 4_096,
+                modificationTime: 1_700_000_000
+            )),
+            .done
+        ])
+    }
+
+    func testDirectoryDecoderWaitsForCompleteDoneRecord() throws {
+        var decoder = ADBSyncDirectoryResponseDecoder()
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.done.rawValue)
+        bytes.append(contentsOf: repeatElement(0, count: 16))
+
+        XCTAssertEqual(try decoder.append(Array(bytes.prefix(4))), [])
+        XCTAssertEqual(try decoder.append(Array(bytes.dropFirst(4))), [.done])
+    }
+
+    func testDirectoryDecoderRejectsPathSeparators() throws {
+        let name = Array("../private".utf8)
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.directoryEntryV1.rawValue)
+        bytes.appendLittleEndian(0o100644)
+        bytes.appendLittleEndian(0)
+        bytes.appendLittleEndian(0)
+        bytes.appendLittleEndian(UInt32(name.count))
+        bytes.append(contentsOf: name)
+        var decoder = ADBSyncDirectoryResponseDecoder()
+
+        XCTAssertThrowsError(try decoder.append(bytes)) { error in
+            XCTAssertEqual(error as? ADBSyncFramingError, .invalidDirectoryEntryName)
+        }
+    }
+
+    func testDirectoryDecoderRejectsInvalidUTF8Names() throws {
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.directoryEntryV1.rawValue)
+        bytes.appendLittleEndian(0o100644)
+        bytes.appendLittleEndian(0)
+        bytes.appendLittleEndian(0)
+        bytes.appendLittleEndian(1)
+        bytes.append(0xff)
+        var decoder = ADBSyncDirectoryResponseDecoder()
+
+        XCTAssertThrowsError(try decoder.append(bytes)) { error in
+            XCTAssertEqual(error as? ADBSyncFramingError, .invalidDirectoryEntryName)
+        }
+    }
+
+    func testPullDecoderHandlesFragmentedDataAndDone() throws {
+        let payload = Array("video".utf8)
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.data.rawValue)
+        bytes.appendLittleEndian(UInt32(payload.count))
+        bytes.append(contentsOf: payload)
+        bytes.appendLittleEndian(ADBSyncID.done.rawValue)
+        bytes.appendLittleEndian(0)
+        var decoder = ADBSyncPullResponseDecoder()
+
+        XCTAssertEqual(try decoder.append(Array(bytes.prefix(10))), [])
+        XCTAssertEqual(try decoder.append(Array(bytes.dropFirst(10))), [
+            .data(payload),
+            .done
+        ])
+    }
+
+    func testPullDecoderRejectsOversizedDataFrame() throws {
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.data.rawValue)
+        bytes.appendLittleEndian(UInt32(ADBSyncFrame.maxDataByteCount + 1))
+        var decoder = ADBSyncPullResponseDecoder()
+
+        XCTAssertThrowsError(try decoder.append(bytes)) { error in
+            XCTAssertEqual(
+                error as? ADBSyncFramingError,
+                .dataPayloadTooLarge(ADBSyncFrame.maxDataByteCount + 1)
+            )
         }
     }
 }
