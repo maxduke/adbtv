@@ -111,6 +111,9 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Test a TV with a large third-party app library and confirm bounded metadata loading does not block package actions or navigation.
 - [ ] Launch an Android TV app and confirm its Leanback activity opens.
 - [ ] Launch a phone-style app without a Leanback activity and confirm the standard launcher fallback opens it, or a clear error with Technical Details appears.
+- [ ] Force stop a user app from its row menu, confirm playback and background activity stop without removing app data, then launch it again.
+- [ ] Open a system app's details, confirm Force Stop requires the stronger system warning, and cancel without affecting the TV.
+- [ ] Force stop a disposable system app from details, confirm the operation is bounded, and confirm Android can launch or restart it afterward.
 - [ ] Cancel the uninstall confirmation and confirm the package remains installed.
 - [ ] Confirm uninstall for a disposable package, verify its app data is removed, and confirm the row disappears.
 - [ ] Refresh after installing an app outside ADB TV and confirm the new package appears.
@@ -152,6 +155,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Capture a screenshot and confirm its orientation, dimensions, colors, and visible TV content are correct.
 - [ ] Use Share to save the captured screenshot to Files and Photos; confirm both copies open correctly.
 - [ ] Capture a second screenshot and confirm the preview replaces the first without retaining history.
+- [ ] Open DRM-protected content, capture a screenshot, and confirm a protected-content/device-blocked message appears with Technical Details instead of `invalidScreenshotPNG` as the user-facing error.
 - [ ] Run `getprop ro.build.version.release` and confirm the output and exit code are shown.
 - [ ] Run a command that exits nonzero and confirm its output and nonzero exit code remain visible without being reported as success.
 - [ ] Run a command that produces no output and confirm the completed state remains understandable.

@@ -105,6 +105,12 @@ jobs:
                 "$output/$device_name-$appearance-apps-portrait.png"
               xcrun simctl terminate "$udid" com.maxduke.adbtv
 
+              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-apps --ui-app-details
+              sleep 2
+              xcrun simctl io "$udid" screenshot \
+                "$output/$device_name-$appearance-app-details-portrait.png"
+              xcrun simctl terminate "$udid" com.maxduke.adbtv
+
               xcrun simctl launch "$udid" com.maxduke.adbtv --ui-tools
               sleep 2
               xcrun simctl io "$udid" screenshot \
