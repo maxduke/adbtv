@@ -514,7 +514,7 @@ struct ADBTVFileBrowserView: View {
 }
 
 private extension ADBTVFileBrowserView {
-    fileprivate static func contents(
+    static func contents(
         of directory: ADBSharedStoragePath,
         on device: ADBTVDeviceSummary
     ) async throws -> [ADBSharedStorageItem] {

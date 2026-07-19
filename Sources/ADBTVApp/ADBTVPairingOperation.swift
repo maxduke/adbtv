@@ -11,7 +11,9 @@ public struct ADBTVPairingOperation: Sendable {
     private let pair: Pair
 
     public init() {
-        self.pair = Self.pairUsingSystemClient
+        self.pair = { target, secret in
+            try await Self.pairUsingSystemClient(target: target, secret: secret)
+        }
     }
 
     public init(pair: @escaping Pair) {

@@ -1858,7 +1858,7 @@ public struct ADBTVRootView: View {
     ) async throws -> ADBTVDeviceToolResult {
 #if canImport(Network) && canImport(Security)
         let work: @Sendable () async throws -> ADBTVDeviceToolResult = {
-            var connection = try await connectedDevice(for: device)
+            let connection = try await connectedDevice(for: device)
             defer { connection.cancel() }
             var tools = ADBTVDeviceTools(session: connection)
 
