@@ -246,11 +246,12 @@ public struct ADBSyncDirectoryResponseDecoder: Sendable {
                     return responses
                 }
                 let nameBytes = buffer[Self.entryHeaderByteCount ..< responseByteCount]
-                guard !nameBytes.contains(0), !nameBytes.contains(47) else {
+                guard !nameBytes.contains(0), !nameBytes.contains(47),
+                      let name = String(bytes: nameBytes, encoding: .utf8) else {
                     throw ADBSyncFramingError.invalidDirectoryEntryName
                 }
                 responses.append(.entry(ADBSyncDirectoryEntry(
-                    name: String(decoding: nameBytes, as: UTF8.self),
+                    name: name,
                     mode: ADBSyncFileMode(rawValue: buffer.readLittleEndianUInt32(at: 4)),
                     byteCount: buffer.readLittleEndianUInt32(at: 8),
                     modificationTime: buffer.readLittleEndianUInt32(at: 12)

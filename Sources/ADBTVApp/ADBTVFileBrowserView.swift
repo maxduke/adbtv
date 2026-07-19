@@ -239,13 +239,13 @@ struct ADBTVFileBrowserView: View {
                 Spacer()
                 Button {
                     operationTask?.cancel()
-                    operationTask = nil
-                    self.transfer = nil
+                    self.transfer?.title = "Cancelling"
                 } label: {
                     Label("Cancel", systemImage: "xmark")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
+                .disabled(operationTask?.isCancelled == true)
             }
             if let fraction = transfer.fractionCompleted {
                 ProgressView(value: fraction)
@@ -258,7 +258,9 @@ struct ADBTVFileBrowserView: View {
         .overlay(alignment: .top) { Divider() }
     }
 
-    private var isBusy: Bool { operationTask != nil }
+    private var isBusy: Bool {
+        operationTask != nil || status == .loading
+    }
 
     private var renamePromptBinding: Binding<Bool> {
         Binding(

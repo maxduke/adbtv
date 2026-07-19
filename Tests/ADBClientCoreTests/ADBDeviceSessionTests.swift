@@ -429,6 +429,43 @@ final class ADBDeviceSessionTests: XCTestCase {
         XCTAssertEqual(events.last, .completed)
     }
 
+    func testStreamingPushStopsAfterEarlyRemoteFailure() async throws {
+        let remotePath = try ADBRemotePath("/sdcard/Download/video.txt")
+        let contents = Array(repeating: UInt8(7), count: ADBSyncFrame.maxDataByteCount + 1)
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try Data(contents).write(to: source)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let plan = try ADBSyncPushPlan(remotePath: remotePath, totalByteCount: contents.count)
+        let message = Array("permission denied".utf8)
+        let failure = try ADBSyncFrame(
+            id: .fail,
+            value: UInt32(message.count),
+            payload: message
+        ).encoded()
+        let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
+            writeChunkCount: 1,
+            responsePayload: failure,
+            coalesceResponseWithFinalWriteAcknowledgement: true,
+            closeAfterResponse: true
+        ))
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState(maxData: 1024))),
+            transport: transport
+        )
+
+        do {
+            _ = try await session.pushFile(from: source, plan: plan)
+            XCTFail("Expected the remote failure.")
+        } catch let error as ADBSyncTransferError {
+            XCTAssertEqual(error, .remoteFailure("permission denied"))
+        }
+        let sentPackets = try await transport.sentChunks().map { try $0.decodedPacket() }
+        let transferPayloads = sentPackets.filter { $0.command == .write }.map(\.payload)
+
+        XCTAssertEqual(transferPayloads, [try ADBSyncFrame.sendV1(path: remotePath).encoded()])
+    }
+
     func testTransportSessionOutputExtractsConnectedDeviceAndFinishedShellOutput() throws {
         let connectedOutput = try ADBTransportSessionOutput(driverOutput: ADBClientDriverOutput(
             actions: [

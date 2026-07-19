@@ -358,6 +358,7 @@ struct ADBTVDeviceToolsPanel: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(state.informationStatus == .loading)
                 .accessibilityValue(isInformationExpanded ? "Expanded" : "Collapsed")
 
                 if isInformationExpanded {
@@ -545,6 +546,7 @@ struct ADBTVDeviceToolsPanel: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .disabled(state.shellStatus == .running)
                 .accessibilityValue(isShellExpanded ? "Expanded" : "Collapsed")
 
                 Menu {

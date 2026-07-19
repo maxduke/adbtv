@@ -137,6 +137,9 @@ public struct ADBDeviceSession: Sendable {
                 events.append(event)
                 await eventHandler(event)
             }
+            if case .fail? = bufferedResponse {
+                break
+            }
         }
 
         let response: ADBSyncResponse
@@ -332,6 +335,9 @@ public struct ADBDeviceSession: Sendable {
                             localID: localID,
                             decoder: &responseDecoder
                         )
+                    }
+                    if case .fail(let message)? = bufferedResponse {
+                        throw ADBSyncTransferError.remoteFailure(message)
                     }
                     pendingBytes.removeAll(keepingCapacity: true)
                     if sentByteCount > reportedByteCount {

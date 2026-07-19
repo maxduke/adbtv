@@ -162,6 +162,21 @@ final class ADBSyncProtocolTests: XCTestCase {
         }
     }
 
+    func testDirectoryDecoderRejectsInvalidUTF8Names() throws {
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.directoryEntryV1.rawValue)
+        bytes.appendLittleEndian(0o100644)
+        bytes.appendLittleEndian(0)
+        bytes.appendLittleEndian(0)
+        bytes.appendLittleEndian(1)
+        bytes.append(0xff)
+        var decoder = ADBSyncDirectoryResponseDecoder()
+
+        XCTAssertThrowsError(try decoder.append(bytes)) { error in
+            XCTAssertEqual(error as? ADBSyncFramingError, .invalidDirectoryEntryName)
+        }
+    }
+
     func testPullDecoderHandlesFragmentedDataAndDone() throws {
         let payload = Array("video".utf8)
         var bytes: [UInt8] = []
