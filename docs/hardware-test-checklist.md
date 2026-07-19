@@ -118,13 +118,16 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] After an operation fails because the TV is offline, return to the device list and confirm the same saved device can be opened again.
 - [ ] Start an Apps operation and confirm back navigation, device switching, Remote, Install, rename, and connection updates stay unavailable until it completes.
 
-## APK Installation
+## App Installation
 
 - [ ] Install a known-good signed single APK selected from Files.
+- [ ] Install a known-good APKM containing a base APK and device-compatible splits from Files, then launch the installed app.
+- [ ] Install a known-good APKM from a direct HTTPS URL.
 - [ ] Observe determinate byte progress during a known-length URL download and ADB transfer.
 - [ ] Download from a server without `Content-Length` and confirm indeterminate progress shows received bytes.
 - [ ] Cancel during download or transfer, confirm **Cancelling and cleaning up** appears before **Installation cancelled**, then retry the same source successfully.
 - [ ] Make the TV unreachable during cancellation cleanup and confirm the operation ends with cleanup-specific Technical Details.
+- [ ] Cancel an APKM transfer, retry it immediately, and confirm the retry succeeds without a conflicting or abandoned Package Manager session.
 - [ ] Install the same package again and confirm replacement succeeds.
 - [ ] Install a known-good APK from a direct HTTPS URL.
 - [ ] Enter an HTTP URL and confirm the insecure-transport warning appears before install.
@@ -133,9 +136,12 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Install from a local HTTP server when local-network permission is granted.
 - [ ] Return an HTTP error or HTML response from an APK URL and confirm download-specific Diagnostic Detail appears before the app connects to the TV.
 - [ ] Attempt a package advertised above 512 MiB and confirm it is rejected before buffering or connecting to the TV.
-- [ ] Select a renamed non-APK file and confirm validation fails before transfer.
+- [ ] Select a file other than APK or APKM and confirm validation fails before transfer.
+- [ ] Select malformed APKM bundles with a missing base APK, no split APK, or an invalid contained APK and confirm each is rejected before connecting to the TV.
+- [ ] Install an APKM with splits incompatible with the TV and confirm Package Manager detail is shown without partially replacing the installed app.
 - [ ] Test an invalid signature or incompatible APK and confirm Package Manager detail is shown.
 - [ ] Confirm each attempt uses a distinct UUID-named temporary APK and that its exact path is removed after success and failure.
+- [ ] Confirm APKM installation does not create files under `/data/local/tmp/adbtv` and that cancellation or failure does not block a later install.
 - [ ] Confirm no persistent install-history screen or record is created.
 
 ## Device Tools

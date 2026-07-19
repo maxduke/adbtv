@@ -25,7 +25,7 @@ Current direction:
 - target-bound device operations that prevent cross-device status or endpoint confusion;
 - synced ADB identity through iCloud Keychain;
 - structured actions instead of raw shell in the first version;
-- APK installation from Files or HTTP/HTTPS URL.
+- APK and APKM installation from Files or HTTP/HTTPS URL.
 
 Implemented so far:
 
@@ -34,15 +34,17 @@ Implemented so far:
 - checked saved-device reconnect before Remote or Install tools are shown, with a bounded retry surface for unreachable TVs;
 - verified connection repair for unreachable saved devices, with atomic endpoint replacement and duplicate protection;
 - resilient Device Library loading that preserves legacy records, recovers valid entries from partial corruption, and reports rejected data without rewriting it;
-- APK source selection from the iOS Files picker;
-- APK source entry from a direct HTTP or HTTPS URL;
-- an explicit insecure-transport warning for HTTP APK sources;
+- APK or APKM source selection from the iOS Files picker;
+- APK or APKM source entry from a direct HTTP or HTTPS URL;
+- an explicit insecure-transport warning for HTTP app-package sources;
 - ordered URL download progress with known-length and indeterminate presentation;
 - bounded 512 MiB package loading for URL and Files sources, with response validation;
 - redirect-aware APK downloads that reject unsupported schemes and HTTPS-to-HTTP transport downgrades;
 - structural APK validation as a ZIP archive containing a root `AndroidManifest.xml` before transfer;
 - package preparation and validation before opening the Android TV connection;
 - single-APK install orchestration through the native ADB client;
+- bounded APKM extraction with safe paths, structural validation of every APK, and temporary-file cleanup;
+- atomic APKM split installation through Android Package Manager sessions, with cancellation-safe session abandonment and no remote staging files;
 - live URL download and acknowledged APK transfer progress with byte counts in the install UI;
 - lazy ADB sync framing with at most one 1 MiB transfer batch beyond the selected APK in memory;
 - explicit APK-install cancellation that retains operation ownership through bounded fresh-connection staging cleanup, with cleanup failures exposed before same-source retry;
