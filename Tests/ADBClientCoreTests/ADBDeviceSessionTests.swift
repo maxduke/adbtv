@@ -343,7 +343,7 @@ final class ADBDeviceSessionTests: XCTestCase {
         let response = syncDirectoryEntry(name: ".", mode: 0o040755)
             + syncDirectoryEntry(name: "Movies", mode: 0o040755, size: 4_096)
             + syncDirectoryEntry(name: "video.mp4", mode: 0o100644, size: 42)
-            + syncDoneResponse()
+            + syncDirectoryDoneResponse()
         let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
             writeChunkCount: 1,
             responsePayload: response,
@@ -367,7 +367,7 @@ final class ADBDeviceSessionTests: XCTestCase {
     func testPullFileStreamsResponsesToDisk() async throws {
         let remotePath = try ADBRemotePath("/sdcard/Download/video.txt")
         let contents = Array("streamed file".utf8)
-        let response = try ADBSyncFrame.data(contents).encoded() + syncDoneResponse()
+        let response = try ADBSyncFrame.data(contents).encoded() + syncTransferDoneResponse()
         let transport = InMemoryADBByteTransport(inboundChunks: try syncPushInboundChunks(
             writeChunkCount: 1,
             responsePayload: response,
@@ -525,9 +525,17 @@ final class ADBDeviceSessionTests: XCTestCase {
         return bytes
     }
 
-    private func syncDoneResponse() -> [UInt8] {
+    private func syncDirectoryDoneResponse() -> [UInt8] {
         var bytes: [UInt8] = []
         bytes.appendLittleEndian(ADBSyncID.done.rawValue)
+        bytes.append(contentsOf: repeatElement(0, count: 16))
+        return bytes
+    }
+
+    private func syncTransferDoneResponse() -> [UInt8] {
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.done.rawValue)
+        bytes.appendLittleEndian(0)
         return bytes
     }
 }

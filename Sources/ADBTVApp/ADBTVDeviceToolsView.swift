@@ -360,13 +360,15 @@ struct ADBTVDeviceToolsPanel: View {
                 .buttonStyle(.plain)
                 .accessibilityValue(isInformationExpanded ? "Expanded" : "Collapsed")
 
-                Button(action: loadInformation) {
-                    Label("Refresh Device Information", systemImage: "arrow.clockwise")
-                        .labelStyle(.iconOnly)
+                if isInformationExpanded {
+                    Button(action: loadInformation) {
+                        Label("Refresh Device Information", systemImage: "arrow.clockwise")
+                            .labelStyle(.iconOnly)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(deviceOperationInProgress)
+                    .help("Refresh Device Information")
                 }
-                .buttonStyle(.bordered)
-                .disabled(deviceOperationInProgress)
-                .help("Refresh Device Information")
             }
 
             if isInformationExpanded {

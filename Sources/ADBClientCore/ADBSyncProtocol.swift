@@ -258,7 +258,10 @@ public struct ADBSyncDirectoryResponseDecoder: Sendable {
                 buffer.removeFirst(responseByteCount)
 
             case .done:
-                buffer.removeFirst(4)
+                guard buffer.count >= Self.entryHeaderByteCount else {
+                    return responses
+                }
+                buffer.removeFirst(Self.entryHeaderByteCount)
                 responses.append(.done)
 
             case .fail:
@@ -337,7 +340,10 @@ public struct ADBSyncPullResponseDecoder: Sendable {
                 buffer.removeFirst(responseByteCount)
 
             case .done:
-                buffer.removeFirst(4)
+                guard buffer.count >= ADBSyncFrame.headerLength else {
+                    return responses
+                }
+                buffer.removeFirst(ADBSyncFrame.headerLength)
                 responses.append(.done)
 
             case .fail:

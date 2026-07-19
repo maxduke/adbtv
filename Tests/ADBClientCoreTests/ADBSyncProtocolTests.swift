@@ -121,6 +121,7 @@ final class ADBSyncProtocolTests: XCTestCase {
         bytes.appendLittleEndian(UInt32(name.count))
         bytes.append(contentsOf: name)
         bytes.appendLittleEndian(ADBSyncID.done.rawValue)
+        bytes.append(contentsOf: repeatElement(0, count: 16))
         var decoder = ADBSyncDirectoryResponseDecoder()
 
         XCTAssertEqual(try decoder.append(Array(bytes.prefix(7))), [])
@@ -133,6 +134,16 @@ final class ADBSyncProtocolTests: XCTestCase {
             )),
             .done
         ])
+    }
+
+    func testDirectoryDecoderWaitsForCompleteDoneRecord() throws {
+        var decoder = ADBSyncDirectoryResponseDecoder()
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.done.rawValue)
+        bytes.append(contentsOf: repeatElement(0, count: 16))
+
+        XCTAssertEqual(try decoder.append(Array(bytes.prefix(4))), [])
+        XCTAssertEqual(try decoder.append(Array(bytes.dropFirst(4))), [.done])
     }
 
     func testDirectoryDecoderRejectsPathSeparators() throws {
@@ -158,6 +169,7 @@ final class ADBSyncProtocolTests: XCTestCase {
         bytes.appendLittleEndian(UInt32(payload.count))
         bytes.append(contentsOf: payload)
         bytes.appendLittleEndian(ADBSyncID.done.rawValue)
+        bytes.appendLittleEndian(0)
         var decoder = ADBSyncPullResponseDecoder()
 
         XCTAssertEqual(try decoder.append(Array(bytes.prefix(10))), [])
