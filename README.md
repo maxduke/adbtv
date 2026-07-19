@@ -4,7 +4,7 @@ ADB TV is a native SwiftUI iOS app for managing Android TV devices over Wireless
 
 ## Status
 
-Version [0.6.2](https://github.com/maxduke/adbtv/releases/tag/v0.6.2) is the current release with the following Swift package and native SwiftUI iOS app features:
+Version 0.7.0 is in validation. The current public release is [0.6.2](https://github.com/maxduke/adbtv/releases/tag/v0.6.2). The project includes the following Swift package and native SwiftUI iOS app features:
 
 - `ADBClientCore`: native ADB packet, stream, shell, sync, remote-control, and APK install foundations.
 - `ADBTVApp`: SwiftUI app shell for saved devices, APK install sources, install state, and Android TV remote actions.
@@ -38,15 +38,16 @@ Implemented so far:
 - APK or APKM source entry from a direct HTTP or HTTPS URL;
 - an explicit insecure-transport warning for HTTP app-package sources;
 - ordered URL download progress with known-length and indeterminate presentation;
-- bounded 512 MiB package loading for URL and Files sources, with response validation;
+- bounded 512 MiB file-backed package staging for URL and Files sources, with response validation;
 - redirect-aware APK downloads that reject unsupported schemes and HTTPS-to-HTTP transport downgrades;
-- structural APK validation as a ZIP archive containing a root `AndroidManifest.xml` before transfer;
+- mapped structural APK validation as a ZIP archive containing a root `AndroidManifest.xml` before transfer;
 - package preparation and validation before opening the Android TV connection;
 - single-APK install orchestration through the native ADB client;
 - bounded APKM extraction with safe paths, structural validation of every APK, and temporary-file cleanup;
 - atomic APKM split installation through Android Package Manager sessions, with cancellation-safe session abandonment and no remote staging files;
 - live URL download and acknowledged APK transfer progress with byte counts in the install UI;
-- lazy ADB sync framing with at most one 1 MiB transfer batch beyond the selected APK in memory;
+- file-backed single-APK transfer with at most one ADB sync frame and one 1 MiB transport batch in memory;
+- owned local package staging with cleanup after validation, success, failure, cancellation, or timeout;
 - explicit APK-install cancellation that retains operation ownership through bounded fresh-connection staging cleanup, with cleanup failures exposed before same-source retry;
 - operation-unique remote staging with checked removal and cleanup failures preserved in technical diagnostics;
 - single active install or remote operation, bound to its originating device until completion or cancellation;

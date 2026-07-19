@@ -133,6 +133,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Install a known-good APKM from a direct HTTPS URL.
 - [ ] Observe determinate byte progress during a known-length URL download and ADB transfer.
 - [ ] Download from a server without `Content-Length` and confirm indeterminate progress shows received bytes.
+- [ ] Install a large APK from Files and from a direct URL; confirm progress remains responsive and iOS does not terminate ADB TV for memory pressure.
 - [ ] Cancel during download or transfer, confirm **Cancelling and cleaning up** appears before **Installation cancelled**, then retry the same source successfully.
 - [ ] Make the TV unreachable during cancellation cleanup and confirm the operation ends with cleanup-specific Technical Details.
 - [ ] Cancel an APKM transfer, retry it immediately, and confirm the retry succeeds without a conflicting or abandoned Package Manager session.
@@ -149,6 +150,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Install an APKM with splits incompatible with the TV and confirm Package Manager detail is shown without partially replacing the installed app.
 - [ ] Test an invalid signature or incompatible APK and confirm Package Manager detail is shown.
 - [ ] Confirm each attempt uses a distinct UUID-named temporary APK and that its exact path is removed after success and failure.
+- [ ] Complete, fail, and cancel separate single-APK attempts; confirm each can immediately retry and no staged APK remains under `/data/local/tmp/adbtv`.
 - [ ] Confirm APKM installation does not create files under `/data/local/tmp/adbtv` and that cancellation or failure does not block a later install.
 - [ ] Confirm no persistent install-history screen or record is created.
 
