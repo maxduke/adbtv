@@ -104,6 +104,92 @@ public struct ADBDeviceSession: Sendable {
         }
     }
 
+    public mutating func runService(
+        _ service: String,
+        inputFrom fileURL: URL,
+        inputByteCount: Int64,
+        maximumOutputByteCount: Int,
+        progressHandler: @escaping @Sendable (Int64) async -> Void = { _ in }
+    ) async throws -> ADBServiceOutput {
+        guard !service.isEmpty else {
+            throw ADBDeviceSessionError.emptyService
+        }
+        guard !service.utf8.contains(0) else {
+            throw ADBDeviceSessionError.serviceContainsNullByte
+        }
+        guard inputByteCount >= 0 else {
+            throw ADBDeviceSessionError.invalidServiceInputByteCount(inputByteCount)
+        }
+        guard maximumOutputByteCount > 0 else {
+            throw ADBDeviceSessionError.invalidMaximumOutputByteCount(maximumOutputByteCount)
+        }
+
+        let fileHandle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? fileHandle.close() }
+
+        let startOutput = try await transportSession.startService(service)
+        let localID = try startOutput.startedStreamLocalID(service: "rawServiceInput")
+        try await waitForStreamReady(localID: localID, service: service)
+
+        let maximumInputChunkByteCount = try streamWritePayloadByteCount()
+        var outputBytes: [UInt8] = []
+        var sentByteCount: Int64 = 0
+
+        while let data = try fileHandle.read(upToCount: maximumInputChunkByteCount), !data.isEmpty {
+            try Task.checkCancellation()
+            let nextSentByteCount = sentByteCount + Int64(data.count)
+            guard nextSentByteCount <= inputByteCount else {
+                throw ADBDeviceSessionError.serviceInputByteCountMismatch(
+                    expected: inputByteCount,
+                    actual: nextSentByteCount
+                )
+            }
+
+            _ = try await transportSession.writeStream(
+                localID: localID,
+                payload: Array(data)
+            )
+            sentByteCount = nextSentByteCount
+            let isWritable = try await waitForServiceStreamWritable(
+                localID: localID,
+                outputBytes: &outputBytes,
+                maximumOutputByteCount: maximumOutputByteCount
+            )
+            await progressHandler(sentByteCount)
+            if !isWritable {
+                guard sentByteCount == inputByteCount else {
+                    throw ADBDeviceSessionError.serviceClosedBeforeInputFinished(
+                        expected: inputByteCount,
+                        actual: sentByteCount,
+                        output: ADBServiceOutput(bytes: outputBytes)
+                    )
+                }
+                return ADBServiceOutput(bytes: outputBytes)
+            }
+        }
+
+        guard sentByteCount == inputByteCount else {
+            throw ADBDeviceSessionError.serviceInputByteCountMismatch(
+                expected: inputByteCount,
+                actual: sentByteCount
+            )
+        }
+
+        while true {
+            guard let output = try await transportSession.receiveNext() else {
+                throw ADBDeviceSessionError.transportClosedBeforeServiceFinished
+            }
+            if try appendServiceOutput(
+                from: output,
+                localID: localID,
+                to: &outputBytes,
+                maximumOutputByteCount: maximumOutputByteCount
+            ) {
+                return ADBServiceOutput(bytes: outputBytes)
+            }
+        }
+    }
+
     public mutating func pushFile(
         contents: [UInt8],
         plan: ADBSyncPushPlan,
@@ -510,6 +596,57 @@ public struct ADBDeviceSession: Sendable {
         }
     }
 
+    private mutating func waitForServiceStreamWritable(
+        localID: UInt32,
+        outputBytes: inout [UInt8],
+        maximumOutputByteCount: Int
+    ) async throws -> Bool {
+        while true {
+            guard let output = try await transportSession.receiveNext() else {
+                throw ADBDeviceSessionError.transportClosedBeforeStreamWritable(localID: localID)
+            }
+            let isClosed = try appendServiceOutput(
+                from: output,
+                localID: localID,
+                to: &outputBytes,
+                maximumOutputByteCount: maximumOutputByteCount
+            )
+            if isClosed {
+                return false
+            }
+            if output.containsEvent(where: { event in
+                event.localStreamID == localID && event.isStreamWritable
+            }) {
+                return true
+            }
+        }
+    }
+
+    private func appendServiceOutput(
+        from output: ADBTransportSessionOutput,
+        localID: UInt32,
+        to bytes: inout [UInt8],
+        maximumOutputByteCount: Int
+    ) throws -> Bool {
+        var isClosed = false
+        for event in output.events {
+            switch event {
+            case .streamData(let eventLocalID, _, let payload) where eventLocalID == localID:
+                guard payload.count <= maximumOutputByteCount - bytes.count else {
+                    throw ADBDeviceSessionError.serviceOutputTooLarge(
+                        maximumByteCount: maximumOutputByteCount
+                    )
+                }
+                bytes.append(contentsOf: payload)
+            case .streamClosed(let eventLocalID, _) where eventLocalID == localID:
+                isClosed = true
+            default:
+                continue
+            }
+        }
+        return isClosed
+    }
+
     private mutating func waitForSyncResponse(
         localID: UInt32,
         decoder: inout ADBSyncResponseDecoder
@@ -718,6 +855,9 @@ public enum ADBDeviceSessionError: Error, Equatable, Sendable {
     case streamClosedBeforeSyncCompletion(localID: UInt32)
     case emptyService
     case serviceContainsNullByte
+    case invalidServiceInputByteCount(Int64)
+    case serviceInputByteCountMismatch(expected: Int64, actual: Int64)
+    case serviceClosedBeforeInputFinished(expected: Int64, actual: Int64, output: ADBServiceOutput)
     case invalidMaximumOutputByteCount(Int)
     case transportClosedBeforeServiceFinished
     case serviceDataBeforeReady(localID: UInt32)

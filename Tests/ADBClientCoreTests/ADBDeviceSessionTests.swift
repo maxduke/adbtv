@@ -150,6 +150,54 @@ final class ADBDeviceSessionTests: XCTestCase {
         XCTAssertEqual(sentPackets.last, ADBPacket(command: .okay, arg0: 1, arg1: 42))
     }
 
+    func testRunServiceStreamsFileInputAndCapturesOutput() async throws {
+        let input = [UInt8]("split-apk".utf8)
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try Data(input).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        let transport = InMemoryADBByteTransport(inboundChunks: [
+            try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded(),
+            try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded(),
+            try ADBPacket(
+                command: .write,
+                arg0: 42,
+                arg1: 1,
+                payload: Array("Success\n".utf8)
+            ).encoded(),
+            try ADBPacket(command: .close, arg0: 42, arg1: 1).encoded()
+        ])
+        var session = ADBDeviceSession(
+            driver: ADBClientDriver(client: ADBClient(connection: connectedState())),
+            transport: transport
+        )
+        let progressRecorder = ServiceInputProgressRecorder()
+
+        let output = try await session.runService(
+            "exec:cmd package install-write -S 9 12 base.apk -",
+            inputFrom: fileURL,
+            inputByteCount: Int64(input.count),
+            maximumOutputByteCount: 64,
+            progressHandler: { await progressRecorder.record($0) }
+        )
+
+        XCTAssertEqual(output.utf8String, "Success\n")
+        let progress = await progressRecorder.values
+        XCTAssertEqual(progress, [9])
+        let sentPackets = try await transport.sentChunks().map { try $0.decodedPacket() }
+        XCTAssertEqual(sentPackets, [
+            ADBPacket(
+                command: .open,
+                arg0: 1,
+                arg1: 0,
+                payload: Array("exec:cmd package install-write -S 9 12 base.apk -".utf8) + [0]
+            ),
+            ADBPacket(command: .write, arg0: 1, arg1: 42, payload: input),
+            ADBPacket(command: .okay, arg0: 1, arg1: 42)
+        ])
+    }
+
     func testRunServiceRejectsOutputOverLimit() async throws {
         let transport = InMemoryADBByteTransport(inboundChunks: [
             try ADBPacket(command: .okay, arg0: 42, arg1: 1).encoded(),
@@ -598,6 +646,14 @@ private actor SyncPullEventRecorder {
 
     func recordedEvents() -> [ADBSyncPullEvent] {
         events
+    }
+}
+
+private actor ServiceInputProgressRecorder {
+    private(set) var values: [Int64] = []
+
+    func record(_ value: Int64) {
+        values.append(value)
     }
 }
 
