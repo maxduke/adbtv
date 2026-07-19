@@ -122,6 +122,7 @@ struct ADBTVFileBrowserView: View {
         .alert("New Folder", isPresented: $isNewFolderPromptPresented) {
             TextField("Folder Name", text: $newFolderName)
             Button("Create") { createFolder() }
+                .disabled(!canCreateFolder)
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Create a folder in \(directory.name).")
@@ -129,6 +130,7 @@ struct ADBTVFileBrowserView: View {
         .alert("Rename", isPresented: renamePromptBinding) {
             TextField("Name", text: $renameName)
             Button("Save") { renameSelectedItem() }
+                .disabled(!canRenameItem)
             Button("Cancel", role: .cancel) { renameItem = nil }
         }
         .alert("Delete Item?", isPresented: deletePromptBinding, presenting: deleteItem) { item in
@@ -153,6 +155,7 @@ struct ADBTVFileBrowserView: View {
         .sheet(item: $moveItem) { item in
             ADBTVFolderPickerView(
                 device: device,
+                sourceDirectory: item.path.parent ?? directory,
                 excludedDirectory: item.kind == .directory ? item.path : nil
             ) { destination in
                 moveItem = nil
@@ -262,6 +265,23 @@ struct ADBTVFileBrowserView: View {
         operationTask != nil || status == .loading
     }
 
+    private var normalizedNewFolderName: String {
+        newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canCreateFolder: Bool {
+        (try? directory.appendingPathComponent(normalizedNewFolderName)) != nil
+    }
+
+    private var normalizedRenameName: String {
+        renameName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canRenameItem: Bool {
+        guard let renameItem, normalizedRenameName != renameItem.name else { return false }
+        return (try? directory.appendingPathComponent(normalizedRenameName)) != nil
+    }
+
     private var renamePromptBinding: Binding<Bool> {
         Binding(
             get: { renameItem != nil },
@@ -295,6 +315,7 @@ struct ADBTVFileBrowserView: View {
             items = try await Self.contents(of: directory, on: device)
             status = .ready
         } catch is CancellationError {
+            status.finishCancelledLoad()
             return
         } catch {
             fail("Could not load this folder.", error: error, operation: "listDirectory")
@@ -347,8 +368,8 @@ struct ADBTVFileBrowserView: View {
     }
 
     private func createFolder() {
-        let name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { return }
+        guard canCreateFolder else { return }
+        let name = normalizedNewFolderName
         startOperation(title: "Creating \(name)") {
             try await Self.createDirectory(named: name, in: directory, on: device)
             await loadContents()
@@ -356,10 +377,9 @@ struct ADBTVFileBrowserView: View {
     }
 
     private func renameSelectedItem() {
-        guard let item = renameItem else { return }
-        let name = renameName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let item = renameItem, canRenameItem else { return }
+        let name = normalizedRenameName
         renameItem = nil
-        guard !name.isEmpty, name != item.name else { return }
         startOperation(title: "Renaming \(item.name)") {
             try await Self.rename(item, to: name, on: device)
             await loadContents()
@@ -494,7 +514,7 @@ struct ADBTVFileBrowserView: View {
 }
 
 private extension ADBTVFileBrowserView {
-    fileprivate static func contents(
+    static func contents(
         of directory: ADBSharedStoragePath,
         on device: ADBTVDeviceSummary
     ) async throws -> [ADBSharedStorageItem] {
@@ -607,6 +627,7 @@ private struct ADBTVFolderPickerView: View {
     @Environment(\.dismiss) private var dismiss
 
     var device: ADBTVDeviceSummary
+    var sourceDirectory: ADBSharedStoragePath
     var excludedDirectory: ADBSharedStoragePath?
     var select: (ADBSharedStoragePath) -> Void
 
@@ -615,6 +636,7 @@ private struct ADBTVFolderPickerView: View {
             ADBTVFolderPickerDirectoryView(
                 device: device,
                 directory: .root,
+                sourceDirectory: sourceDirectory,
                 excludedDirectory: excludedDirectory,
                 select: select
             )
@@ -630,6 +652,7 @@ private struct ADBTVFolderPickerView: View {
 private struct ADBTVFolderPickerDirectoryView: View {
     var device: ADBTVDeviceSummary
     var directory: ADBSharedStoragePath
+    var sourceDirectory: ADBSharedStoragePath
     var excludedDirectory: ADBSharedStoragePath?
     var select: (ADBSharedStoragePath) -> Void
 
@@ -646,7 +669,7 @@ private struct ADBTVFolderPickerDirectoryView: View {
                     Label("Move Here", systemImage: "folder.badge.plus")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .disabled(isExcluded(directory))
+                .disabled(directory == sourceDirectory || isExcluded(directory))
             }
 
             if isLoading {
@@ -668,6 +691,7 @@ private struct ADBTVFolderPickerDirectoryView: View {
                             ADBTVFolderPickerDirectoryView(
                                 device: device,
                                 directory: item.path,
+                                sourceDirectory: sourceDirectory,
                                 excludedDirectory: excludedDirectory,
                                 select: select
                             )
@@ -723,16 +747,21 @@ private struct ADBTVFileTransferState: Equatable {
     }
 }
 
-private struct ADBTVFileBrowserFailure: Equatable {
+struct ADBTVFileBrowserFailure: Equatable {
     var userMessage: String
     var diagnosticDetail: DiagnosticDetail
 }
 
-private enum ADBTVFileListStatus: Equatable {
+enum ADBTVFileListStatus: Equatable {
     case idle
     case loading
     case ready
     case failed(ADBTVFileBrowserFailure)
+
+    mutating func finishCancelledLoad() {
+        guard self == .loading else { return }
+        self = .ready
+    }
 }
 
 private enum ADBTVFileBrowserError: Error {

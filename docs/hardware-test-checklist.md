@@ -111,6 +111,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Install a v3 helper signed by a different key, retry helper installation, confirm **Replace Helper** uninstalls only the old helper, and confirm the bundled helper installs successfully.
 - [ ] Test a TV with a large third-party app library and confirm bounded metadata loading does not block package actions or navigation.
 - [ ] Launch an Android TV app and confirm its Leanback activity opens.
+- [ ] Launch and uninstall an app with metadata available and confirm progress and success messages use its app name rather than only its package identifier.
 - [ ] Launch a phone-style app without a Leanback activity and confirm the standard launcher fallback opens it, or a clear error with Technical Details appears.
 - [ ] Force stop a user app from its row menu, confirm playback and background activity stop without removing app data, then launch it again.
 - [ ] With the current helper installed, refresh Apps and confirm Force Stop shows as **Stopped** and is disabled only for packages Android reports as stopped; launch one and confirm the action becomes available again.
@@ -153,6 +154,9 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Device Tools
 
+- [ ] Open **Files**, create and rename a folder, and confirm blank, unchanged, relative, and path-separator names cannot be submitted.
+- [ ] Open **Move** for a file or folder and confirm **Move Here** is disabled in its current folder while valid destinations remain selectable.
+- [ ] Start a file upload, download, or mutation; cancel while the automatic folder refresh is running; confirm the loading state clears and Refresh remains available.
 - [ ] Open **Tools**, refresh Device Information, and confirm model, Android/API version, resolution, storage, uptime, and build identity match the TV.
 - [ ] Capture a screenshot and confirm its orientation, dimensions, colors, and visible TV content are correct.
 - [ ] Use Share to save the captured screenshot to Files and Photos; confirm both copies open correctly.
