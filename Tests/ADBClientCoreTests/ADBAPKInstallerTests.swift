@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 @testable import ADBClientCore
 
@@ -63,6 +64,54 @@ final class ADBAPKInstallerTests: XCTestCase {
             .phaseFinished(.cleanup)
         ])
         XCTAssertEqual(streamedEvents, report.events)
+    }
+
+    func testFileBackedInstallStreamsTheFileThroughTheSameStagedFlow() async throws {
+        let contents = makeTestAPK()
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBAPKInstallerTests-\(UUID().uuidString).apk")
+        try Data(contents).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "Example App.apk",
+            byteCount: Int64(contents.count)
+        )
+        let transferEvents: [ADBSyncPushEvent] = [
+            .started(remotePath: plan.remoteAPKPath, totalByteCount: contents.count),
+            .finishedSending(sentByteCount: contents.count, totalByteCount: contents.count),
+            .completed
+        ]
+        var session = RecordingAPKInstallSession(
+            shellOutputs: [
+                try plan.installShellCommand().rawValue: ADBShellOutput(
+                    bytes: Array("Success\n".utf8)
+                )
+            ],
+            pushedEvents: transferEvents
+        )
+
+        let report = try await ADBAPKInstaller().install(
+            fileURL: fileURL,
+            plan: plan,
+            modificationTime: 456,
+            using: &session
+        )
+
+        XCTAssertEqual(report.result, .success)
+        XCTAssertEqual(session.pushedFileURLs, [fileURL])
+        XCTAssertEqual(session.pushedContents, [])
+        XCTAssertEqual(session.pushedPlans, [
+            try ADBSyncPushPlan(
+                remotePath: plan.remoteAPKPath,
+                modificationTime: 456,
+                totalByteCount: contents.count
+            )
+        ])
+        XCTAssertEqual(session.commands, [
+            try plan.prepareRemoteDirectoryShellInvocation().shellCommand.rawValue,
+            try plan.installShellCommand().rawValue,
+            try plan.cleanupShellInvocation().shellCommand.rawValue
+        ])
     }
 
     func testInstallFailureOutputReturnsFailureReportAndStillCleansUp() async throws {
@@ -287,6 +336,39 @@ final class ADBAPKInstallerTests: XCTestCase {
         XCTAssertEqual(session.pushedContents, [])
     }
 
+    func testFileBackedInstallRejectsPackageByteCountMismatchBeforeCommands() async throws {
+        let contents = makeTestAPK()
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBAPKInstallerTests-\(UUID().uuidString).apk")
+        try Data(contents).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+        let plan = try ADBAPKInstallPlan.singleAPK(
+            fileName: "app.apk",
+            byteCount: Int64(contents.count + 1)
+        )
+        var session = RecordingAPKInstallSession()
+
+        do {
+            _ = try await ADBAPKInstaller().install(
+                fileURL: fileURL,
+                plan: plan,
+                using: &session
+            )
+            XCTFail("Expected byte count mismatch to throw.")
+        } catch let error as ADBAPKInstallExecutionError {
+            XCTAssertEqual(
+                error,
+                .packageByteCountMismatch(
+                    expected: Int64(contents.count + 1),
+                    actual: contents.count
+                )
+            )
+        }
+
+        XCTAssertEqual(session.commands, [])
+        XCTAssertEqual(session.pushedFileURLs, [])
+    }
+
     func testInstallRejectsInvalidAPKBeforeCommands() async throws {
         let contents = Array(repeating: UInt8(0), count: 22)
         let plan = try ADBAPKInstallPlan.singleAPK(
@@ -313,6 +395,7 @@ private struct RecordingAPKInstallSession: ADBAPKInstallRunningSession {
     var pushError: RecordingAPKInstallSessionError?
     private(set) var commands: [String]
     private(set) var pushedContents: [[UInt8]]
+    private(set) var pushedFileURLs: [URL]
     private(set) var pushedPlans: [ADBSyncPushPlan]
 
     init(
@@ -325,6 +408,7 @@ private struct RecordingAPKInstallSession: ADBAPKInstallRunningSession {
         self.pushError = pushError
         self.commands = []
         self.pushedContents = []
+        self.pushedFileURLs = []
         self.pushedPlans = []
     }
 
@@ -337,6 +421,22 @@ private struct RecordingAPKInstallSession: ADBAPKInstallRunningSession {
             return checkedShellOutput("")
         }
         return ADBShellOutput(bytes: [])
+    }
+
+    mutating func pushFile(
+        from localURL: URL,
+        plan: ADBSyncPushPlan,
+        eventHandler: @escaping ADBSyncPushEventHandler
+    ) async throws -> [ADBSyncPushEvent] {
+        pushedFileURLs.append(localURL)
+        pushedPlans.append(plan)
+        if let pushError {
+            throw pushError
+        }
+        for event in pushedEvents {
+            await eventHandler(event)
+        }
+        return pushedEvents
     }
 
     mutating func pushFile(

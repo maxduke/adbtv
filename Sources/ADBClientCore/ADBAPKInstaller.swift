@@ -1,6 +1,14 @@
+import Foundation
+
 public protocol ADBAPKInstallRunningSession: ADBShellCommandRunningSession {
     mutating func pushFile(
         contents: [UInt8],
+        plan: ADBSyncPushPlan,
+        eventHandler: @escaping ADBSyncPushEventHandler
+    ) async throws -> [ADBSyncPushEvent]
+
+    mutating func pushFile(
+        from localURL: URL,
         plan: ADBSyncPushPlan,
         eventHandler: @escaping ADBSyncPushEventHandler
     ) async throws -> [ADBSyncPushEvent]
@@ -10,6 +18,7 @@ public extension ADBAPKInstallRunningSession {
     mutating func pushFile(contents: [UInt8], plan: ADBSyncPushPlan) async throws -> [ADBSyncPushEvent] {
         try await pushFile(contents: contents, plan: plan, eventHandler: { _ in })
     }
+
 }
 
 extension ADBDeviceSession: ADBAPKInstallRunningSession {}
@@ -44,7 +53,51 @@ public struct ADBAPKInstaller: Sendable {
             )
         }
         try ADBAPKValidator().validate(contents: contents)
+        return try await install(
+            source: .memory(contents),
+            plan: plan,
+            modificationTime: modificationTime,
+            using: &session,
+            eventHandler: eventHandler
+        )
+    }
 
+    public func install<Session: ADBAPKInstallRunningSession>(
+        fileURL: URL,
+        plan: ADBAPKInstallPlan,
+        modificationTime: UInt32 = 0,
+        using session: inout Session,
+        eventHandler: @escaping ADBAPKInstallEventHandler = { _ in }
+    ) async throws -> ADBAPKInstallReport {
+        guard let byteCount = try fileURL.resourceValues(
+            forKeys: [.fileSizeKey]
+        ).fileSize else {
+            throw ADBAPKInstallExecutionError.packageFileSizeUnavailable
+        }
+        if let expectedByteCount = plan.package.byteCount,
+           expectedByteCount != Int64(byteCount) {
+            throw ADBAPKInstallExecutionError.packageByteCountMismatch(
+                expected: expectedByteCount,
+                actual: byteCount
+            )
+        }
+        try ADBAPKValidator().validate(fileURL: fileURL)
+        return try await install(
+            source: .file(fileURL, byteCount: byteCount),
+            plan: plan,
+            modificationTime: modificationTime,
+            using: &session,
+            eventHandler: eventHandler
+        )
+    }
+
+    private func install<Session: ADBAPKInstallRunningSession>(
+        source: ADBAPKInstallSource,
+        plan: ADBAPKInstallPlan,
+        modificationTime: UInt32,
+        using session: inout Session,
+        eventHandler: @escaping ADBAPKInstallEventHandler
+    ) async throws -> ADBAPKInstallReport {
         var events: [ADBAPKInstallEvent] = []
 
         let prepareStarted = ADBAPKInstallEvent.phaseStarted(.prepareRemoteDirectory)
@@ -67,7 +120,7 @@ public struct ADBAPKInstaller: Sendable {
         let stagedAttempt: Result<ADBAPKInstallResult, ADBAPKStagedInstallFailure>
         do {
             stagedAttempt = .success(try await runStagedInstall(
-                contents: contents,
+                source: source,
                 plan: plan,
                 modificationTime: modificationTime,
                 using: &session,
@@ -109,7 +162,7 @@ public struct ADBAPKInstaller: Sendable {
     }
 
     private func runStagedInstall<Session: ADBAPKInstallRunningSession>(
-        contents: [UInt8],
+        source: ADBAPKInstallSource,
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32,
         using session: inout Session,
@@ -125,7 +178,7 @@ public struct ADBAPKInstaller: Sendable {
             syncPlan = try ADBSyncPushPlan(
                 remotePath: plan.remoteAPKPath,
                 modificationTime: modificationTime,
-                totalByteCount: contents.count
+                totalByteCount: source.byteCount
             )
         } catch {
             throw ADBAPKStagedInstallFailure.transferCommandFailed(String(describing: error))
@@ -133,13 +186,23 @@ public struct ADBAPKInstaller: Sendable {
 
         let syncEvents: [ADBSyncPushEvent]
         do {
-            syncEvents = try await session.pushFile(
-                contents: contents,
-                plan: syncPlan,
-                eventHandler: { event in
-                    await eventHandler(.transfer(event))
-                }
-            )
+            let transferHandler: ADBSyncPushEventHandler = { event in
+                await eventHandler(.transfer(event))
+            }
+            switch source {
+            case .memory(let contents):
+                syncEvents = try await session.pushFile(
+                    contents: contents,
+                    plan: syncPlan,
+                    eventHandler: transferHandler
+                )
+            case .file(let fileURL, _):
+                syncEvents = try await session.pushFile(
+                    from: fileURL,
+                    plan: syncPlan,
+                    eventHandler: transferHandler
+                )
+            }
         } catch {
             throw ADBAPKStagedInstallFailure.transferCommandFailed(String(describing: error))
         }
@@ -211,6 +274,22 @@ public struct ADBAPKInstaller: Sendable {
 
 public extension ADBDeviceSession {
     mutating func installAPK(
+        fileURL: URL,
+        plan: ADBAPKInstallPlan,
+        modificationTime: UInt32 = 0,
+        installer: ADBAPKInstaller = ADBAPKInstaller(),
+        eventHandler: @escaping ADBAPKInstallEventHandler = { _ in }
+    ) async throws -> ADBAPKInstallReport {
+        try await installer.install(
+            fileURL: fileURL,
+            plan: plan,
+            modificationTime: modificationTime,
+            using: &self,
+            eventHandler: eventHandler
+        )
+    }
+
+    mutating func installAPK(
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32 = 0,
@@ -249,6 +328,7 @@ public enum ADBAPKInstallEvent: Equatable, Sendable {
 public typealias ADBAPKInstallEventHandler = @Sendable (ADBAPKInstallEvent) async -> Void
 
 public enum ADBAPKInstallExecutionError: Error, Equatable, Sendable {
+    case packageFileSizeUnavailable
     case packageByteCountMismatch(expected: Int64, actual: Int)
     case prepareCommandFailed(events: [ADBAPKInstallEvent], underlyingError: String)
     case transferFailed(
@@ -267,6 +347,20 @@ public enum ADBAPKInstallExecutionError: Error, Equatable, Sendable {
         cleanupError: String?
     )
     case cleanupFailed(result: ADBAPKInstallResult, events: [ADBAPKInstallEvent], underlyingError: String)
+}
+
+private enum ADBAPKInstallSource: Sendable {
+    case memory([UInt8])
+    case file(URL, byteCount: Int)
+
+    var byteCount: Int {
+        switch self {
+        case .memory(let contents):
+            return contents.count
+        case .file(_, let byteCount):
+            return byteCount
+        }
+    }
 }
 
 private enum ADBAPKStagedInstallFailure: Error {

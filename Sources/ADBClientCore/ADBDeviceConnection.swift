@@ -245,6 +245,23 @@ public struct ADBDeviceConnection: Sendable {
     }
 
     public mutating func installAPK(
+        fileURL: URL,
+        plan: ADBAPKInstallPlan,
+        modificationTime: UInt32 = 0,
+        installer: ADBAPKInstaller = ADBAPKInstaller(),
+        eventHandler: @escaping ADBAPKInstallEventHandler = { _ in }
+    ) async throws -> ADBAPKInstallReport {
+        start()
+        return try await session.installAPK(
+            fileURL: fileURL,
+            plan: plan,
+            modificationTime: modificationTime,
+            installer: installer,
+            eventHandler: eventHandler
+        )
+    }
+
+    public mutating func installAPK(
         contents: [UInt8],
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32 = 0,

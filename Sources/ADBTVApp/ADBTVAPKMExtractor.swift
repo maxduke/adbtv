@@ -134,7 +134,7 @@ public struct ADBTVAPKMExtractor: Sendable {
                     to: destinationURL
                 )
                 let contents = try Data(contentsOf: destinationURL, options: .mappedIfSafe)
-                try ADBAPKValidator().validate(contents: Array(contents))
+                try ADBAPKValidator().validate(contents: contents)
                 files.append(try ADBPackageSessionFile(
                     fileURL: destinationURL,
                     fileName: item.fileName,

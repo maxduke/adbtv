@@ -12,6 +12,14 @@ public struct ADBAPKValidator: Sendable {
     public init() {}
 
     public func validate(contents: [UInt8]) throws {
+        try validate(contents: Data(contents))
+    }
+
+    public func validate(fileURL: URL) throws {
+        try validate(contents: Data(contentsOf: fileURL, options: .mappedIfSafe))
+    }
+
+    public func validate(contents: Data) throws {
         guard contents.count >= Self.endOfCentralDirectoryLength else {
             throw ADBAPKValidationError.fileTooSmall(contents.count)
         }
@@ -100,7 +108,7 @@ public struct ADBAPKValidator: Sendable {
         }
     }
 
-    private func endOfCentralDirectoryOffset(in contents: [UInt8]) throws -> Int {
+    private func endOfCentralDirectoryOffset(in contents: Data) throws -> Int {
         let minimumOffset = max(
             0,
             contents.count - Self.endOfCentralDirectoryLength - Self.maximumZIPCommentLength
@@ -124,7 +132,7 @@ public struct ADBAPKValidator: Sendable {
         centralEntryOffset: Int,
         centralDirectoryOffset: Int,
         fileName: [UInt8],
-        contents: [UInt8]
+        contents: Data
     ) throws {
         guard let compressedSizeValue = contents.littleEndianUInt32(at: centralEntryOffset + 20),
               let localHeaderOffsetValue = contents.littleEndianUInt32(at: centralEntryOffset + 42) else {
@@ -163,7 +171,7 @@ public struct ADBAPKValidator: Sendable {
     }
 
     private func validateCentralDirectoryRemainder(
-        contents: [UInt8],
+        contents: Data,
         cursor: Int,
         centralDirectoryEnd: Int
     ) throws {
@@ -218,7 +226,7 @@ public enum ADBAPKValidationError: Error, Equatable, Sendable, CustomStringConve
     }
 }
 
-private extension Array where Element == UInt8 {
+private extension Data {
     func littleEndianUInt16(at offset: Int) -> UInt16? {
         guard containsRange(startingAt: offset, length: 2) else {
             return nil

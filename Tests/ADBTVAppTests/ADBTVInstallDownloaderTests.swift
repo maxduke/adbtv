@@ -28,9 +28,11 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
         let package = try await download(maximumByteCount: 10) { progress in
             await recorder.record(progress)
         }
+        defer { try? package.removeTemporaryFiles() }
         let progress = await recorder.values
 
-        XCTAssertEqual(package.contents, [1, 2, 3, 4])
+        XCTAssertEqual(try Data(contentsOf: package.fileURL), Data([1, 2, 3, 4]))
+        XCTAssertEqual(package.byteCount, 4)
         XCTAssertEqual(package.fileName, "TV App.apk")
         XCTAssertEqual(progress.first, ADBTVInstallDownloadProgress(
             receivedByteCount: 0,
@@ -53,6 +55,7 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
         let package = try await download(
             url: URL(string: "https://example.com/Remote%20App.apk")!
         )
+        defer { try? package.removeTemporaryFiles() }
 
         XCTAssertEqual(package.fileName, "Remote App.apk")
     }
@@ -65,6 +68,7 @@ final class ADBTVInstallDownloaderTests: XCTestCase {
         )
 
         let package = try await download()
+        defer { try? package.removeTemporaryFiles() }
 
         XCTAssertEqual(package.fileName, "TV App.apkm")
     }

@@ -3,7 +3,7 @@ import Foundation
 
 public protocol ADBTVInstallConnection: Sendable {
     mutating func installAPK(
-        contents: [UInt8],
+        fileURL: URL,
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32,
         eventHandler: @escaping ADBAPKInstallEventHandler
@@ -41,20 +41,33 @@ public enum ADBTVInstallPackageLimits {
 }
 
 public enum ADBTVPreparedInstallPackage: Equatable, Sendable {
-    case singleAPK(contents: [UInt8], plan: ADBAPKInstallPlan)
+    case singleAPK(ADBTVPreparedAPK)
     case apkm(ADBTVPreparedAPKM)
 
     public var singleAPKPlan: ADBAPKInstallPlan? {
-        guard case .singleAPK(_, let plan) = self else {
+        guard case .singleAPK(let preparedAPK) = self else {
             return nil
         }
-        return plan
+        return preparedAPK.plan
     }
 
     public func removeTemporaryFiles() throws {
-        if case .apkm(let preparedAPKM) = self {
+        switch self {
+        case .singleAPK(let preparedAPK):
+            try preparedAPK.removeTemporaryFiles()
+        case .apkm(let preparedAPKM):
             try preparedAPKM.removeTemporaryFiles()
         }
+    }
+}
+
+public struct ADBTVPreparedAPK: Equatable, Sendable {
+    public let fileURL: URL
+    public let plan: ADBAPKInstallPlan
+    public let temporaryDirectoryURL: URL
+
+    public func removeTemporaryFiles() throws {
+        try FileManager.default.removeItem(at: temporaryDirectoryURL)
     }
 }
 
@@ -68,12 +81,12 @@ public struct ADBTVInstallReport: Equatable, Sendable {
 
 public extension ADBTVInstallConnection {
     mutating func installAPK(
-        contents: [UInt8],
+        fileURL: URL,
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32
     ) async throws -> ADBAPKInstallReport {
         try await installAPK(
-            contents: contents,
+            fileURL: fileURL,
             plan: plan,
             modificationTime: modificationTime,
             eventHandler: { _ in }
@@ -84,13 +97,13 @@ public extension ADBTVInstallConnection {
 #if canImport(Network)
 extension ADBDeviceConnection: ADBTVInstallConnection {
     public mutating func installAPK(
-        contents: [UInt8],
+        fileURL: URL,
         plan: ADBAPKInstallPlan,
         modificationTime: UInt32,
         eventHandler: @escaping ADBAPKInstallEventHandler
     ) async throws -> ADBAPKInstallReport {
         try await installAPK(
-            contents: contents,
+            fileURL: fileURL,
             plan: plan,
             modificationTime: modificationTime,
             installer: ADBAPKInstaller(),
@@ -112,7 +125,11 @@ extension ADBDeviceConnection: ADBTVInstallConnection {
 #endif
 
 public struct ADBTVInstallOperation: Sendable {
-    public var readFile: @Sendable (URL) throws -> [UInt8]
+    public var stageAPK: @Sendable (
+        URL,
+        String,
+        Int64?
+    ) throws -> ADBTVPreparedAPK
     public var downloadPackage: @Sendable (
         URL,
         @escaping ADBTVInstallDownloadProgressHandler
@@ -121,8 +138,16 @@ public struct ADBTVInstallOperation: Sendable {
     public var extractAPKM: @Sendable (URL) throws -> ADBTVPreparedAPKM
 
     public init(
-        readFile: @escaping @Sendable (URL) throws -> [UInt8] = {
-            try ADBTVInstallFileReader.readFileBytes(from: $0)
+        stageAPK: @escaping @Sendable (
+            URL,
+            String,
+            Int64?
+        ) throws -> ADBTVPreparedAPK = { url, fileName, expectedByteCount in
+            try ADBTVInstallFileStager.stageAPK(
+                from: url,
+                fileName: fileName,
+                expectedByteCount: expectedByteCount
+            )
         },
         downloadPackage: @escaping @Sendable (
             URL,
@@ -140,7 +165,7 @@ public struct ADBTVInstallOperation: Sendable {
             try ADBTVAPKMExtractor().extract(from: $0)
         }
     ) {
-        self.readFile = readFile
+        self.stageAPK = stageAPK
         self.downloadPackage = downloadPackage
         self.modificationTime = modificationTime
         self.extractAPKM = extractAPKM
@@ -175,8 +200,13 @@ public struct ADBTVInstallOperation: Sendable {
             from: model.installDraft,
             eventHandler: eventHandler
         )
-        if case .singleAPK(let contents, _) = package {
-            try ADBAPKValidator().validate(contents: contents)
+        do {
+            if case .singleAPK(let preparedAPK) = package {
+                try ADBAPKValidator().validate(fileURL: preparedAPK.fileURL)
+            }
+        } catch {
+            try? package.removeTemporaryFiles()
+            throw error
         }
         await eventHandler(.installer(.phaseFinished(.validatePackage)))
         return package
@@ -188,10 +218,10 @@ public struct ADBTVInstallOperation: Sendable {
         eventHandler: @escaping ADBTVInstallEventHandler = { _ in }
     ) async throws -> ADBTVInstallReport {
         switch package {
-        case .singleAPK(let contents, let plan):
+        case .singleAPK(let preparedAPK):
             let report = try await connection.installAPK(
-                contents: contents,
-                plan: plan,
+                fileURL: preparedAPK.fileURL,
+                plan: preparedAPK.plan,
                 modificationTime: modificationTime(),
                 eventHandler: { event in
                     await eventHandler(.installer(event))
@@ -221,10 +251,11 @@ public struct ADBTVInstallOperation: Sendable {
             await eventHandler(.installer(.phaseStarted(.validatePackage)))
             switch draft.packageKind {
             case .singleAPK:
-                return .singleAPK(
-                    contents: try readFile(fileURL),
-                    plan: try draft.installPlan()
-                )
+                return .singleAPK(try stageAPK(
+                    fileURL,
+                    selectedPackage.fileName,
+                    selectedPackage.byteCount
+                ))
             case .apkm:
                 return .apkm(try extractAPKM(fileURL))
             case nil:
@@ -244,72 +275,122 @@ public struct ADBTVInstallOperation: Sendable {
         let downloadedFileName = downloadedPackage.fileName ?? fileName
         switch ADBTVInstallPackageKind(fileName: downloadedFileName) {
         case .singleAPK:
-            return .singleAPK(
-                contents: downloadedPackage.contents,
-                plan: try ADBAPKInstallPlan.singleAPK(
-                    fileName: downloadedFileName,
-                    byteCount: Int64(downloadedPackage.contents.count)
-                )
-            )
+            do {
+                return .singleAPK(ADBTVPreparedAPK(
+                    fileURL: downloadedPackage.fileURL,
+                    plan: try ADBAPKInstallPlan.singleAPK(
+                        fileName: downloadedFileName,
+                        byteCount: downloadedPackage.byteCount
+                    ),
+                    temporaryDirectoryURL: downloadedPackage.temporaryDirectoryURL
+                ))
+            } catch {
+                try? downloadedPackage.removeTemporaryFiles()
+                throw error
+            }
         case .apkm:
-            let temporaryArchiveURL = FileManager.default.temporaryDirectory
-                .appendingPathComponent("ADBTV-\(UUID().uuidString).apkm")
-            try Data(downloadedPackage.contents).write(to: temporaryArchiveURL, options: .atomic)
-            defer { try? FileManager.default.removeItem(at: temporaryArchiveURL) }
-            return .apkm(try extractAPKM(temporaryArchiveURL))
+            defer { try? downloadedPackage.removeTemporaryFiles() }
+            return .apkm(try extractAPKM(downloadedPackage.fileURL))
         case nil:
+            try? downloadedPackage.removeTemporaryFiles()
             throw ADBTVInstallOperationError.unsupportedPackage(downloadedFileName)
         }
     }
 }
 
-public enum ADBTVInstallFileReader: Sendable {
-    public static func readFileBytes(
-        from url: URL,
+public enum ADBTVInstallFileStager: Sendable {
+    public static func stageAPK(
+        from sourceURL: URL,
+        fileName: String,
+        expectedByteCount: Int64? = nil,
         maximumByteCount: Int64 = ADBTVInstallPackageLimits.maximumByteCount
-    ) throws -> [UInt8] {
+    ) throws -> ADBTVPreparedAPK {
         guard maximumByteCount > 0 else {
             throw ADBTVInstallFileError.invalidMaximumByteCount(maximumByteCount)
         }
 
-        let didStartAccessing = url.startAccessingSecurityScopedResource()
+        let didStartAccessing = sourceURL.startAccessingSecurityScopedResource()
         defer {
             if didStartAccessing {
-                url.stopAccessingSecurityScopedResource()
+                sourceURL.stopAccessingSecurityScopedResource()
             }
         }
 
-        if let fileSize = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
-           Int64(fileSize) > maximumByteCount {
+        guard let sourceByteCount = try sourceURL.resourceValues(
+            forKeys: [.fileSizeKey]
+        ).fileSize else {
+            throw ADBTVInstallFileError.packageSizeUnavailable
+        }
+        guard Int64(sourceByteCount) <= maximumByteCount else {
             throw ADBTVInstallFileError.packageTooLarge(
                 maximumByteCount: maximumByteCount,
-                actualByteCount: Int64(fileSize)
+                actualByteCount: Int64(sourceByteCount)
             )
         }
 
-        let data = try Data(contentsOf: url, options: .mappedIfSafe)
-        guard Int64(data.count) <= maximumByteCount else {
-            throw ADBTVInstallFileError.packageTooLarge(
-                maximumByteCount: maximumByteCount,
-                actualByteCount: Int64(data.count)
+        let temporaryDirectoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBTV-APK-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: temporaryDirectoryURL,
+                withIntermediateDirectories: false
             )
+            let stagedFileURL = temporaryDirectoryURL
+                .appendingPathComponent("package.apk", isDirectory: false)
+            try FileManager.default.copyItem(at: sourceURL, to: stagedFileURL)
+            guard let stagedByteCount = try stagedFileURL.resourceValues(
+                forKeys: [.fileSizeKey]
+            ).fileSize else {
+                throw ADBTVInstallFileError.packageSizeUnavailable
+            }
+            guard stagedByteCount == sourceByteCount else {
+                throw ADBTVInstallFileError.packageChangedDuringStaging(
+                    expectedByteCount: sourceByteCount,
+                    actualByteCount: stagedByteCount
+                )
+            }
+            return ADBTVPreparedAPK(
+                fileURL: stagedFileURL,
+                plan: try ADBAPKInstallPlan.singleAPK(
+                    fileName: fileName,
+                    byteCount: expectedByteCount ?? Int64(stagedByteCount)
+                ),
+                temporaryDirectoryURL: temporaryDirectoryURL
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: temporaryDirectoryURL)
+            throw error
         }
-        return Array(data)
     }
 }
 
 public enum ADBTVInstallFileError: Error, Equatable, Sendable {
     case invalidMaximumByteCount(Int64)
+    case packageSizeUnavailable
     case packageTooLarge(maximumByteCount: Int64, actualByteCount: Int64)
+    case packageChangedDuringStaging(expectedByteCount: Int, actualByteCount: Int)
 }
 
 public struct ADBTVDownloadedPackage: Equatable, Sendable {
-    public var contents: [UInt8]
-    public var fileName: String?
+    public let fileURL: URL
+    public let temporaryDirectoryURL: URL
+    public let fileName: String?
+    public let byteCount: Int64
 
-    public init(contents: [UInt8], fileName: String? = nil) {
-        self.contents = contents
+    public init(
+        fileURL: URL,
+        temporaryDirectoryURL: URL,
+        fileName: String? = nil,
+        byteCount: Int64
+    ) {
+        self.fileURL = fileURL
+        self.temporaryDirectoryURL = temporaryDirectoryURL
         self.fileName = fileName
+        self.byteCount = byteCount
+    }
+
+    public func removeTemporaryFiles() throws {
+        try FileManager.default.removeItem(at: temporaryDirectoryURL)
     }
 }
 
@@ -388,6 +469,7 @@ public enum ADBTVInstallDownloadError: Error, Equatable, Sendable {
     case unacceptableStatusCode(Int)
     case unacceptableContentType(String)
     case packageTooLarge(maximumByteCount: Int64, receivedByteCount: Int64)
+    case temporaryFileFailure(String)
     case missingResponse
     case emptyResponse
 }
@@ -419,11 +501,14 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
     private let maximumByteCount: Int64
     private let progressHandler: ADBTVInstallDownloadProgressHandler
     private var continuation: CheckedContinuation<ADBTVDownloadedPackage, Error>?
-    private var contents: [UInt8] = []
+    private var fileHandle: FileHandle?
+    private var temporaryDirectoryURL: URL?
+    private var downloadedFileURL: URL?
     private var responseFileName: String?
     private var receivedResponse = false
+    private var receivedByteCount: Int64 = 0
     private var totalByteCount: Int64?
-    private var terminalError: ADBTVInstallDownloadError?
+    private var terminalError: Error?
     private var progressTask: Task<Void, Never>?
     private var lastReportedByteCount: Int64 = -1
     private let minimumProgressIncrement: Int64 = 256 * 1024
@@ -459,7 +544,7 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
             return
         }
         guard let destinationURL = request.url else {
-            terminalError = .unsupportedURLScheme(nil)
+            terminalError = ADBTVInstallDownloadError.unsupportedURLScheme(nil)
             completionHandler(nil)
             return
         }
@@ -488,7 +573,7 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
             ? response.expectedContentLength
             : nil
         guard let responseURL = response.url else {
-            terminalError = .unsupportedURLScheme(nil)
+            terminalError = ADBTVInstallDownloadError.unsupportedURLScheme(nil)
             completionHandler(.cancel)
             return
         }
@@ -501,22 +586,22 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
             return
         }
         guard let statusCode = (response as? HTTPURLResponse)?.statusCode else {
-            terminalError = .nonHTTPResponse
+            terminalError = ADBTVInstallDownloadError.nonHTTPResponse
             completionHandler(.cancel)
             return
         }
         guard (200 ... 299).contains(statusCode) else {
-            terminalError = .unacceptableStatusCode(statusCode)
+            terminalError = ADBTVInstallDownloadError.unacceptableStatusCode(statusCode)
             completionHandler(.cancel)
             return
         }
         if let mimeType = response.mimeType, adbTVIsClearlyNotAPK(mimeType: mimeType) {
-            terminalError = .unacceptableContentType(mimeType)
+            terminalError = ADBTVInstallDownloadError.unacceptableContentType(mimeType)
             completionHandler(.cancel)
             return
         }
         if let expectedByteCount, expectedByteCount > maximumByteCount {
-            terminalError = .packageTooLarge(
+            terminalError = ADBTVInstallDownloadError.packageTooLarge(
                 maximumByteCount: maximumByteCount,
                 receivedByteCount: expectedByteCount
             )
@@ -527,9 +612,27 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
         receivedResponse = true
         totalByteCount = expectedByteCount
         responseFileName = adbTVInstallPackageFileName(from: response.suggestedFilename)
-        if let expectedByteCount,
-           let capacity = Int(exactly: expectedByteCount) {
-            contents.reserveCapacity(capacity)
+        do {
+            let directoryURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("ADBTV-Download-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(
+                at: directoryURL,
+                withIntermediateDirectories: false
+            )
+            temporaryDirectoryURL = directoryURL
+            let fileURL = directoryURL.appendingPathComponent("package", isDirectory: false)
+            guard FileManager.default.createFile(atPath: fileURL.path, contents: nil) else {
+                throw ADBTVInstallDownloadError.temporaryFileFailure(
+                    "Could not create the download file."
+                )
+            }
+            downloadedFileURL = fileURL
+            fileHandle = try FileHandle(forWritingTo: fileURL)
+        } catch {
+            terminalError = error
+            cleanupTemporaryFiles()
+            completionHandler(.cancel)
+            return
         }
         reportProgress(receivedByteCount: 0)
         completionHandler(.allow)
@@ -543,9 +646,9 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
         guard receivedResponse, terminalError == nil else {
             return
         }
-        let nextByteCount = Int64(contents.count) + Int64(data.count)
+        let nextByteCount = receivedByteCount + Int64(data.count)
         guard nextByteCount <= maximumByteCount else {
-            terminalError = .packageTooLarge(
+            terminalError = ADBTVInstallDownloadError.packageTooLarge(
                 maximumByteCount: maximumByteCount,
                 receivedByteCount: nextByteCount
             )
@@ -553,7 +656,21 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
             return
         }
 
-        contents.append(contentsOf: data)
+        do {
+            guard let fileHandle else {
+                throw ADBTVInstallDownloadError.temporaryFileFailure(
+                    "The download file is not open."
+                )
+            }
+            try fileHandle.write(contentsOf: data)
+            receivedByteCount = nextByteCount
+        } catch {
+            terminalError = ADBTVInstallDownloadError.temporaryFileFailure(
+                String(describing: error)
+            )
+            dataTask.cancel()
+            return
+        }
         if let totalByteCount, nextByteCount > totalByteCount {
             self.totalByteCount = nil
         }
@@ -571,27 +688,50 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
         task: URLSessionTask,
         didCompleteWithError error: Error?
     ) {
+        do {
+            try fileHandle?.close()
+        } catch {
+            if terminalError == nil {
+                terminalError = ADBTVInstallDownloadError.temporaryFileFailure(
+                    String(describing: error)
+                )
+            }
+        }
+        fileHandle = nil
+
         let result: Result<ADBTVDownloadedPackage, Error>
+        var keepsTemporaryFiles = false
         if let terminalError {
             result = .failure(terminalError)
         } else if let error {
             result = .failure(error)
         } else if !receivedResponse {
             result = .failure(ADBTVInstallDownloadError.missingResponse)
-        } else if contents.isEmpty {
+        } else if receivedByteCount == 0 {
             result = .failure(ADBTVInstallDownloadError.emptyResponse)
-        } else {
+        } else if let fileURL = downloadedFileURL,
+                  let directoryURL = temporaryDirectoryURL {
             result = .success(ADBTVDownloadedPackage(
-                contents: contents,
+                fileURL: fileURL,
+                temporaryDirectoryURL: directoryURL,
                 fileName: responseFileName ?? adbTVInstallPackageFileName(
                     from: sourceURL.lastPathComponent
-                )
+                ),
+                byteCount: receivedByteCount
+            ))
+            keepsTemporaryFiles = true
+        } else {
+            result = .failure(ADBTVInstallDownloadError.temporaryFileFailure(
+                "The downloaded file is unavailable."
             ))
         }
 
         if receivedResponse, terminalError == nil,
-           !contents.isEmpty, lastReportedByteCount != Int64(contents.count) {
-            reportProgress(receivedByteCount: Int64(contents.count))
+           receivedByteCount > 0, lastReportedByteCount != receivedByteCount {
+            reportProgress(receivedByteCount: receivedByteCount)
+        }
+        if !keepsTemporaryFiles {
+            cleanupTemporaryFiles()
         }
 
         let continuation = self.continuation
@@ -601,6 +741,16 @@ private final class ADBTVInstallDownloadDelegate: NSObject, URLSessionDataDelega
             await progressTask?.value
             continuation?.resume(with: result)
         }
+    }
+
+    private func cleanupTemporaryFiles() {
+        try? fileHandle?.close()
+        fileHandle = nil
+        if let temporaryDirectoryURL {
+            try? FileManager.default.removeItem(at: temporaryDirectoryURL)
+        }
+        temporaryDirectoryURL = nil
+        downloadedFileURL = nil
     }
 
     private func reportProgress(receivedByteCount: Int64) {
