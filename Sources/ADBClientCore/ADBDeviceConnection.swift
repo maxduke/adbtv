@@ -192,6 +192,23 @@ public struct ADBDeviceConnection: Sendable {
         )
     }
 
+    public mutating func runService(
+        _ service: String,
+        inputFrom fileURL: URL,
+        inputByteCount: Int64,
+        maximumOutputByteCount: Int,
+        progressHandler: @escaping @Sendable (Int64) async -> Void = { _ in }
+    ) async throws -> ADBServiceOutput {
+        start()
+        return try await session.runService(
+            service,
+            inputFrom: fileURL,
+            inputByteCount: inputByteCount,
+            maximumOutputByteCount: maximumOutputByteCount,
+            progressHandler: progressHandler
+        )
+    }
+
     public mutating func listDirectory(
         _ path: ADBRemotePath
     ) async throws -> [ADBSyncDirectoryEntry] {
