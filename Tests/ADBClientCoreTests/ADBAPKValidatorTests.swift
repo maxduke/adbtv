@@ -1,9 +1,19 @@
+import Foundation
 import XCTest
 @testable import ADBClientCore
 
 final class ADBAPKValidatorTests: XCTestCase {
     func testAcceptsZIPArchiveWithRootAndroidManifest() throws {
         XCTAssertNoThrow(try ADBAPKValidator().validate(contents: makeTestAPK()))
+    }
+
+    func testAcceptsMappedFileWithoutConvertingItToAByteArray() throws {
+        let fileURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBAPKValidatorTests-\(UUID().uuidString).apk")
+        try Data(makeTestAPK()).write(to: fileURL)
+        defer { try? FileManager.default.removeItem(at: fileURL) }
+
+        XCTAssertNoThrow(try ADBAPKValidator().validate(fileURL: fileURL))
     }
 
     func testRejectsNonZIPAndTruncatedArchives() throws {
