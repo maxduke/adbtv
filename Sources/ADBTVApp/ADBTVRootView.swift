@@ -39,6 +39,7 @@ public struct ADBTVRootView: View {
     @State private var deviceConnectionTask: Task<Void, Never>?
     @State private var deviceConnectionState = ADBTVSavedDeviceConnectionState.idle
     @State private var automaticDiscoveryPolicy = ADBTVAutomaticDiscoveryPolicy()
+    @State private var helperReplacementDevice: ADBTVDeviceSummary?
 #if os(iOS) && canImport(AVFoundation)
     @State private var isQRCodeScannerPresented = false
     @State private var qrScannerError: DiagnosticDetail?
@@ -381,6 +382,33 @@ public struct ADBTVRootView: View {
             Button("OK", role: .cancel) {}
         } message: { diagnosticDetail in
             Text(diagnosticDetail.formattedDescription)
+        }
+        .confirmationDialog(
+            "Replace Input Helper?",
+            isPresented: Binding(
+                get: { helperReplacementDevice != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        helperReplacementDevice = nil
+                    }
+                }
+            ),
+            presenting: helperReplacementDevice
+        ) { device in
+            Button("Replace Helper", role: .destructive) {
+                helperReplacementDevice = nil
+                startInstall(
+                    for: device,
+                    isUnicodeInputHelper: true,
+                    replacingUnicodeInputHelper: true
+                )
+            }
+        } message: { _ in
+            Text(
+                "Android cannot update the installed helper because it was signed differently. "
+                    + "Replacing it removes only the helper, then installs this version. "
+                    + "No TV app data is affected."
+            )
         }
 #if os(iOS)
         .sheet(isPresented: $isFileImporterPresented) {
@@ -1048,7 +1076,11 @@ public struct ADBTVRootView: View {
         return "Could not pair with this Android TV."
     }
 
-    private func startInstall(for device: ADBTVDeviceSummary) {
+    private func startInstall(
+        for device: ADBTVDeviceSummary,
+        isUnicodeInputHelper: Bool = false,
+        replacingUnicodeInputHelper: Bool = false
+    ) {
         let installModel = model
         guard model.startInstall(on: device.id) else {
             return
@@ -1058,6 +1090,9 @@ public struct ADBTVRootView: View {
         installTask = Task {
             let completion: InstallCompletion
             do {
+                if replacingUnicodeInputHelper {
+                    try await Self.uninstallUnicodeInputHelper(from: device)
+                }
                 completion = .success(try await Self.installPackage(
                     for: device,
                     using: installModel,
@@ -1086,13 +1121,25 @@ public struct ADBTVRootView: View {
                 completion = .cancelled(cleanupFailure: nil)
             } catch {
                 completion = .failure(
-                    userMessage: Self.installUserMessage(for: error),
-                    diagnosticDetail: Self.installDiagnosticDetail(error, device: device)
+                    userMessage: replacingUnicodeInputHelper
+                        ? "Could not replace the Input Helper."
+                        : Self.installUserMessage(for: error),
+                    diagnosticDetail: Self.installDiagnosticDetail(
+                        error,
+                        device: device,
+                        operation: replacingUnicodeInputHelper
+                            ? "replaceUnicodeInputHelper" : "installAPK"
+                    )
                 )
             }
 
             await MainActor.run {
-                completeInstall(completion, on: device.id)
+                completeInstall(
+                    completion,
+                    on: device.id,
+                    isUnicodeInputHelper: isUnicodeInputHelper,
+                    replacingUnicodeInputHelper: replacingUnicodeInputHelper
+                )
             }
         }
     }
@@ -1116,7 +1163,7 @@ public struct ADBTVRootView: View {
             fileURL: packageURL,
             byteCount: packageURL.adbTVFileByteCount
         )
-        startInstall(for: device)
+        startInstall(for: device, isUnicodeInputHelper: true)
     }
 
     private func cancelInstall() {
@@ -1207,15 +1254,39 @@ public struct ADBTVRootView: View {
 #endif
     }
 
+    private static func uninstallUnicodeInputHelper(
+        from device: ADBTVDeviceSummary
+    ) async throws {
+#if canImport(Network) && canImport(Security)
+        try await ADBTVOperationTimeoutPolicy.installedApps.run(operation: .installedApps) {
+            var connection = try await connectedDevice(for: device)
+            defer { connection.cancel() }
+            let package = try ADBTVInstalledPackage(
+                packageName: ADBTVUnicodeInputHelper.packageName
+            )
+            try await ADBTVInstalledAppManager().uninstall(package, using: &connection)
+        }
+#else
+        throw ADBTVInstallOperationError.unsupportedPlatform
+#endif
+    }
+
     @MainActor
     private func completeInstall(
         _ completion: InstallCompletion,
-        on deviceID: ADBTVDeviceSummary.ID
+        on deviceID: ADBTVDeviceSummary.ID,
+        isUnicodeInputHelper: Bool,
+        replacingUnicodeInputHelper: Bool
     ) {
         installTask = nil
         switch completion {
         case .success(let report):
             model.finishInstall(result: report.result, on: deviceID)
+            if isUnicodeInputHelper,
+               !replacingUnicodeInputHelper,
+               report.result.isUpdateIncompatible {
+                helperReplacementDevice = model.devices.first { $0.id == deviceID }
+            }
         case .failure(let userMessage, let diagnosticDetail):
             model.failInstall(
                 userMessage: userMessage,
@@ -1321,10 +1392,14 @@ public struct ADBTVRootView: View {
         )
     }
 
-    private static func installDiagnosticDetail(_ error: Error, device: ADBTVDeviceSummary) -> DiagnosticDetail {
+    private static func installDiagnosticDetail(
+        _ error: Error,
+        device: ADBTVDeviceSummary,
+        operation: String = "installAPK"
+    ) -> DiagnosticDetail {
         var context = [
             "device": device.connectionDescription,
-            "operation": "installAPK"
+            "operation": operation
         ]
         if error is ADBAPKValidationError
             || error is ADBTVInstallFileError

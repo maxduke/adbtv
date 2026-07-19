@@ -191,6 +191,13 @@ public enum ADBAPKInstallResult: Equatable, Sendable {
     case success
     case failure(message: String)
 
+    public var isUpdateIncompatible: Bool {
+        guard case .failure(let message) = self else {
+            return false
+        }
+        return message.contains("INSTALL_FAILED_UPDATE_INCOMPATIBLE")
+    }
+
     public static func parse(shellOutput: ADBShellOutput) -> ADBAPKInstallResult {
         parse(output: shellOutput.utf8String)
     }

@@ -119,5 +119,12 @@ final class ADBAPKInstallPlanTests: XCTestCase {
             ADBAPKInstallResult.parse(output: ""),
             .failure(message: "Unknown install failure")
         )
+        XCTAssertTrue(ADBAPKInstallResult.failure(
+            message: "INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match"
+        ).isUpdateIncompatible)
+        XCTAssertFalse(ADBAPKInstallResult.failure(
+            message: "INSTALL_FAILED_INVALID_APK"
+        ).isUpdateIncompatible)
+        XCTAssertFalse(ADBAPKInstallResult.success.isUpdateIncompatible)
     }
 }

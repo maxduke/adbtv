@@ -108,6 +108,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Remove the v3 helper, refresh **Apps**, and confirm package identifiers and generic icons remain without blocking list, search, launch, or uninstall.
 - [ ] With only the v2 helper installed, confirm Chinese input still works; install v3 and confirm Chinese input continues to work.
 - [ ] Reinstall the helper, change an installed package, refresh, and confirm removed or replaced app metadata is not retained.
+- [ ] Install a v3 helper signed by a different key, retry helper installation, confirm **Replace Helper** uninstalls only the old helper, and confirm the bundled helper installs successfully.
 - [ ] Test a TV with a large third-party app library and confirm bounded metadata loading does not block package actions or navigation.
 - [ ] Launch an Android TV app and confirm its Leanback activity opens.
 - [ ] Launch a phone-style app without a Leanback activity and confirm the standard launcher fallback opens it, or a clear error with Technical Details appears.
