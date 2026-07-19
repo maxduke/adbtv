@@ -61,6 +61,19 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertTrue(session.commands[0].contains("'com.example.player'"))
     }
 
+    func testForceStopTargetsCurrentUserAndValidatedPackage() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [checkedOutput("")])
+
+        try await ADBTVInstalledAppManager().forceStop(package, using: &session)
+
+        XCTAssertTrue(
+            session.commands[0].hasPrefix(
+                "am force-stop --user current 'com.example.player'; "
+            )
+        )
+    }
+
     func testUninstallRequiresSuccessOutput() async throws {
         let package = try ADBTVInstalledPackage(packageName: "com.example.player")
         var session = InstalledAppSession(outputs: [checkedOutput("Failure [blocked]\n")])

@@ -248,6 +248,9 @@ public struct ADBTVRootView: View {
                         launchInstalledApp: { package in
                             runInstalledAppCommand(.launch(package), on: device)
                         },
+                        forceStopInstalledApp: { package in
+                            runInstalledAppCommand(.forceStop(package), on: device)
+                        },
                         uninstallInstalledApp: { package in
                             runInstalledAppCommand(.uninstall(package), on: device)
                         },
@@ -1559,6 +1562,10 @@ public struct ADBTVRootView: View {
             installedAppsState.status = .ready(
                 message: "Launched \(package.packageName)."
             )
+        case .success(.stopped(let package)):
+            let name = installedAppsState.details[package.packageName]?.displayName
+                ?? package.packageName
+            installedAppsState.status = .ready(message: "Stopped \(name).")
         case .success(.uninstalled(let package)):
             installedAppsState.packages.removeAll { $0 == package }
             installedAppsState.details.removeValue(forKey: package.packageName)
@@ -1600,10 +1607,10 @@ public struct ADBTVRootView: View {
                 }
                 completion = .failure(
                     operation: operation,
-                    userMessage: operation.failureMessage,
+                    userMessage: Self.deviceToolUserMessage(for: operation, error: error),
                     diagnosticDetail: DiagnosticDetail(
                         summary: String(describing: error),
-                        context: Self.operationDiagnosticContext(
+                        context: Self.deviceToolDiagnosticContext(
                             error: error,
                             base: [
                                 "device": device.connectionDescription,
@@ -1745,6 +1752,9 @@ public struct ADBTVRootView: View {
             case .launch(let package):
                 try await manager.launch(package, using: &connection)
                 return .launched(package)
+            case .forceStop(let package):
+                try await manager.forceStop(package, using: &connection)
+                return .stopped(package)
             case .uninstall(let package):
                 try await manager.uninstall(package, using: &connection)
                 return .uninstalled(package)
@@ -1998,6 +2008,33 @@ public struct ADBTVRootView: View {
         return "Could not send text."
     }
 
+    private static func deviceToolUserMessage(
+        for operation: ADBTVDeviceToolOperation,
+        error: Error
+    ) -> String {
+        if case .screenshot = operation,
+           let toolsError = error as? ADBTVDeviceToolsError,
+           case .screenshotUnavailable = toolsError {
+            return "Screenshot unavailable. The current app or TV may block screen capture."
+        }
+        return operation.failureMessage
+    }
+
+    private static func deviceToolDiagnosticContext(
+        error: Error,
+        base: [String: String]
+    ) -> [String: String] {
+        var context = operationDiagnosticContext(error: error, base: base)
+        if let toolsError = error as? ADBTVDeviceToolsError,
+           case let .screenshotUnavailable(byteCount, message) = toolsError {
+            context["outputByteCount"] = String(byteCount)
+            if let message {
+                context["deviceMessage"] = message
+            }
+        }
+        return context
+    }
+
     private static func operationDiagnosticContext(
         error: Error,
         base: [String: String]
@@ -2071,6 +2108,7 @@ private enum RemoteCompletion: Sendable {
 private enum ADBTVInstalledAppCommand: Sendable {
     case list(ADBTVInstalledAppScope)
     case launch(ADBTVInstalledPackage)
+    case forceStop(ADBTVInstalledPackage)
     case uninstall(ADBTVInstalledPackage)
 
     var inProgressStatus: ADBTVInstalledAppsStatus {
@@ -2079,6 +2117,8 @@ private enum ADBTVInstalledAppCommand: Sendable {
             return .loading
         case .launch(let package):
             return .launching(package)
+        case .forceStop(let package):
+            return .stopping(package)
         case .uninstall(let package):
             return .uninstalling(package)
         }
@@ -2090,6 +2130,8 @@ private enum ADBTVInstalledAppCommand: Sendable {
             return scope == .user ? "listUserApps" : "listSystemApps"
         case .launch:
             return "launchInstalledApp"
+        case .forceStop:
+            return "forceStopInstalledApp"
         case .uninstall:
             return "uninstallInstalledApp"
         }
@@ -2099,7 +2141,7 @@ private enum ADBTVInstalledAppCommand: Sendable {
         switch self {
         case .list:
             return nil
-        case .launch(let package), .uninstall(let package):
+        case .launch(let package), .forceStop(let package), .uninstall(let package):
             return package.packageName
         }
     }
@@ -2110,6 +2152,8 @@ private enum ADBTVInstalledAppCommand: Sendable {
             return "Could not load installed apps."
         case .launch:
             return "Could not launch this app."
+        case .forceStop:
+            return "Could not stop this app."
         case .uninstall:
             return "Could not uninstall this app."
         }
@@ -2119,6 +2163,7 @@ private enum ADBTVInstalledAppCommand: Sendable {
 private enum ADBTVInstalledAppResult: Sendable {
     case listed([ADBTVInstalledPackage])
     case launched(ADBTVInstalledPackage)
+    case stopped(ADBTVInstalledPackage)
     case uninstalled(ADBTVInstalledPackage)
 }
 
@@ -2200,12 +2245,13 @@ private enum ADBTVInstalledAppsStatus: Equatable {
     case loading
     case ready(message: String?)
     case launching(ADBTVInstalledPackage)
+    case stopping(ADBTVInstalledPackage)
     case uninstalling(ADBTVInstalledPackage)
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
 
     var isBusy: Bool {
         switch self {
-        case .loading, .launching, .uninstalling:
+        case .loading, .launching, .stopping, .uninstalling:
             return true
         case .idle, .ready, .failed:
             return false
@@ -3206,6 +3252,7 @@ private struct DeviceDetailView: View {
     var installUnicodeInputHelper: () -> Void
     var loadInstalledApps: (ADBTVInstalledAppScope) -> Void
     var launchInstalledApp: (ADBTVInstalledPackage) -> Void
+    var forceStopInstalledApp: (ADBTVInstalledPackage) -> Void
     var uninstallInstalledApp: (ADBTVInstalledPackage) -> Void
     var cancelInstalledAppOperation: () -> Void
     var loadDeviceInformation: () -> Void
@@ -3291,6 +3338,7 @@ private struct DeviceDetailView: View {
                 installUnicodeInputHelper()
             },
             launch: launchInstalledApp,
+            forceStop: forceStopInstalledApp,
             uninstall: uninstallInstalledApp,
             cancel: cancelInstalledAppOperation
         )
@@ -3380,12 +3428,17 @@ private struct InstalledAppsPanel: View {
     var load: (ADBTVInstalledAppScope) -> Void
     var installHelper: () -> Void
     var launch: (ADBTVInstalledPackage) -> Void
+    var forceStop: (ADBTVInstalledPackage) -> Void
     var uninstall: (ADBTVInstalledPackage) -> Void
     var cancel: () -> Void
 
     @State private var searchText = ""
+    @State private var pendingForceStop: ADBTVInstalledPackage?
     @State private var pendingUninstall: ADBTVInstalledPackage?
-    @State private var selectedPackage: ADBTVInstalledPackage?
+    @State private var selectedPackage: ADBTVInstalledPackage? =
+        ProcessInfo.processInfo.arguments.contains("--ui-app-details")
+            ? (try? ADBTVInstalledPackage(packageName: "com.netflix.ninja"))
+            : nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -3456,8 +3509,24 @@ private struct InstalledAppsPanel: View {
         }
         .onChange(of: state.scope) { _, _ in
             searchText = ""
+            pendingForceStop = nil
             pendingUninstall = nil
             selectedPackage = nil
+        }
+        .confirmationDialog(
+            "Force Stop App?",
+            isPresented: Binding(
+                get: { pendingForceStop != nil },
+                set: { if !$0 { pendingForceStop = nil } }
+            ),
+            presenting: pendingForceStop
+        ) { package in
+            Button("Force Stop \(appTitle(for: package))", role: .destructive) {
+                forceStop(package)
+                pendingForceStop = nil
+            }
+        } message: { _ in
+            Text("This stops the app, background activity, and playback without removing its data.")
         }
         .confirmationDialog(
             "Uninstall app?",
@@ -3481,6 +3550,7 @@ private struct InstalledAppsPanel: View {
                 actionsDisabled: deviceOperationInProgress || state.status.isBusy,
                 allowsUninstall: state.scope == .user,
                 launch: launch,
+                forceStop: forceStop,
                 uninstall: uninstall
             )
         }
@@ -3495,6 +3565,8 @@ private struct InstalledAppsPanel: View {
             progressLabel("Loading installed apps", cancel: cancel)
         case .launching(let package):
             progressLabel("Launching \(package.packageName)", cancel: cancel)
+        case .stopping(let package):
+            progressLabel("Stopping \(appTitle(for: package))", cancel: cancel)
         case .uninstalling(let package):
             progressLabel("Uninstalling \(package.packageName)", cancel: cancel)
         case .ready(let message):
@@ -3572,6 +3644,13 @@ private struct InstalledAppsPanel: View {
                 .disabled(deviceOperationInProgress || state.status.isBusy)
 
                 if state.scope == .user {
+                    Button(role: .destructive) {
+                        pendingForceStop = package
+                    } label: {
+                        Label("Force Stop", systemImage: "stop.circle")
+                    }
+                    .disabled(deviceOperationInProgress || state.status.isBusy)
+
                     Divider()
 
                     Button(role: .destructive) {
@@ -3601,6 +3680,10 @@ private struct InstalledAppsPanel: View {
                     .localizedCaseInsensitiveContains(searchText) == true
         }
     }
+
+    private func appTitle(for package: ADBTVInstalledPackage) -> String {
+        state.details[package.packageName]?.displayName ?? package.packageName
+    }
 }
 
 private struct InstalledAppDetailsView: View {
@@ -3611,8 +3694,10 @@ private struct InstalledAppDetailsView: View {
     var actionsDisabled: Bool
     var allowsUninstall: Bool
     var launch: (ADBTVInstalledPackage) -> Void
+    var forceStop: (ADBTVInstalledPackage) -> Void
     var uninstall: (ADBTVInstalledPackage) -> Void
 
+    @State private var confirmsForceStop = false
     @State private var confirmsUninstall = false
 
     var body: some View {
@@ -3682,6 +3767,13 @@ private struct InstalledAppDetailsView: View {
                     }
                     .disabled(actionsDisabled)
 
+                    Button(role: .destructive) {
+                        confirmsForceStop = true
+                    } label: {
+                        Label("Force Stop", systemImage: "stop.circle")
+                    }
+                    .disabled(actionsDisabled)
+
                     if allowsUninstall {
                         Button(role: .destructive) {
                             confirmsUninstall = true
@@ -3698,6 +3790,21 @@ private struct InstalledAppDetailsView: View {
                     Button("Done") {
                         dismiss()
                     }
+                }
+            }
+            .confirmationDialog(
+                "Force Stop App?",
+                isPresented: $confirmsForceStop
+            ) {
+                Button("Force Stop", role: .destructive) {
+                    dismiss()
+                    forceStop(package)
+                }
+            } message: {
+                if allowsUninstall {
+                    Text("This stops the app, background activity, and playback without removing its data.")
+                } else {
+                    Text("This is a system app. Stopping it may temporarily affect TV features, and Android may restart it.")
                 }
             }
             .confirmationDialog(

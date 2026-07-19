@@ -154,6 +154,19 @@ public struct ADBTVInstalledAppManager: Sendable {
         _ = try invocation.validatedOutput(from: output)
     }
 
+    public func forceStop<Session: ADBShellCommandRunningSession>(
+        _ package: ADBTVInstalledPackage,
+        using session: inout Session
+    ) async throws {
+        let invocation = try ADBCheckedShellInvocation(
+            command: ADBShellCommand(
+                "am force-stop --user current \(package.shellEscaped)"
+            )
+        )
+        let output = try await session.runShellCommand(invocation.shellCommand)
+        _ = try invocation.validatedOutput(from: output)
+    }
+
     public func uninstall<Session: ADBShellCommandRunningSession>(
         _ package: ADBTVInstalledPackage,
         using session: inout Session

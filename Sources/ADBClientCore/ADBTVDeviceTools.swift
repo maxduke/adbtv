@@ -53,7 +53,14 @@ public struct ADBTVDeviceTools<Session: ADBDeviceToolsSession>: Sendable {
             "exec:screencap -p",
             maximumOutputByteCount: Self.maximumScreenshotByteCount
         )
-        return try ADBTVScreenshot(pngData: Data(output.bytes))
+        do {
+            return try ADBTVScreenshot(pngData: Data(output.bytes))
+        } catch ADBTVDeviceToolsError.invalidScreenshotPNG {
+            throw ADBTVDeviceToolsError.screenshotUnavailable(
+                outputByteCount: output.bytes.count,
+                deviceMessage: Self.textPreview(output.bytes)
+            )
+        }
     }
 
     public mutating func runShellCommand(_ rawCommand: String) async throws -> ADBCheckedShellResult {
@@ -106,6 +113,22 @@ public struct ADBTVDeviceTools<Session: ADBDeviceToolsSession>: Sendable {
         } catch {
             return nil
         }
+    }
+
+    private static func textPreview(_ bytes: [UInt8]) -> String? {
+        let prefix = bytes.prefix(512)
+        guard let value = String(bytes: prefix, encoding: .utf8) else {
+            return nil
+        }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed.unicodeScalars.allSatisfy({
+                  !CharacterSet.controlCharacters.contains($0)
+                      || $0.value == 9 || $0.value == 10 || $0.value == 13
+              }) else {
+            return nil
+        }
+        return trimmed
     }
 }
 
@@ -260,6 +283,7 @@ public enum ADBTVDeviceToolsError: Error, Equatable, Sendable {
     case shellCommandTooLarge(maximumByteCount: Int)
     case shellOutputTooLarge(maximumByteCount: Int)
     case screenshotTooLarge(Int)
+    case screenshotUnavailable(outputByteCount: Int, deviceMessage: String?)
     case invalidScreenshotPNG
     case invalidScreenshotDimensions(width: Int, height: Int)
 }
