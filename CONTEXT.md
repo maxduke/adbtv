@@ -124,6 +124,10 @@ _Avoid_: Terminal, console when referring to the operation itself
 A Structured Action that sends Android TV remote input such as D-pad navigation, select, back, home, settings, text input, volume, or power.
 _Avoid_: Remote command
 
+**Remote Session**:
+A bounded interaction period in which the app keeps a checked connection to one Managed Device for responsive TV Remote Actions.
+_Avoid_: Pairing Session, permanent connection
+
 **Repeating TV Remote Action**:
 A D-pad direction or volume adjustment sent immediately and then repeatedly while the user continues holding its control.
 _Avoid_: Android long press, repeated media action
