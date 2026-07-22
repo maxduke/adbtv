@@ -67,8 +67,6 @@ private struct RecordingRemoteConnection: ADBTVRemoteConnection {
         texts.append(text)
         return output
     }
-
-    func cancel() {}
 }
 
 private func XCTAssertThrowsADBTVRemoteOperationError<T>(

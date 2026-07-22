@@ -30,6 +30,7 @@ public struct ADBTVRootView: View {
     @State private var remoteSession: ADBTVRemoteSession?
     @State private var remoteSessionDeviceID: ADBTVDeviceSummary.ID?
     @State private var remoteSessionToken: UUID?
+    @State private var remoteInputTask: Task<Void, Never>?
     @State private var installedAppsTask: Task<Void, Never>?
     @State private var installedAppsOperationID: UUID?
     @State private var installedAppDetailsTask: Task<Void, Never>?
@@ -1504,6 +1505,8 @@ public struct ADBTVRootView: View {
         remoteSession = nil
         remoteSessionDeviceID = nil
         remoteSessionToken = nil
+        remoteInputTask?.cancel()
+        remoteInputTask = nil
         if model.activeDeviceOperation == nil {
             model.remoteStatus = .idle
         }
@@ -1524,12 +1527,22 @@ public struct ADBTVRootView: View {
         policy: ADBTVRemoteSession.EnqueuePolicy = .ordered,
         haptic: Bool = true
     ) {
-        guard remoteSessionDeviceID == device.id, let remoteSession else {
+        guard remoteSessionDeviceID == device.id,
+              let remoteSession,
+              let token = remoteSessionToken else {
             return
         }
-        Task {
+        let previousInputTask = remoteInputTask
+        remoteInputTask = Task {
+            await previousInputTask?.value
+            guard !Task.isCancelled else {
+                return
+            }
             let result = await remoteSession.enqueue(action, policy: policy)
             await MainActor.run {
+                guard remoteSessionToken == token, remoteSessionDeviceID == device.id else {
+                    return
+                }
                 switch result {
                 case .accepted:
                     if haptic {
@@ -4384,7 +4397,11 @@ private struct RemoteActionsPanel: View {
             }
             .padding(16)
             .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-            .disabled(status.remoteActionsUnavailable || deviceOperationInProgress)
+            .disabled(
+                scenePhase != .active
+                    || status.remoteActionsUnavailable
+                    || deviceOperationInProgress
+            )
 
             Divider()
 
@@ -4407,7 +4424,7 @@ private struct RemoteActionsPanel: View {
                         .autocorrectionDisabled()
                         .textFieldStyle(.roundedBorder)
                         .focused($focusedControl, equals: .text)
-                        .disabled(deviceOperationInProgress)
+                        .disabled(deviceOperationInProgress || status.remoteActionsUnavailable)
                     Button {
                         sendText()
                     } label: {
@@ -4417,7 +4434,7 @@ private struct RemoteActionsPanel: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .foregroundStyle(Color.white)
-                    .disabled(!canSendText)
+                    .disabled(!canSendText || status.remoteActionsUnavailable)
                     .accessibilityLabel("Send Text")
                 }
 
@@ -4538,7 +4555,11 @@ private struct RemoteActionsPanel: View {
                 Spacer(minLength: 0)
             }
         }
-        .disabled(status.remoteActionsUnavailable || deviceOperationInProgress)
+        .disabled(
+            scenePhase != .active
+                || status.remoteActionsUnavailable
+                || deviceOperationInProgress
+        )
     }
 
     private func mediaButton(
@@ -4615,7 +4636,7 @@ private struct RemoteActionsPanel: View {
             Label("Install Input Helper", systemImage: "keyboard")
         }
         .buttonStyle(.bordered)
-        .disabled(deviceOperationInProgress)
+        .disabled(deviceOperationInProgress || status.remoteActionsUnavailable)
     }
 
     private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
@@ -4642,10 +4663,12 @@ private struct RemoteActionsPanel: View {
         }
 
         if press.phase == .repeat {
-            sendRepeat(action)
-        } else {
-            sendFromKeyboard(action)
+            if action == .up || action == .down || action == .left || action == .right {
+                sendRepeat(action)
+            }
+            return .handled
         }
+        sendFromKeyboard(action)
         return .handled
     }
 
@@ -4677,6 +4700,11 @@ private struct RemoteControlButton<Label: View>: View {
             )
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { action() }
+            .onChange(of: isEnabled) { _, enabled in
+                if !enabled {
+                    endPress()
+                }
+            }
             .onDisappear(perform: endPress)
     }
 
