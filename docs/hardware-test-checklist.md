@@ -81,6 +81,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Android TV Remote
 
+- [ ] Open **Remote**, confirm **Connecting to TV** appears, controls remain unavailable until connected, and controls become available without another tap.
 - [ ] Send D-pad up, down, left, and right.
 - [ ] Send select, back, home, menu, and settings.
 - [ ] Send volume up, volume down, and mute.
@@ -91,10 +92,17 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Send text containing spaces and shell punctuation to a focused text field and confirm the exact text arrives.
 - [ ] Enter Chinese text, install the bundled ADB TV Input helper, focus a TV text field, and confirm the exact text arrives.
 - [ ] Confirm Unicode input restores the TV's previously selected input method after success and failure.
-- [ ] Trigger an Android-side `input` failure and confirm the remote status does not show **Sent**.
-- [ ] Disconnect the TV and confirm every failed action provides a User Error and technical detail.
-- [ ] Send an action to an unreachable TV and confirm it times out instead of remaining in progress.
-- [ ] Cancel an in-flight action to an unreachable TV and confirm the interface becomes usable immediately.
+- [ ] Rapidly tap a known sequence of D-pad and navigation controls, confirm the interface never freezes, and confirm the TV applies accepted actions in order.
+- [ ] Overfill input against a slow TV, confirm **Remote is catching up** appears with a warning haptic, and confirm accepted actions are not replaced by newer taps.
+- [ ] Hold each D-pad direction and volume up/down, confirm the first action is immediate, repeat remains responsive, and release stops new actions without catch-up.
+- [ ] Hold select, back, home, menu, settings, mute, power, and each media control; confirm each remains one-shot.
+- [ ] Hold a repeating control for more than eight seconds and confirm new actions stop at the bound.
+- [ ] Use an external keyboard: arrows send directions, Return sends Select, and Escape sends Back; confirm held arrows repeat while Return and Escape remain one-shot.
+- [ ] Focus **Text Input** and confirm remote keyboard mappings do not intercept typing; tap a remote control and confirm keyboard navigation works again.
+- [ ] Disconnect the TV during rapid input, confirm pending actions are discarded, the failed action is not replayed, and exactly one automatic reconnect is attempted.
+- [ ] Let automatic reconnect fail, confirm technical details and **Retry Connection** appear, restore the TV, and retry successfully.
+- [ ] Hold a repeating control while switching tools or backgrounding ADB TV; confirm no further actions arrive after release/reopen.
+- [ ] Trigger an Android-side `input` failure and confirm a warning haptic and reconnect state appear without freezing the interface.
 
 ## Installed Apps
 
