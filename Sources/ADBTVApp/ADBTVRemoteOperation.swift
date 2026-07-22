@@ -4,6 +4,7 @@ import Foundation
 public protocol ADBTVRemoteConnection: Sendable {
     mutating func sendRemoteAction(_ action: ADBTVRemoteAction) async throws -> ADBShellOutput
     mutating func sendRemoteText(_ text: ADBTVRemoteText) async throws -> ADBShellOutput
+    func cancel()
 }
 
 #if canImport(Network)
@@ -55,4 +56,27 @@ public struct ADBTVRemoteOperation: Sendable {
 public enum ADBTVRemoteOperationError: Error, Equatable, Sendable {
     case missingDevice
     case unsupportedPlatform
+}
+
+actor ADBTVRemoteConnectionChannel: ADBTVRemoteSessionChannel {
+    private var connection: any ADBTVRemoteConnection
+
+    init(connection: any ADBTVRemoteConnection) {
+        self.connection = connection
+    }
+
+    func send(_ action: ADBTVRemoteAction) async throws {
+        var connection = connection
+        do {
+            _ = try await connection.sendRemoteAction(action)
+            self.connection = connection
+        } catch {
+            self.connection = connection
+            throw error
+        }
+    }
+
+    func cancel() async {
+        connection.cancel()
+    }
 }
