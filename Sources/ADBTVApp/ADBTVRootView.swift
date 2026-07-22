@@ -27,6 +27,9 @@ public struct ADBTVRootView: View {
     @State private var devicePersistenceError: DiagnosticDetail?
     @State private var installTask: Task<Void, Never>?
     @State private var remoteTask: Task<Void, Never>?
+    @State private var remoteSession: ADBTVRemoteSession?
+    @State private var remoteSessionDeviceID: ADBTVDeviceSummary.ID?
+    @State private var remoteSessionToken: UUID?
     @State private var installedAppsTask: Task<Void, Never>?
     @State private var installedAppsOperationID: UUID?
     @State private var installedAppDetailsTask: Task<Void, Never>?
@@ -236,6 +239,17 @@ public struct ADBTVRootView: View {
                         sendRemoteAction: { action in
                             sendRemoteAction(action, to: device)
                         },
+                        sendRepeatingRemoteAction: { action in
+                            sendRemoteAction(action, to: device, policy: .onlyWhenIdle, haptic: false)
+                        },
+                        sendKeyboardRemoteAction: { action in
+                            sendRemoteAction(action, to: device, haptic: false)
+                        },
+                        startRemoteSession: {
+                            startRemoteSession(for: device)
+                        },
+                        stopRemoteSession: stopRemoteSession,
+                        retryRemoteSession: retryRemoteSession,
                         sendRemoteText: {
                             sendRemoteText(to: device)
                         },
@@ -443,6 +457,7 @@ public struct ADBTVRootView: View {
         .onDisappear {
             installTask?.cancel()
             remoteTask?.cancel()
+            stopRemoteSession()
             installedAppsTask?.cancel()
             installedAppsOperationID = nil
             installedAppDetailsTask?.cancel()
@@ -468,6 +483,7 @@ public struct ADBTVRootView: View {
                 startDiscovery()
             }
         case .background:
+            stopRemoteSession()
             automaticDiscoveryPolicy.recordSceneLeftActiveState()
             if automaticDiscoveryPolicy.shouldSuspendDiscovery(status: model.discoveryStatus) {
                 stopDiscovery()
@@ -1448,33 +1464,83 @@ public struct ADBTVRootView: View {
         return "Could not install the app package."
     }
 
-    private func sendRemoteAction(_ action: ADBTVRemoteAction, to device: ADBTVDeviceSummary) {
-        let remoteModel = model
-        guard model.recordRemoteActionStarted(action, on: device.id) else {
+    private func startRemoteSession(for device: ADBTVDeviceSummary) {
+        guard !ProcessInfo.processInfo.arguments.contains("--ui-preview") else {
+            return
+        }
+        guard scenePhase == .active,
+              remoteSessionDeviceID != device.id || remoteSession == nil else {
             return
         }
 
-        remoteTask?.cancel()
-        remoteTask = Task {
-            let completion: RemoteCompletion
-            do {
-                _ = try await Self.sendRemoteAction(action, to: device, using: remoteModel)
-                completion = .success(action)
-            } catch is CancellationError {
-                return
-            } catch {
-                completion = .failure(
-                    action: action,
-                    userMessage: Self.remoteUserMessage(for: error),
-                    diagnosticDetail: Self.remoteDiagnosticDetail(error, action: action, device: device)
-                )
+        stopRemoteSession()
+        let token = UUID()
+        let session = ADBTVRemoteSession(
+            channelFactory: {
+#if canImport(Network) && canImport(Security)
+                let connection = try await Self.connectedDevice(for: device)
+                return ADBTVRemoteConnectionChannel(connection: connection)
+#else
+                throw ADBTVRemoteOperationError.unsupportedPlatform
+#endif
+            },
+            eventHandler: { event in
+                await MainActor.run {
+                    handleRemoteSessionEvent(event, for: device, token: token)
+                }
             }
+        )
+        remoteSession = session
+        remoteSessionDeviceID = device.id
+        remoteSessionToken = token
+        model.remoteStatus = .connecting
+        Task { await session.start() }
+    }
 
-            guard !Task.isCancelled else {
-                return
-            }
+    private func stopRemoteSession() {
+        guard let session = remoteSession else {
+            return
+        }
+        remoteSession = nil
+        remoteSessionDeviceID = nil
+        remoteSessionToken = nil
+        if model.activeDeviceOperation == nil {
+            model.remoteStatus = .idle
+        }
+        Task { await session.close() }
+    }
+
+    private func retryRemoteSession() {
+        guard let remoteSession else {
+            return
+        }
+        model.remoteStatus = .connecting
+        Task { await remoteSession.retryConnection() }
+    }
+
+    private func sendRemoteAction(
+        _ action: ADBTVRemoteAction,
+        to device: ADBTVDeviceSummary,
+        policy: ADBTVRemoteSession.EnqueuePolicy = .ordered,
+        haptic: Bool = true
+    ) {
+        guard remoteSessionDeviceID == device.id, let remoteSession else {
+            return
+        }
+        Task {
+            let result = await remoteSession.enqueue(action, policy: policy)
             await MainActor.run {
-                completeRemoteAction(completion, on: device.id)
+                switch result {
+                case .accepted:
+                    if haptic {
+                        Self.remoteImpactFeedback()
+                    }
+                case .full:
+                    model.remoteStatus = .catchingUp
+                    Self.remoteWarningFeedback()
+                case .busy, .unavailable:
+                    break
+                }
             }
         }
     }
@@ -1904,26 +1970,6 @@ public struct ADBTVRootView: View {
 #endif
     }
 
-    private static func sendRemoteAction(
-        _ action: ADBTVRemoteAction,
-        to device: ADBTVDeviceSummary,
-        using remoteModel: ADBTVAppModel
-    ) async throws -> ADBShellOutput {
-#if canImport(Network) && canImport(Security)
-        return try await ADBTVOperationTimeoutPolicy.remoteAction.run(operation: .remoteAction) {
-            var connection = try await connectedDevice(for: device)
-            defer { connection.cancel() }
-            return try await ADBTVRemoteOperation().sendAction(
-                action,
-                from: remoteModel,
-                using: &connection
-            )
-        }
-#else
-        throw ADBTVRemoteOperationError.unsupportedPlatform
-#endif
-    }
-
     private static func sendRemoteText(
         _ text: ADBTVRemoteText,
         to device: ADBTVDeviceSummary,
@@ -2032,17 +2078,8 @@ public struct ADBTVRootView: View {
     ) {
         remoteTask = nil
         switch completion {
-        case .success(let action):
-            model.finishRemoteAction(action, on: deviceID)
         case .textSuccess:
             model.finishRemoteText(on: deviceID)
-        case .failure(let action, let userMessage, let diagnosticDetail):
-            model.failRemoteAction(
-                action,
-                userMessage: userMessage,
-                diagnosticDetail: diagnosticDetail,
-                on: deviceID
-            )
         case .textFailure(let userMessage, let diagnosticDetail):
             model.failRemoteText(
                 userMessage: userMessage,
@@ -2052,28 +2089,78 @@ public struct ADBTVRootView: View {
         }
     }
 
-    private static func remoteDiagnosticDetail(
-        _ error: Error,
-        action: ADBTVRemoteAction,
-        device: ADBTVDeviceSummary
-    ) -> DiagnosticDetail {
-        DiagnosticDetail(
-            summary: String(describing: error),
-            context: operationDiagnosticContext(
-                error: error,
-                base: [
-                    "action": action.displayTitle,
-                    "device": device.connectionDescription,
-                    "operation": "sendRemoteAction"
-                ]
+    @MainActor
+    private func handleRemoteSessionEvent(
+        _ event: ADBTVRemoteSessionEvent,
+        for device: ADBTVDeviceSummary,
+        token: UUID
+    ) {
+        guard remoteSessionToken == token, remoteSessionDeviceID == device.id else {
+            return
+        }
+
+        switch event {
+        case .connecting:
+            model.remoteStatus = .connecting
+        case .ready:
+            model.remoteStatus = .idle
+        case .sending, .sent:
+            break
+        case .drained:
+            if model.remoteStatus == .catchingUp {
+                model.remoteStatus = .idle
+            }
+        case .actionFailed:
+            Self.remoteWarningFeedback()
+        case .reconnecting:
+            model.remoteStatus = .reconnecting
+        case .connectionFailed(let failure):
+            model.remoteStatus = .connectionFailed(
+                userMessage: failure.timedOut
+                    ? "The TV did not respond in time."
+                    : "Could not connect to the TV.",
+                diagnosticDetail: Self.remoteSessionDiagnosticDetail(failure, device: device)
             )
-        )
+            Self.remoteWarningFeedback()
+        case .reconnectFailed(let actionFailure, let connectionFailure):
+            var detail = Self.remoteSessionDiagnosticDetail(connectionFailure, device: device)
+            detail.context["failedAction"] = actionFailure.action?.displayTitle ?? "unknown"
+            detail.context["actionFailure"] = actionFailure.summary
+            model.remoteStatus = .connectionFailed(
+                userMessage: "Connection to the TV was lost.",
+                diagnosticDetail: detail
+            )
+            Self.remoteWarningFeedback()
+        case .closed:
+            break
+        }
     }
 
-    private static func remoteUserMessage(for error: Error) -> String {
-        error is ADBTVOperationTimeoutError
-            ? "The TV did not respond in time."
-            : "Could not send remote action."
+    private static func remoteSessionDiagnosticDetail(
+        _ failure: ADBTVRemoteSessionFailure,
+        device: ADBTVDeviceSummary
+    ) -> DiagnosticDetail {
+        var context = [
+            "device": device.connectionDescription,
+            "operation": "remoteSession",
+            "stage": failure.stage.rawValue
+        ]
+        if let action = failure.action {
+            context["action"] = action.displayTitle
+        }
+        return DiagnosticDetail(summary: failure.summary, context: context)
+    }
+
+    private static func remoteImpactFeedback() {
+#if os(iOS)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+#endif
+    }
+
+    private static func remoteWarningFeedback() {
+#if os(iOS)
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+#endif
     }
 
     private static func remoteTextUserMessage(for error: Error) -> String {
@@ -2186,9 +2273,7 @@ private actor ADBTVInstallCleanupRecorder {
 }
 
 private enum RemoteCompletion: Sendable {
-    case success(ADBTVRemoteAction)
     case textSuccess
-    case failure(action: ADBTVRemoteAction, userMessage: String, diagnosticDetail: DiagnosticDetail)
     case textFailure(userMessage: String, diagnosticDetail: DiagnosticDetail)
 }
 
@@ -3334,6 +3419,11 @@ private struct DeviceDetailView: View {
     var install: () -> Void
     var cancelInstall: () -> Void
     var sendRemoteAction: (ADBTVRemoteAction) -> Void
+    var sendRepeatingRemoteAction: (ADBTVRemoteAction) -> Void
+    var sendKeyboardRemoteAction: (ADBTVRemoteAction) -> Void
+    var startRemoteSession: () -> Void
+    var stopRemoteSession: () -> Void
+    var retryRemoteSession: () -> Void
     var sendRemoteText: () -> Void
     var cancelRemoteOperation: () -> Void
     var installUnicodeInputHelper: () -> Void
@@ -3408,7 +3498,12 @@ private struct DeviceDetailView: View {
             deviceOperationInProgress: deviceOperationInProgress,
             unicodeHelperInstallStatus: unicodeHelperInstallStatus,
             send: sendRemoteAction,
+            sendRepeat: sendRepeatingRemoteAction,
+            sendFromKeyboard: sendKeyboardRemoteAction,
             sendText: sendRemoteText,
+            startSession: startRemoteSession,
+            stopSession: stopRemoteSession,
+            retrySession: retryRemoteSession,
             cancelRemoteOperation: cancelRemoteOperation,
             installUnicodeInputHelper: installUnicodeInputHelper
         )
@@ -4229,19 +4324,32 @@ private struct InstallStatusView: View {
 }
 
 private struct RemoteActionsPanel: View {
+    @Environment(\.scenePhase) private var scenePhase
+
     var status: ADBTVRemoteStatus
     var text: Binding<String>
     var canSendText: Bool
     var deviceOperationInProgress: Bool
     var unicodeHelperInstallStatus: ADBTVInstallStatus?
     var send: (ADBTVRemoteAction) -> Void
+    var sendRepeat: (ADBTVRemoteAction) -> Void
+    var sendFromKeyboard: (ADBTVRemoteAction) -> Void
     var sendText: () -> Void
+    var startSession: () -> Void
+    var stopSession: () -> Void
+    var retrySession: () -> Void
     var cancelRemoteOperation: () -> Void
     var installUnicodeInputHelper: () -> Void
 
     @State private var isMediaControlsExpanded = ProcessInfo.processInfo.arguments.contains(
         "--ui-media-expanded"
     )
+    @FocusState private var focusedControl: FocusedControl?
+
+    private enum FocusedControl: Hashable {
+        case remote
+        case text
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -4256,15 +4364,12 @@ private struct RemoteActionsPanel: View {
 
                 directionalPad
 
-                Button {
-                    send(.back)
-                } label: {
+                RemoteControlButton(action: { sendFromControl(.back) }) {
                     Image(systemName: "arrow.uturn.backward")
                         .font(.title2.weight(.semibold))
                         .frame(width: 152, height: 44)
                         .background(controlBackground, in: Capsule())
                 }
-                .buttonStyle(.plain)
                 .accessibilityLabel("Back")
 
                 HStack {
@@ -4279,7 +4384,7 @@ private struct RemoteActionsPanel: View {
             }
             .padding(16)
             .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-            .disabled(status.isSending || deviceOperationInProgress)
+            .disabled(status.remoteActionsUnavailable || deviceOperationInProgress)
 
             Divider()
 
@@ -4301,6 +4406,7 @@ private struct RemoteActionsPanel: View {
                     TextField("Type text to send", text: text)
                         .autocorrectionDisabled()
                         .textFieldStyle(.roundedBorder)
+                        .focused($focusedControl, equals: .text)
                         .disabled(deviceOperationInProgress)
                     Button {
                         sendText()
@@ -4337,8 +4443,37 @@ private struct RemoteActionsPanel: View {
 
             RemoteStatusView(
                 status: status,
+                retry: retrySession,
                 cancel: cancelRemoteOperation
             )
+        }
+        .focusable()
+        .focused($focusedControl, equals: .remote)
+        .focusEffectDisabled()
+        .onKeyPress(
+            keys: [.upArrow, .downArrow, .leftArrow, .rightArrow, .return, .escape],
+            phases: [.down, .repeat]
+        ) { press in
+            handleKeyPress(press)
+        }
+        .onAppear {
+            focusedControl = .remote
+            if scenePhase == .active {
+                startSession()
+            }
+        }
+        .onDisappear(perform: stopSession)
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                startSession()
+            case .background:
+                stopSession()
+            case .inactive:
+                break
+            @unknown default:
+                break
+            }
         }
     }
 
@@ -4358,15 +4493,12 @@ private struct RemoteActionsPanel: View {
                 directionButton(.down, systemImage: "chevron.down")
                     .position(x: size / 2, y: size * 0.82)
 
-                Button {
-                    send(.select)
-                } label: {
+                RemoteControlButton(action: { sendFromControl(.select) }) {
                     Text("OK")
                         .font(.title3.bold())
                         .frame(width: 76, height: 76)
                         .background(Color.accentColor, in: Circle())
                 }
-                .buttonStyle(.plain)
                 .foregroundStyle(Color.white)
                 .accessibilityLabel("Select")
             }
@@ -4406,7 +4538,7 @@ private struct RemoteActionsPanel: View {
                 Spacer(minLength: 0)
             }
         }
-        .disabled(status.isSending || deviceOperationInProgress)
+        .disabled(status.remoteActionsUnavailable || deviceOperationInProgress)
     }
 
     private func mediaButton(
@@ -4415,9 +4547,7 @@ private struct RemoteActionsPanel: View {
         title: String,
         tint: Color = .primary
     ) -> some View {
-        Button {
-            send(action)
-        } label: {
+        RemoteControlButton(action: { sendFromControl(action) }) {
             VStack(spacing: 5) {
                 Image(systemName: systemImage)
                     .font(.title3.weight(.semibold))
@@ -4430,7 +4560,6 @@ private struct RemoteActionsPanel: View {
             .frame(width: 54, height: 58)
             .background(controlBackground, in: RoundedRectangle(cornerRadius: 8))
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(action.displayTitle)
     }
 
@@ -4438,15 +4567,15 @@ private struct RemoteActionsPanel: View {
         _ action: ADBTVRemoteAction,
         systemImage: String
     ) -> some View {
-        Button {
-            send(action)
-        } label: {
+        RemoteControlButton(
+            action: { sendFromControl(action) },
+            repeatAction: { sendRepeat(action) }
+        ) {
             Image(systemName: systemImage)
                 .font(.title2.weight(.bold))
                 .frame(width: 52, height: 52)
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(action.displayTitle)
     }
 
@@ -4455,16 +4584,18 @@ private struct RemoteActionsPanel: View {
         systemImage: String,
         foregroundStyle: Color = .primary
     ) -> some View {
-        Button {
-            send(action)
-        } label: {
+        RemoteControlButton(
+            action: { sendFromControl(action) },
+            repeatAction: action == .volumeDown || action == .volumeUp
+                ? { sendRepeat(action) }
+                : nil
+        ) {
             Image(systemName: systemImage)
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(foregroundStyle)
                 .frame(width: 50, height: 50)
                 .background(controlBackground, in: Circle())
         }
-        .buttonStyle(.plain)
         .accessibilityLabel(action.displayTitle)
     }
 
@@ -4487,16 +4618,120 @@ private struct RemoteActionsPanel: View {
         .disabled(deviceOperationInProgress)
     }
 
+    private func handleKeyPress(_ press: KeyPress) -> KeyPress.Result {
+        guard focusedControl != .text else {
+            return .ignored
+        }
+
+        let action: ADBTVRemoteAction
+        switch press.key {
+        case .upArrow:
+            action = .up
+        case .downArrow:
+            action = .down
+        case .leftArrow:
+            action = .left
+        case .rightArrow:
+            action = .right
+        case .return:
+            action = .select
+        case .escape:
+            action = .back
+        default:
+            return .ignored
+        }
+
+        if press.phase == .repeat {
+            sendRepeat(action)
+        } else {
+            sendFromKeyboard(action)
+        }
+        return .handled
+    }
+
+    private func sendFromControl(_ action: ADBTVRemoteAction) {
+        focusedControl = .remote
+        send(action)
+    }
+
+}
+
+private struct RemoteControlButton<Label: View>: View {
+    @Environment(\.isEnabled) private var isEnabled
+
+    var action: () -> Void
+    var repeatAction: (() -> Void)? = nil
+    @ViewBuilder var label: () -> Label
+
+    @State private var isPressed = false
+    @State private var repeatTask: Task<Void, Never>?
+
+    var body: some View {
+        label()
+            .contentShape(Rectangle())
+            .opacity(isEnabled ? (isPressed ? 0.65 : 1) : 0.45)
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in beginPress() }
+                    .onEnded { _ in endPress() }
+            )
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { action() }
+            .onDisappear(perform: endPress)
+    }
+
+    private func beginPress() {
+        guard isEnabled, !isPressed else {
+            return
+        }
+        isPressed = true
+        action()
+        guard let repeatAction else {
+            return
+        }
+        repeatTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(350))
+            for _ in 0..<62 where !Task.isCancelled {
+                repeatAction()
+                try? await Task.sleep(for: .milliseconds(125))
+            }
+        }
+    }
+
+    private func endPress() {
+        isPressed = false
+        repeatTask?.cancel()
+        repeatTask = nil
+    }
 }
 
 private struct RemoteStatusView: View {
     var status: ADBTVRemoteStatus
+    var retry: () -> Void
     var cancel: () -> Void
 
     var body: some View {
         switch status {
         case .idle:
             EmptyView()
+        case .connecting:
+            connectionStatus("Connecting to TV")
+        case .reconnecting:
+            connectionStatus("Reconnecting to TV")
+        case .catchingUp:
+            Label("Remote is catching up", systemImage: "clock.arrow.circlepath")
+                .foregroundStyle(.orange)
+        case .connectionFailed(let userMessage, let diagnosticDetail):
+            VStack(alignment: .leading, spacing: 10) {
+                RemoteFailureView(
+                    userMessage: userMessage,
+                    diagnosticDetail: diagnosticDetail
+                )
+                Button(action: retry) {
+                    Label("Retry Connection", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+            }
         case .sending(let action):
             sendingStatus("Sending \(action.displayTitle)")
         case .sendingText:
@@ -4517,6 +4752,14 @@ private struct RemoteStatusView: View {
                 userMessage: userMessage,
                 diagnosticDetail: diagnosticDetail
             )
+        }
+    }
+
+    private func connectionStatus(_ title: String) -> some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text(title)
+                .foregroundStyle(.secondary)
         }
     }
 

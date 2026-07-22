@@ -1067,6 +1067,10 @@ public enum ADBTVActiveDeviceOperation: Equatable, Sendable {
 
 public enum ADBTVRemoteStatus: Equatable, Sendable {
     case idle
+    case connecting
+    case reconnecting
+    case catchingUp
+    case connectionFailed(userMessage: String, diagnosticDetail: DiagnosticDetail)
     case sending(ADBTVRemoteAction)
     case sendingText
     case sent(ADBTVRemoteAction)
@@ -1077,6 +1081,15 @@ public enum ADBTVRemoteStatus: Equatable, Sendable {
     public var isSending: Bool {
         switch self {
         case .sending, .sendingText:
+            return true
+        default:
+            return false
+        }
+    }
+
+    public var remoteActionsUnavailable: Bool {
+        switch self {
+        case .connecting, .reconnecting, .connectionFailed:
             return true
         default:
             return false
