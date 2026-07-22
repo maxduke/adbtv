@@ -1,3 +1,4 @@
+import ADBClientCore
 import XCTest
 @testable import ADBTVApp
 
