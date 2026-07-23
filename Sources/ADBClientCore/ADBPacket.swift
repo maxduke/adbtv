@@ -1,5 +1,6 @@
 public struct ADBPacket: Equatable, Sendable {
     public static let headerLength = 24
+    public static let maximumPayloadByteCount = 1024 * 1024
 
     public var command: ADBCommand
     public var arg0: UInt32
@@ -51,6 +52,10 @@ public struct ADBPacket: Equatable, Sendable {
 
         guard expectedMagic == actualMagic else {
             throw ADBPacketFramingError.invalidMagic(expected: expectedMagic, actual: actualMagic)
+        }
+
+        guard payloadLength <= Self.maximumPayloadByteCount else {
+            throw ADBPacketFramingError.payloadTooLarge(payloadLength)
         }
 
         guard bytes.count >= Self.headerLength + payloadLength else {
