@@ -47,6 +47,16 @@ jobs:
           output="build/ui-snapshots/screenshots"
           mkdir -p "$output"
 
+          capture() {
+            udid="$1"
+            filename="$2"
+            shift 2
+            xcrun simctl launch "$udid" com.maxduke.adbtv "$@"
+            sleep 2
+            xcrun simctl io "$udid" screenshot "$output/$filename-portrait.png"
+            xcrun simctl terminate "$udid" com.maxduke.adbtv
+          }
+
           capture_device() {
             udid="$1"
             device_name="$2"
@@ -57,71 +67,26 @@ jobs:
             for appearance in light dark; do
               xcrun simctl ui "$udid" appearance "$appearance"
 
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-library
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-library-self-signed-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
+              for content_size in large accessibility-extra-extra-extra-large; do
+                xcrun simctl ui "$udid" content_size "$content_size"
+                prefix="$device_name-$appearance"
+                if [ "$content_size" != large ]; then
+                  prefix="$prefix-accessibility"
+                fi
 
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-about
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-about-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
-
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-repair
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-connection-repair-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
-
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-rename
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-device-rename-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
-
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-remote-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
-
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-media-expanded
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-remote-media-expanded-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
-
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-preview --ui-install
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-install-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
-
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-apps
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-apps-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
-
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-apps --ui-app-details
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-app-details-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
-
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-tools
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-tools-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
-
-              xcrun simctl launch "$udid" com.maxduke.adbtv --ui-files
-              sleep 2
-              xcrun simctl io "$udid" screenshot \
-                "$output/$device_name-$appearance-files-portrait.png"
-              xcrun simctl terminate "$udid" com.maxduke.adbtv
+                capture "$udid" "$prefix-library-self-signed" --ui-library
+                capture "$udid" "$prefix-about" --ui-about
+                capture "$udid" "$prefix-connection-repair" --ui-repair
+                capture "$udid" "$prefix-device-rename" --ui-rename
+                capture "$udid" "$prefix-remote" --ui-preview
+                capture "$udid" "$prefix-remote-media-expanded" \
+                  --ui-preview --ui-media-expanded
+                capture "$udid" "$prefix-install" --ui-preview --ui-install
+                capture "$udid" "$prefix-apps" --ui-apps
+                capture "$udid" "$prefix-app-details" --ui-apps --ui-app-details
+                capture "$udid" "$prefix-tools" --ui-tools
+                capture "$udid" "$prefix-files" --ui-files
+              done
             done
 
             xcrun simctl shutdown "$udid"
