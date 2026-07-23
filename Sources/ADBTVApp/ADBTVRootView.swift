@@ -4135,6 +4135,8 @@ private struct DeviceHeader: View {
 }
 
 private struct APKInstallPanel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var installDraft: ADBTVInstallDraft
     var installURLString: Binding<String>
     var canInstall: Bool
@@ -4145,22 +4147,32 @@ private struct APKInstallPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
                     chooseButton
                     installButton
                     if installDraft.status.canCancel {
                         cancelButton
                     }
                 }
-
-                VStack(alignment: .leading, spacing: 10) {
+            } else {
+                ViewThatFits(in: .horizontal) {
                     HStack(spacing: 12) {
                         chooseButton
                         installButton
+                        if installDraft.status.canCancel {
+                            cancelButton
+                        }
                     }
-                    if installDraft.status.canCancel {
-                        cancelButton
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 12) {
+                            chooseButton
+                            installButton
+                        }
+                        if installDraft.status.canCancel {
+                            cancelButton
+                        }
                     }
                 }
             }
@@ -4210,6 +4222,7 @@ private struct APKInstallPanel: View {
             chooseAPK()
         } label: {
             Label("Choose Package", systemImage: "doc.badge.plus")
+                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
         .buttonStyle(.bordered)
         .disabled(installDraft.status.isRunning || deviceOperationInProgress)
@@ -4220,6 +4233,7 @@ private struct APKInstallPanel: View {
             install()
         } label: {
             Label("Install", systemImage: "square.and.arrow.down")
+                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
         .buttonStyle(.borderedProminent)
         .foregroundStyle(Color.white)
@@ -4231,6 +4245,7 @@ private struct APKInstallPanel: View {
             cancelInstall()
         } label: {
             Label("Cancel", systemImage: "xmark.circle")
+                .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
         .buttonStyle(.bordered)
     }
@@ -4338,6 +4353,7 @@ private struct InstallStatusView: View {
 
 private struct RemoteActionsPanel: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var status: ADBTVRemoteStatus
     var text: Binding<String>
@@ -4530,6 +4546,34 @@ private struct RemoteActionsPanel: View {
     }
 
     private var mediaControls: some View {
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                LazyVGrid(
+                    columns: [GridItem(.adaptive(minimum: 96), spacing: 12)],
+                    spacing: 12
+                ) {
+                    mediaButton(.mediaPrevious, systemImage: "backward.end.fill", title: "Prev")
+                    mediaButton(.mediaRewind, systemImage: "backward.fill", title: "Rew")
+                    mediaButton(.mediaPlayPause, systemImage: "playpause.fill", title: "Play")
+                    mediaButton(.mediaFastForward, systemImage: "forward.fill", title: "FF")
+                    mediaButton(.mediaNext, systemImage: "forward.end.fill", title: "Next")
+                    mediaButton(.mediaStop, systemImage: "stop.fill", title: "Stop", tint: .red)
+                    mediaButton(.enter, systemImage: "return", title: "Enter")
+                    mediaButton(.delete, systemImage: "delete.left.fill", title: "Delete")
+                    mediaButton(.tab, systemImage: "arrow.right.to.line", title: "Tab")
+                }
+            } else {
+                defaultMediaControls
+            }
+        }
+        .disabled(
+            scenePhase != .active
+                || status.remoteActionsUnavailable
+                || deviceOperationInProgress
+        )
+    }
+
+    private var defaultMediaControls: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 0) {
                 mediaButton(.mediaPrevious, systemImage: "backward.end.fill", title: "Prev")
@@ -4555,11 +4599,6 @@ private struct RemoteActionsPanel: View {
                 Spacer(minLength: 0)
             }
         }
-        .disabled(
-            scenePhase != .active
-                || status.remoteActionsUnavailable
-                || deviceOperationInProgress
-        )
     }
 
     private func mediaButton(
@@ -4569,19 +4608,36 @@ private struct RemoteActionsPanel: View {
         tint: Color = .primary
     ) -> some View {
         RemoteControlButton(action: { sendFromControl(action) }) {
-            VStack(spacing: 5) {
-                Image(systemName: systemImage)
-                    .font(.title3.weight(.semibold))
-                    .frame(height: 24)
-                Text(title)
-                    .font(.caption2)
-                    .lineLimit(1)
-            }
-            .foregroundStyle(tint)
-            .frame(width: 54, height: 58)
-            .background(controlBackground, in: RoundedRectangle(cornerRadius: 8))
+            mediaButtonLabel(systemImage: systemImage, title: title, tint: tint)
         }
         .accessibilityLabel(action.displayTitle)
+    }
+
+    @ViewBuilder
+    private func mediaButtonLabel(
+        systemImage: String,
+        title: String,
+        tint: Color
+    ) -> some View {
+        let label = VStack(spacing: 5) {
+            Image(systemName: systemImage)
+                .font(.title3.weight(.semibold))
+                .frame(height: dynamicTypeSize.isAccessibilitySize ? nil : 24)
+            Text(title)
+                .font(.caption2)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
+        }
+        .foregroundStyle(tint)
+
+        if dynamicTypeSize.isAccessibilitySize {
+            label
+                .frame(maxWidth: .infinity, minHeight: 92)
+                .background(controlBackground, in: RoundedRectangle(cornerRadius: 8))
+        } else {
+            label
+                .frame(width: 54, height: 58)
+                .background(controlBackground, in: RoundedRectangle(cornerRadius: 8))
+        }
     }
 
     private func directionButton(

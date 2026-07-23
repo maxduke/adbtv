@@ -219,6 +219,8 @@ struct ADBTVShellPreset: Identifiable {
 }
 
 struct ADBTVDeviceToolsPanel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var state: ADBTVDeviceToolsViewState
     var deviceOperationInProgress: Bool
     var loadInformation: () -> Void
@@ -272,7 +274,7 @@ struct ADBTVDeviceToolsPanel: View {
                 Image(systemName: "folder.fill")
                     .font(.title2)
                     .foregroundStyle(.blue)
-                    .frame(width: 30)
+                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 30)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Files")
                         .font(.headline)
@@ -298,7 +300,7 @@ struct ADBTVDeviceToolsPanel: View {
                 Image(systemName: "internaldrive")
                     .font(.title2)
                     .foregroundStyle(.orange)
-                    .frame(width: 30)
+                    .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 30)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Storage Cleanup")
                         .font(.headline)
