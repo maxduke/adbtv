@@ -56,3 +56,28 @@ public enum ADBTVRemoteOperationError: Error, Equatable, Sendable {
     case missingDevice
     case unsupportedPlatform
 }
+
+#if canImport(Network)
+actor ADBTVRemoteConnectionChannel: ADBTVRemoteSessionChannel {
+    private var connection: ADBDeviceConnection
+
+    init(connection: ADBDeviceConnection) {
+        self.connection = connection
+    }
+
+    func send(_ action: ADBTVRemoteAction) async throws {
+        var connection = connection
+        do {
+            _ = try await connection.sendRemoteAction(action)
+            self.connection = connection
+        } catch {
+            self.connection = connection
+            throw error
+        }
+    }
+
+    func cancel() async {
+        connection.cancel()
+    }
+}
+#endif

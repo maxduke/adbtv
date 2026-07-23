@@ -50,7 +50,7 @@ Implemented so far:
 - owned local package staging with cleanup after validation, success, failure, cancellation, or timeout;
 - explicit APK-install cancellation that retains operation ownership through bounded fresh-connection staging cleanup, with cleanup failures exposed before same-source retry;
 - operation-unique remote staging with checked removal and cleanup failures preserved in technical diagnostics;
-- single active install or remote operation, bound to its originating device until completion or cancellation;
+- single active long-running device operation, bound to its originating device until completion or cancellation;
 - Android TV D-pad, select, back, home, and settings remote actions;
 - user-facing operation status plus technical diagnostic details;
 - bounded connection, pairing, remote-action, and APK-install operations with timeout diagnostics;
@@ -68,7 +68,8 @@ Implemented so far:
 - loopback interoperability tests for SPAKE2, AES-GCM, TLS identity import, and TLS exporter output;
 - end-to-end loopback coverage for secure reconnect, an encrypted ADB shell command, and encrypted APK installation;
 - remote text input, menu, volume, and power controls in addition to D-pad navigation;
-- cancellable remote reconnect/action progress with an eight-second failure bound;
+- page-scoped Remote Sessions that reuse one checked ADB connection, preserve up to eight rapid taps in order, reconnect once without replaying uncertain actions, and remain responsive while commands are sent;
+- press-and-hold D-pad and volume repeat, external-keyboard navigation, native haptics, and bounded connection diagnostics;
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - searchable user and system app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, launch, force stop, user-app uninstall, and checked command diagnostics;
