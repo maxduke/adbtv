@@ -46,6 +46,7 @@ struct ADBTVDeviceToolsViewState: Equatable {
     var information: ADBTVDeviceInformation?
     var screenshot: ADBTVScreenshot?
     var shellResult: ADBCheckedShellResult?
+    var submittedShellCommand: String?
     var informationStatus = ADBTVDeviceInformationStatus.idle
     var cacheCleanupStatus = ADBTVCacheCleanupStatus.idle
     var screenshotStatus = ADBTVScreenshotStatus.idle
@@ -69,7 +70,8 @@ struct ADBTVDeviceToolsViewState: Equatable {
             cacheCleanupStatus = .running
         case .screenshot:
             screenshotStatus = .capturing
-        case .shell:
+        case .shell(let command):
+            submittedShellCommand = command
             shellResult = nil
             shellStatus = .running
         }
@@ -171,6 +173,7 @@ struct ADBTVDeviceToolsViewState: Equatable {
             output: ADBShellOutput(bytes: Array("Android TV device connected\n".utf8)),
             exitCode: 0
         )
+        state.submittedShellCommand = "getprop ro.build.version.release"
         state.shellStatus = .finished
         return state
     }
@@ -584,8 +587,8 @@ struct ADBTVDeviceToolsPanel: View {
                     .help("Run Command")
                 }
 
-                if state.shellResult != nil {
-                    shellOutput
+                if state.submittedShellCommand != nil {
+                    shellTranscript
                 }
 
                 switch state.shellStatus {
@@ -600,13 +603,26 @@ struct ADBTVDeviceToolsPanel: View {
         }
     }
 
-    private var shellOutput: some View {
+    private var shellTranscript: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Output")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                if let result = state.shellResult {
+            if let command = state.submittedShellCommand {
+                ScrollView(.horizontal) {
+                    Text("$ \(command)")
+                        .font(.footnote.monospaced())
+                        .fixedSize(horizontal: true, vertical: false)
+                        .textSelection(.enabled)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Submitted command")
+                .accessibilityValue(command)
+            }
+
+            if let result = state.shellResult {
+                Divider()
+                HStack {
+                    Text("Output")
+                        .font(.subheadline.weight(.semibold))
+                    Spacer()
                     Label(
                         "Exit \(result.exitCode)",
                         systemImage: result.exitCode == 0
@@ -616,16 +632,16 @@ struct ADBTVDeviceToolsPanel: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(result.exitCode == 0 ? .green : .orange)
                 }
-            }
 
-            ScrollView([.horizontal, .vertical]) {
-                Text(shellOutputText)
-                    .font(.footnote.monospaced())
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(minWidth: 1, alignment: .leading)
+                ScrollView([.horizontal, .vertical]) {
+                    Text(shellOutputText)
+                        .font(.footnote.monospaced())
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: 1, alignment: .leading)
+                }
+                .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, minHeight: 160, maxHeight: 160, alignment: .topLeading)
         }
         .padding(12)
         .background(Color.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
@@ -683,6 +699,7 @@ struct ADBTVDeviceToolsPanel: View {
             return
         }
         runShellCommand(command)
+        shellCommand = ""
     }
 
     private func androidVersion(_ information: ADBTVDeviceInformation) -> String {
