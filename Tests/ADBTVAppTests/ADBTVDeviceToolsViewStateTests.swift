@@ -9,6 +9,7 @@ final class ADBTVDeviceToolsViewStateTests: XCTestCase {
 
         state.start(.shell(command: "id"))
         XCTAssertEqual(state.activeOperation, .shell(command: "id"))
+        XCTAssertEqual(state.submittedShellCommand, "id")
         XCTAssertEqual(state.shellStatus, .running)
 
         let result = ADBCheckedShellResult(
@@ -18,6 +19,7 @@ final class ADBTVDeviceToolsViewStateTests: XCTestCase {
         state.finish(.shell(result))
         XCTAssertNil(state.activeOperation)
         XCTAssertEqual(state.shellResult, result)
+        XCTAssertEqual(state.submittedShellCommand, "id")
         XCTAssertEqual(state.shellStatus, .finished)
 
         state.start(.screenshot)
@@ -42,6 +44,7 @@ final class ADBTVDeviceToolsViewStateTests: XCTestCase {
         XCTAssertNil(secondState.information)
         XCTAssertNil(secondState.screenshot)
         XCTAssertNil(secondState.shellResult)
+        XCTAssertNil(secondState.submittedShellCommand)
     }
 
     func testShellPresetsUseExpectedReadOnlyCommands() {
