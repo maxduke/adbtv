@@ -535,40 +535,17 @@ struct ADBTVDeviceToolsPanel: View {
 
     private var shellSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Button {
-                    isShellExpanded.toggle()
-                } label: {
-                    HStack {
-                        Label("ADB Shell", systemImage: "terminal")
-                            .font(.headline)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .rotationEffect(.degrees(isShellExpanded ? 90 : 0))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    shellDisclosure
+                    commandsMenu
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .buttonStyle(.plain)
-                .disabled(state.shellStatus == .running)
-                .accessibilityValue(isShellExpanded ? "Expanded" : "Collapsed")
-
-                Menu {
-                    ForEach(ADBTVShellPreset.all) { preset in
-                        Button {
-                            shellCommand = preset.command
-                            isShellExpanded = true
-                        } label: {
-                            Label(preset.title, systemImage: "terminal")
-                        }
-                    }
-                } label: {
-                    Label("Commands", systemImage: "list.bullet.rectangle")
+            } else {
+                HStack(spacing: 10) {
+                    shellDisclosure
+                    commandsMenu
                 }
-                .buttonStyle(.bordered)
-                .disabled(deviceOperationInProgress)
-                .help("Built-in Commands")
             }
 
             if isShellExpanded {
@@ -601,6 +578,48 @@ struct ADBTVDeviceToolsPanel: View {
                 }
             }
         }
+    }
+
+    private var shellDisclosure: some View {
+        Button {
+            isShellExpanded.toggle()
+        } label: {
+            HStack {
+                Label("ADB Shell", systemImage: "terminal")
+                    .font(.headline)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .rotationEffect(.degrees(isShellExpanded ? 90 : 0))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(state.shellStatus == .running)
+        .accessibilityValue(isShellExpanded ? "Expanded" : "Collapsed")
+    }
+
+    private var commandsMenu: some View {
+        Menu {
+            ForEach(ADBTVShellPreset.all) { preset in
+                Button {
+                    shellCommand = preset.command
+                    isShellExpanded = true
+                } label: {
+                    Label(preset.title, systemImage: "terminal")
+                }
+            }
+        } label: {
+            Label("Commands", systemImage: "list.bullet.rectangle")
+                .frame(
+                    maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil,
+                    alignment: .leading
+                )
+        }
+        .buttonStyle(.bordered)
+        .disabled(deviceOperationInProgress)
+        .help("Built-in Commands")
     }
 
     private var shellTranscript: some View {

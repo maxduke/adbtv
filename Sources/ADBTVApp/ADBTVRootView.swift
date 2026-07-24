@@ -3499,6 +3499,7 @@ private struct DeviceDetailView: View {
         }
 #if os(iOS)
         .navigationBarBackButtonHidden(deviceOperationInProgress)
+        .navigationBarBackButtonDisplayMode(.minimal)
         .navigationBarTitleDisplayMode(.inline)
 #endif
     }
@@ -4096,25 +4097,44 @@ private struct InstalledAppIconView: View {
 }
 
 private struct DeviceHeader: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var device: ADBTVDeviceSummary
     var repair: () -> Void
     var rename: () -> Void
     var actionsDisabled: Bool
 
+    @ViewBuilder
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                if let model = device.model {
-                    Text(model)
-                        .font(.headline)
-                }
-                Text(device.connectionDescription)
-                    .font(.footnote.monospaced())
-                    .foregroundStyle(.secondary)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 12) {
+                identity
+                actions
+                    .frame(maxWidth: .infinity, alignment: .trailing)
             }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                identity
+                Spacer(minLength: 8)
+                actions
+            }
+        }
+    }
 
-            Spacer(minLength: 8)
+    private var identity: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let model = device.model {
+                Text(model)
+                    .font(.headline)
+            }
+            Text(device.connectionDescription)
+                .font(.footnote.monospaced())
+                .foregroundStyle(.secondary)
+        }
+    }
 
+    private var actions: some View {
+        HStack(spacing: 12) {
             Button(action: repair) {
                 Label("Update Connection", systemImage: "network")
                     .labelStyle(.iconOnly)
