@@ -10,6 +10,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.ParcelFileDescriptor;
 import android.util.Base64;
 
@@ -89,7 +90,7 @@ public final class InstalledAppProvider extends ContentProvider {
                 if (packageInfo.versionName != null) {
                     item.put("versionName", boundedText(packageInfo.versionName));
                 }
-                item.put("versionCode", packageInfo.getLongVersionCode());
+                item.put("versionCode", versionCode(packageInfo));
                 item.put("firstInstallTime", packageInfo.firstInstallTime);
                 item.put("lastUpdateTime", packageInfo.lastUpdateTime);
                 item.put("stopped", (applicationInfo.flags & ApplicationInfo.FLAG_STOPPED) != 0);
@@ -127,6 +128,14 @@ public final class InstalledAppProvider extends ContentProvider {
             }
         }
         return total;
+    }
+
+    @SuppressWarnings("deprecation")
+    private static long versionCode(PackageInfo packageInfo) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return packageInfo.getLongVersionCode();
+        }
+        return packageInfo.versionCode;
     }
 
     private static long fileByteCount(String path) {

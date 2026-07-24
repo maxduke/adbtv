@@ -212,14 +212,17 @@ public struct ADBTVInstalledAppManager: Sendable {
         let packageQuery = packages.map(\.packageName).joined(separator: ",")
         let invocation = try ADBCheckedShellInvocation(
             command: ADBShellCommand(
-                "content read --uri '\(Self.detailsProviderURI)?packages=\(packageQuery)' "
-                    + "2>/dev/null | head -c \(Self.maximumDetailsResponseByteCount)"
+                "content read --uri '\(Self.detailsProviderURI)?packages=\(packageQuery)'"
             )
         )
         let output = try await session.runShellCommand(invocation.shellCommand)
+        let validatedOutput = try invocation.validatedOutput(from: output)
+        guard validatedOutput.bytes.count <= Self.maximumDetailsResponseByteCount else {
+            throw ADBTVInstalledAppError.detailsResponseTooLarge(validatedOutput.bytes.count)
+        }
         let response = try JSONDecoder().decode(
             [DetailsResponse].self,
-            from: Data(invocation.validatedOutput(from: output).bytes)
+            from: Data(validatedOutput.bytes)
         )
         let requestedPackages = Set(packages.map(\.packageName))
         var details: [String: ADBTVInstalledAppDetails] = [:]
@@ -281,4 +284,5 @@ public enum ADBTVInstalledAppError: Error, Equatable, Sendable {
     case iconPNGTooLarge(Int)
     case invalidIconPNG
     case invalidIconDimensions(width: Int, height: Int)
+    case detailsResponseTooLarge(Int)
 }

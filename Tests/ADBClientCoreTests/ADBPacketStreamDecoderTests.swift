@@ -26,4 +26,24 @@ final class ADBPacketStreamDecoderTests: XCTestCase {
         XCTAssertEqual(packets, [first, second])
         XCTAssertEqual(decoder.bufferedByteCount, 0)
     }
+
+    func testRejectsOversizedPayloadBeforeBufferingIt() throws {
+        var header = try ADBPacket(command: .write, arg0: 1, arg1: 2).encoded()
+        let payloadByteCount = UInt32(ADBPacket.maximumPayloadByteCount + 1)
+        header.replaceSubrange(12 ..< 16, with: [
+            UInt8(payloadByteCount & 0xff),
+            UInt8((payloadByteCount >> 8) & 0xff),
+            UInt8((payloadByteCount >> 16) & 0xff),
+            UInt8((payloadByteCount >> 24) & 0xff)
+        ])
+        var decoder = ADBPacketStreamDecoder()
+
+        XCTAssertThrowsError(try decoder.append(header)) { error in
+            XCTAssertEqual(
+                error as? ADBPacketFramingError,
+                .payloadTooLarge(Int(payloadByteCount))
+            )
+        }
+        XCTAssertEqual(decoder.bufferedByteCount, header.count)
+    }
 }

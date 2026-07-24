@@ -8,10 +8,10 @@ The default unsigned IPA is intended for self-signing and uses manual host and p
 
 - Commit:
 - IPA workflow run:
-- iPhone or iPad model:
-- iOS or iPadOS version:
-- Android TV device and model:
-- Android TV version:
+- iPhone model and iOS version:
+- iPad model and iPadOS version:
+- Android TV 1 device, model, and Android version:
+- Android TV 2 device, model, and Android version:
 - Network and router notes:
 - Tester and date:
 
@@ -27,6 +27,18 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Launch on portrait iPhone and iPad layouts without clipped or overlapping controls.
 - [ ] Confirm camera and local-network permission text identifies why access is needed.
 - [ ] Open **About**, confirm the candidate version and build, and open the bundled legal notices.
+
+## Accessibility
+
+- [ ] At the largest Dynamic Type size on iPhone and iPad, open Device Library,
+  Remote with Media Controls expanded, Apps, Install, Files, and Tools; confirm
+  every action remains reachable and text, icons, and controls do not overlap.
+- [ ] Check an intermediate accessibility text size wherever a control changes
+  from a row to a stacked or grid layout.
+- [ ] With VoiceOver, confirm primary controls have understandable labels and
+  values, focus follows visual order, and presented sheets receive focus.
+- [ ] In light and dark appearance, confirm text and enabled, disabled, success,
+  warning, and failure states remain distinguishable without color alone.
 
 ## Pairing Code
 
@@ -176,6 +188,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Run a command that exits nonzero and confirm its output and nonzero exit code remain visible without being reported as success.
 - [ ] Run a command that produces no output and confirm the completed state remains understandable.
 - [ ] Run a command with enough multiline output to scroll horizontally and vertically without resizing or clipping the surrounding layout.
+- [ ] Enter a shell command with the iOS keyboard, tap **Send**, and confirm it runs once instead of inserting a newline.
 - [ ] Start a slow shell command, cancel it, and immediately run another command without a late result replacing it.
 - [ ] Select each built-in shell command, confirm it fills the editable command field, and run it successfully.
 - [ ] Make the TV unreachable during Device Information, screenshot, and shell operations; confirm each failure is bounded and exposes copyable Technical Details.

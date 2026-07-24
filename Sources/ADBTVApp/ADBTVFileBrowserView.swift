@@ -10,6 +10,8 @@ import AppKit
 
 @MainActor
 struct ADBTVFileBrowserView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var device: ADBTVDeviceSummary
     var directory: ADBSharedStoragePath = .root
 
@@ -212,7 +214,7 @@ struct ADBTVFileBrowserView: View {
         HStack(spacing: 12) {
             Image(systemName: iconName(for: item))
                 .foregroundStyle(iconColor(for: item))
-                .frame(width: 24)
+                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 24)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.name)

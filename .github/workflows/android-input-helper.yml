@@ -58,7 +58,7 @@ jobs:
           cache-provider: basic
 
       - name: Build and test helper
-        run: gradle -p Android/ADBTVInput testDebugUnitTest assembleDebug --no-daemon
+        run: gradle -p Android/ADBTVInput lintDebug testDebugUnitTest assembleDebug --no-daemon
 
       - name: Upload source-built helper APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -77,7 +77,7 @@ jobs:
             Android/ADBTVInput/app/build/outputs/apk/debug/app-debug.apk \
             Apps/ADBTViOS/Resources/ADBTVInput.apk; do
             test "$(apkanalyzer manifest application-id "$apk")" = "com.maxduke.adbtv.helper.v3"
-            test "$(apkanalyzer manifest version-code "$apk")" = "4"
+            test "$(apkanalyzer manifest version-code "$apk")" = "5"
           done
 
       - name: Verify bundled helper payload

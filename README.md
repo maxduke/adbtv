@@ -27,6 +27,19 @@ Current direction:
 - structured actions instead of raw shell in the first version;
 - APK and APKM installation from Files or HTTP/HTTPS URL.
 
+Android compatibility:
+
+- Android 8.0 (API 26) is the compatibility floor for helper-backed app
+  metadata and Unicode input.
+- Android 8.0 and Android 10.0 manual host/port connections are physically
+  verified. These older releases require an already-enabled ADB TCP endpoint,
+  commonly port 5555.
+- Pairing Code and QR use Android's modern Wireless Debugging flow, which
+  Google documents for Android TV 13 and later. OEM availability can vary;
+  manual host/port remains the fallback.
+- Newer Android versions use the same bounded ADB protocol and checked command
+  paths, but version-specific release claims require physical validation.
+
 Implemented so far:
 
 - manual device connection verification and persistence with clear success or failure details;
