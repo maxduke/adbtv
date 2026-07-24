@@ -638,9 +638,8 @@ struct ADBTVDeviceToolsPanel: View {
     @ViewBuilder
     private var shellCommandField: some View {
 #if os(iOS)
-        TextField("Command", text: $shellCommand, axis: .vertical)
+        TextField("Command", text: $shellCommand)
             .font(.body.monospaced())
-            .lineLimit(1 ... 4)
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
             .submitLabel(.send)

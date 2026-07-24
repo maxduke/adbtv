@@ -188,6 +188,7 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Run a command that exits nonzero and confirm its output and nonzero exit code remain visible without being reported as success.
 - [ ] Run a command that produces no output and confirm the completed state remains understandable.
 - [ ] Run a command with enough multiline output to scroll horizontally and vertically without resizing or clipping the surrounding layout.
+- [ ] Enter a shell command with the iOS keyboard, tap **Send**, and confirm it runs once instead of inserting a newline.
 - [ ] Start a slow shell command, cancel it, and immediately run another command without a late result replacing it.
 - [ ] Select each built-in shell command, confirm it fills the editable command field, and run it successfully.
 - [ ] Make the TV unreachable during Device Information, screenshot, and shell operations; confirm each failure is bounded and exposes copyable Technical Details.
