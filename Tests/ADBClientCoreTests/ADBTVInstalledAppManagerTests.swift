@@ -125,7 +125,21 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertNil(details["com.example.invalid"]?.icon)
         XCTAssertNil(details["com.unrequested.app"])
         XCTAssertTrue(session.commands[0].contains("content://com.maxduke.adbtv.helper.v3.apps/apps"))
-        XCTAssertTrue(session.commands[0].contains("head -c 1048576"))
+        XCTAssertFalse(session.commands[0].contains("head -c"))
+        XCTAssertFalse(session.commands[0].contains("2>/dev/null"))
+    }
+
+    func testDetailsRejectOversizedProviderResponse() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        let response = """
+        [{"package":"com.example.player","label":"Must Not Load"}]
+        """ + String(repeating: " ", count: 1024 * 1024)
+        var session = InstalledAppSession(outputs: [checkedOutput(response)])
+
+        let details = await ADBTVInstalledAppManager().details(for: [package], using: &session)
+
+        XCTAssertTrue(details.isEmpty)
+        XCTAssertEqual(session.commands.count, 1)
     }
 
     func testDetailsStopAfterUnavailableHelper() async throws {
