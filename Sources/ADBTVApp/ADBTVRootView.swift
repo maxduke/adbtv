@@ -3499,8 +3499,8 @@ private struct DeviceDetailView: View {
         }
 #if os(iOS)
         .navigationBarBackButtonHidden(deviceOperationInProgress)
-        .navigationBarBackButtonDisplayMode(.minimal)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarRole(.editor)
 #endif
     }
 
