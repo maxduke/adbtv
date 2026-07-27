@@ -181,6 +181,8 @@ public struct ADBTVInstalledAppManager: Sendable {
         "android": .androidCore,
         "com.android.shell": .androidCore,
         "com.android.systemui": .androidCore,
+        "com.android.providers.settings": .androidCore,
+        "com.android.networkstack": .androidCore,
         "com.android.packageinstaller": .androidCore,
         "com.google.android.packageinstaller": .androidCore,
         "com.google.android.permissioncontroller": .androidCore,

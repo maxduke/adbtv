@@ -50,6 +50,8 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
                 package:com.example.launcher
                 package:com.example.optional
                 package:com.example.settings
+                package:com.android.networkstack
+                package:com.android.providers.settings
                 package:com.google.android.gms
                 """
             ),
@@ -67,6 +69,14 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertTrue(snapshot.canDisablePackages)
         XCTAssertNil(snapshot.safetyCheckFailureDescription)
         XCTAssertEqual(snapshot.protectionReasons["android"], .androidCore)
+        XCTAssertEqual(
+            snapshot.protectionReasons["com.android.networkstack"],
+            .androidCore
+        )
+        XCTAssertEqual(
+            snapshot.protectionReasons["com.android.providers.settings"],
+            .androidCore
+        )
         XCTAssertEqual(
             snapshot.protectionReasons["com.google.android.gms"],
             .ecosystemInfrastructure
