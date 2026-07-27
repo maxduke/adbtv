@@ -98,11 +98,6 @@ A Preinstalled App made unavailable to the current Android TV user while
 remaining installed and recoverable.
 _Avoid_: Startup-disabled App, Disabled Service
 
-**Managed Disablement**:
-ADB TV's authority to restore a specific Preinstalled App after initiating its
-disablement for a specific Android user on a specific Managed Device.
-_Avoid_: Disable History, Disabled App
-
 **Protected Preinstalled App**:
 A Preinstalled App that ADB TV prevents the user from disabling because it
 fulfills an identifiable core role or is known to be required for ADB TV
