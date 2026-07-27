@@ -148,6 +148,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
     func testDisableUsesNumericUserAndVerifiesDisabledState() async throws {
         let package = try ADBTVInstalledPackage(packageName: "com.example.optional")
         var session = InstalledAppSession(outputs: [
+            checkedOutput("10\n"),
             checkedOutput("com.example.launcher/.MainActivity\n"),
             checkedOutput("com.example.settings/.SettingsActivity\n"),
             checkedOutput("null\n"),
@@ -162,18 +163,19 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         )
 
         XCTAssertTrue(
-            session.commands[3].hasPrefix(
+            session.commands[4].hasPrefix(
                 "pm disable-user --user 10 'com.example.optional'; "
             )
         )
         XCTAssertTrue(
-            session.commands[4].hasPrefix("pm list packages -s -d --user 10; ")
+            session.commands[5].hasPrefix("pm list packages -s -d --user 10; ")
         )
     }
 
     func testDisableRejectsProtectedPackageBeforeChangingState() async throws {
         let package = try ADBTVInstalledPackage(packageName: "com.example.launcher")
         var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
             checkedOutput("com.example.launcher/.MainActivity\n"),
             checkedOutput("com.example.settings/.SettingsActivity\n"),
             checkedOutput("null\n")
@@ -195,13 +197,32 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
                 )
             )
         }
-        XCTAssertEqual(session.commands.count, 3)
+        XCTAssertEqual(session.commands.count, 4)
+        XCTAssertFalse(session.commands.contains { $0.contains("pm disable-user") })
+    }
+
+    func testDisableRejectsChangedActiveUserBeforeChangingState() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.optional")
+        var session = InstalledAppSession(outputs: [checkedOutput("10\n")])
+
+        do {
+            try await ADBTVInstalledAppManager().disable(
+                package,
+                userID: 0,
+                using: &session
+            )
+            XCTFail("Expected active-user verification to fail.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
+        }
+        XCTAssertEqual(session.commands.count, 1)
         XCTAssertFalse(session.commands.contains { $0.contains("pm disable-user") })
     }
 
     func testDisableRejectsUnchangedPackageState() async throws {
         let package = try ADBTVInstalledPackage(packageName: "com.example.optional")
         var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
             checkedOutput("com.example.launcher/.MainActivity\n"),
             checkedOutput("com.example.settings/.SettingsActivity\n"),
             checkedOutput("null\n"),
@@ -231,6 +252,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
     func testRestoreDefaultReturnsAndroidEffectiveState() async throws {
         let package = try ADBTVInstalledPackage(packageName: "com.example.dormant")
         var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
             checkedOutput("Package com.example.dormant new state: default\n"),
             checkedOutput("package:com.example.dormant\n")
         ])
@@ -243,7 +265,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
 
         XCTAssertEqual(state, .disabled)
         XCTAssertTrue(
-            session.commands[0].hasPrefix(
+            session.commands[1].hasPrefix(
                 "pm default-state --user 0 'com.example.dormant'; "
             )
         )

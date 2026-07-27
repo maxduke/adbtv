@@ -250,6 +250,7 @@ public struct ADBTVInstalledAppManager: Sendable {
         using session: inout Session
     ) async throws {
         try Self.validate(userID: userID)
+        try await requireActiveUser(userID, using: &session)
         if let reason = Self.fixedProtectionReasons[package.packageName] {
             throw ADBTVInstalledAppError.protectedPackage(
                 packageName: package.packageName,
@@ -285,6 +286,7 @@ public struct ADBTVInstalledAppManager: Sendable {
         using session: inout Session
     ) async throws -> ADBTVInstalledAppState {
         try Self.validate(userID: userID)
+        try await requireActiveUser(userID, using: &session)
         _ = try await runChecked(
             "pm default-state --user \(userID) \(package.shellEscaped)",
             using: &session
@@ -414,6 +416,19 @@ public struct ADBTVInstalledAppManager: Sendable {
         }
         try Self.validate(userID: userID)
         return userID
+    }
+
+    private func requireActiveUser<Session: ADBShellCommandRunningSession>(
+        _ expectedUserID: Int,
+        using session: inout Session
+    ) async throws {
+        let actualUserID = try await activeUserID(using: &session)
+        guard actualUserID == expectedUserID else {
+            throw ADBTVInstalledAppError.activeUserChanged(
+                expected: expectedUserID,
+                actual: actualUserID
+            )
+        }
     }
 
     private func listSystemPackages<Session: ADBShellCommandRunningSession>(
@@ -594,6 +609,7 @@ public enum ADBTVInstalledAppError: Error, Equatable, Sendable {
     case invalidPackageListLine(String)
     case invalidActiveUserID(String)
     case invalidUserID(Int)
+    case activeUserChanged(expected: Int, actual: Int)
     case invalidComponentOutput(String)
     case packageListResponseTooLarge(Int)
     case controlResponseTooLarge(Int)
