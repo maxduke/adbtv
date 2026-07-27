@@ -4232,51 +4232,52 @@ private struct InstalledAppDetailsView: View {
     @ViewBuilder
     private var systemControlSection: some View {
         Section("System Control") {
-            LabeledContent("State") {
+            VStack(alignment: .leading, spacing: 10) {
                 Label(
                     systemState == .disabled ? "Disabled" : "Enabled",
                     systemImage: systemState == .disabled
                         ? "pause.circle.fill" : "checkmark.circle.fill"
                 )
                 .foregroundStyle(systemState == .disabled ? Color.orange : Color.green)
-            }
 
-            if systemState == .disabled {
-                Text("Restore Android's package default without removing app data.")
-                    .foregroundStyle(.secondary)
-                Button {
-                    confirmsRestoreDefault = true
-                } label: {
+                if systemState == .disabled {
+                    Text("Restore Android's package default without removing app data.")
+                        .foregroundStyle(.secondary)
+                    Button {
+                        confirmsRestoreDefault = true
+                    } label: {
+                        Label(
+                            "Restore Android Default",
+                            systemImage: "arrow.uturn.backward.circle"
+                        )
+                    }
+                    .disabled(actionsDisabled)
+                } else if let protectionReason {
+                    Label(protectionReason.explanation, systemImage: "lock.shield.fill")
+                        .foregroundStyle(.secondary)
+                } else if let failure = systemSnapshot?.safetyCheckFailureDescription {
                     Label(
-                        "Restore Android Default",
-                        systemImage: "arrow.uturn.backward.circle"
+                        "Disable is unavailable because safety checks failed.",
+                        systemImage: "shield.slash"
                     )
-                }
-                .disabled(actionsDisabled)
-            } else if let protectionReason {
-                Label(protectionReason.explanation, systemImage: "lock.shield.fill")
-                    .foregroundStyle(.secondary)
-            } else if let failure = systemSnapshot?.safetyCheckFailureDescription {
-                Label(
-                    "Disable is unavailable because safety checks failed.",
-                    systemImage: "shield.slash"
-                )
-                    .foregroundStyle(.orange)
-                DiagnosticDisclosure(
-                    diagnosticDetail: DiagnosticDetail(
-                        summary: failure,
-                        context: ["operation": "loadSystemAppProtection"]
+                        .foregroundStyle(.orange)
+                    DiagnosticDisclosure(
+                        diagnosticDetail: DiagnosticDetail(
+                            summary: failure,
+                            context: ["operation": "loadSystemAppProtection"]
+                        )
                     )
-                )
-            } else {
-                Button(role: .destructive) {
-                    confirmsDisable = true
-                } label: {
-                    Label("Disable System App", systemImage: "pause.circle")
-                        .foregroundStyle(.red)
+                } else {
+                    Button(role: .destructive) {
+                        confirmsDisable = true
+                    } label: {
+                        Label("Disable System App", systemImage: "pause.circle")
+                            .foregroundStyle(.red)
+                    }
+                    .disabled(actionsDisabled)
                 }
-                .disabled(actionsDisabled)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
