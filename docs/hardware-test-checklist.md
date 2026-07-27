@@ -145,6 +145,16 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] After cancelling an unreachable Apps refresh, return to the device list and reconnect after restoring the TV.
 - [ ] After an operation fails because the TV is offline, return to the device list and confirm the same saved device can be opened again.
 - [ ] Start an Apps operation and confirm back navigation, device switching, Remote, Install, rename, and connection updates stay unavailable until it completes.
+- [ ] On Android 8.0 and Android 10.0, open **System Apps** and confirm enabled and disabled state loads without the Android helper installed.
+- [ ] Confirm Android core, Network Stack, Settings Provider, Google infrastructure, the active launcher, Settings app, and active input method show a protection reason without a Disable action.
+- [ ] Disable a known non-critical preinstalled app, confirm the warning names the app and package, and confirm Android reports it disabled afterward.
+- [ ] Confirm the disabled app remains installed with its data, cannot launch, and shows **Disabled** in the list with Launch and Force Stop unavailable.
+- [ ] Reboot the TV and confirm the disabled state remains.
+- [ ] Choose **Restore Android Default**, confirm its warning, and verify the refreshed effective state matches Android.
+- [ ] Restore a package that Android keeps disabled by default and confirm ADB TV reports that result without claiming the package was enabled.
+- [ ] Make one protected-role query fail or return malformed output, refresh System Apps, and confirm browsing and Restore remain available while every Disable action is unavailable with Technical Details.
+- [ ] Disconnect or cancel during Disable or Restore, reconnect, refresh, and confirm the UI follows the TV's actual state.
+- [ ] Switch Android users when supported, refresh, and confirm state and actions are scoped to the newly active user.
 
 ## App Installation
 
