@@ -99,8 +99,8 @@ remaining installed and recoverable.
 _Avoid_: Startup-disabled App, Disabled Service
 
 **Managed Disablement**:
-The record that ADB TV successfully disabled a specific Preinstalled App on a
-specific Managed Device and may therefore offer to restore it.
+ADB TV's authority to restore a specific Preinstalled App after initiating its
+disablement on a specific Managed Device.
 _Avoid_: Disable History, Disabled App
 
 **Protected Preinstalled App**:
