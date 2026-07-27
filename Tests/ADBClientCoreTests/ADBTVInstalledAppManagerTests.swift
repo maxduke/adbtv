@@ -40,6 +40,222 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertTrue(session.commands[0].hasPrefix("pm list packages -s; "))
     }
 
+    func testSystemSnapshotLoadsStateAndProtectedRolesForActiveUser() async throws {
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("10\n"),
+            checkedOutput(
+                """
+                package:android
+                package:com.example.keyboard
+                package:com.example.launcher
+                package:com.example.optional
+                package:com.example.settings
+                package:com.google.android.gms
+                """
+            ),
+            checkedOutput("package:com.example.optional\n"),
+            checkedOutput("com.example.launcher/.MainActivity\n"),
+            checkedOutput("com.example.settings/.SettingsActivity\n"),
+            checkedOutput("com.example.keyboard/.InputMethod\n")
+        ])
+
+        let snapshot = try await ADBTVInstalledAppManager().systemSnapshot(using: &session)
+        let optional = try ADBTVInstalledPackage(packageName: "com.example.optional")
+
+        XCTAssertEqual(snapshot.userID, 10)
+        XCTAssertEqual(snapshot.state(for: optional), .disabled)
+        XCTAssertTrue(snapshot.canDisablePackages)
+        XCTAssertNil(snapshot.safetyCheckFailureDescription)
+        XCTAssertEqual(snapshot.protectionReasons["android"], .androidCore)
+        XCTAssertEqual(
+            snapshot.protectionReasons["com.google.android.gms"],
+            .ecosystemInfrastructure
+        )
+        XCTAssertEqual(
+            snapshot.protectionReasons["com.example.launcher"],
+            .activeLauncher
+        )
+        XCTAssertEqual(snapshot.protectionReasons["com.example.settings"], .settings)
+        XCTAssertEqual(
+            snapshot.protectionReasons["com.example.keyboard"],
+            .activeInputMethod
+        )
+        XCTAssertTrue(session.commands[0].hasPrefix("am get-current-user; "))
+        XCTAssertTrue(
+            session.commands[1].hasPrefix("pm list packages -s --user 10; ")
+        )
+        XCTAssertTrue(
+            session.commands[2].hasPrefix("pm list packages -s -d --user 10; ")
+        )
+        XCTAssertTrue(session.commands[3].contains("android.intent.category.HOME"))
+        XCTAssertTrue(session.commands[4].contains("android.settings.SETTINGS"))
+        XCTAssertTrue(
+            session.commands[5].hasPrefix(
+                "settings --user 10 get secure default_input_method; "
+            )
+        )
+    }
+
+    func testSystemSnapshotKeepsPackagesWhenProtectionChecksFail() async throws {
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
+            checkedOutput("package:android\npackage:com.example.optional\n"),
+            checkedOutput(""),
+            checkedOutput("No activity found\n")
+        ])
+
+        let snapshot = try await ADBTVInstalledAppManager().systemSnapshot(using: &session)
+
+        XCTAssertEqual(
+            snapshot.packages.map(\.packageName),
+            ["android", "com.example.optional"]
+        )
+        XCTAssertFalse(snapshot.canDisablePackages)
+        XCTAssertNotNil(snapshot.safetyCheckFailureDescription)
+        XCTAssertEqual(snapshot.protectionReasons["android"], .androidCore)
+    }
+
+    func testSystemSnapshotAcceptsTVWithoutActiveInputMethod() async throws {
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
+            checkedOutput(
+                "package:com.example.launcher\npackage:com.example.settings\n"
+            ),
+            checkedOutput(""),
+            checkedOutput("com.example.launcher/.MainActivity\n"),
+            checkedOutput("com.example.settings/.SettingsActivity\n"),
+            checkedOutput("null\n")
+        ])
+
+        let snapshot = try await ADBTVInstalledAppManager().systemSnapshot(using: &session)
+
+        XCTAssertTrue(snapshot.canDisablePackages)
+        XCTAssertFalse(
+            snapshot.protectionReasons.values.contains(.activeInputMethod)
+        )
+    }
+
+    func testDisableUsesNumericUserAndVerifiesDisabledState() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.optional")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("com.example.launcher/.MainActivity\n"),
+            checkedOutput("com.example.settings/.SettingsActivity\n"),
+            checkedOutput("null\n"),
+            checkedOutput("Package com.example.optional new state: disabled-user\n"),
+            checkedOutput("package:com.example.optional\n")
+        ])
+
+        try await ADBTVInstalledAppManager().disable(
+            package,
+            userID: 10,
+            using: &session
+        )
+
+        XCTAssertTrue(
+            session.commands[3].hasPrefix(
+                "pm disable-user --user 10 'com.example.optional'; "
+            )
+        )
+        XCTAssertTrue(
+            session.commands[4].hasPrefix("pm list packages -s -d --user 10; ")
+        )
+    }
+
+    func testDisableRejectsProtectedPackageBeforeChangingState() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.launcher")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("com.example.launcher/.MainActivity\n"),
+            checkedOutput("com.example.settings/.SettingsActivity\n"),
+            checkedOutput("null\n")
+        ])
+
+        do {
+            try await ADBTVInstalledAppManager().disable(
+                package,
+                userID: 0,
+                using: &session
+            )
+            XCTFail("Expected active launcher protection.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(
+                error,
+                .protectedPackage(
+                    packageName: package.packageName,
+                    reason: .activeLauncher
+                )
+            )
+        }
+        XCTAssertEqual(session.commands.count, 3)
+        XCTAssertFalse(session.commands.contains { $0.contains("pm disable-user") })
+    }
+
+    func testDisableRejectsUnchangedPackageState() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.optional")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("com.example.launcher/.MainActivity\n"),
+            checkedOutput("com.example.settings/.SettingsActivity\n"),
+            checkedOutput("null\n"),
+            checkedOutput("Package com.example.optional new state: disabled-user\n"),
+            checkedOutput("")
+        ])
+
+        do {
+            try await ADBTVInstalledAppManager().disable(
+                package,
+                userID: 0,
+                using: &session
+            )
+            XCTFail("Expected state verification to fail.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(
+                error,
+                .packageStateMismatch(
+                    packageName: package.packageName,
+                    expected: .disabled,
+                    actual: .enabled
+                )
+            )
+        }
+    }
+
+    func testRestoreDefaultReturnsAndroidEffectiveState() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.dormant")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("Package com.example.dormant new state: default\n"),
+            checkedOutput("package:com.example.dormant\n")
+        ])
+
+        let state = try await ADBTVInstalledAppManager().restoreDefault(
+            package,
+            userID: 0,
+            using: &session
+        )
+
+        XCTAssertEqual(state, .disabled)
+        XCTAssertTrue(
+            session.commands[0].hasPrefix(
+                "pm default-state --user 0 'com.example.dormant'; "
+            )
+        )
+    }
+
+    func testDisableRejectsInvalidUserBeforeSendingCommand() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.optional")
+        var session = InstalledAppSession(outputs: [])
+
+        do {
+            try await ADBTVInstalledAppManager().disable(
+                package,
+                userID: -1,
+                using: &session
+            )
+            XCTFail("Expected user validation to fail.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .invalidUserID(-1))
+        }
+        XCTAssertTrue(session.commands.isEmpty)
+    }
+
     func testPackageNameRejectsShellMetacharacters() {
         XCTAssertThrowsError(try ADBTVInstalledPackage(packageName: "com.example;reboot")) {
             XCTAssertEqual(
