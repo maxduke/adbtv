@@ -40,6 +40,174 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertTrue(session.commands[0].hasPrefix("pm list packages -s; "))
     }
 
+    func testActivitySnapshotGroupsProcessesAndSortsForegroundAppsByMemory() async throws {
+        let capturedAt = Date(timeIntervalSince1970: 1_720_000_000)
+        var session = AppActivitySession(outputs: [
+            "am get-current-user": ["0\n", "0\n"],
+            "pm list packages -3 -U --user 0": [
+                "package:com.netflix.ninja uid:10001\n"
+            ],
+            "pm list packages -s -U --user 0": [
+                "package:com.google.android.youtube.tv uid:10002\n"
+            ],
+            "ps -A -w -o PID,UID,NAME": [
+                """
+                PID UID NAME
+                11 10001 com.netflix.ninja
+                12 10001 com.netflix.ninja:playback
+                13 10002 com.google.android.youtube.tv
+                1 0 init
+                14 10001 com.netflix.ninja.fake
+                """
+            ],
+            "dumpsys meminfo -c": [
+                """
+                version,1
+                time,1000,2000
+                proc,fore,com.netflix.ninja,11,100,N/A,a
+                proc,servicea,com.netflix.ninja:playback,12,50,N/A,e
+                proc,fore,com.google.android.youtube.tv,13,300,N/A,a
+                """
+            ],
+            "dumpsys activity activities": [
+                """
+                    mResumedActivity: ActivityRecord{a u0 com.netflix.ninja/.Main t1}
+                  ResumedActivity: ActivityRecord{a u0 com.netflix.ninja/.Main t1}
+                    mResumedActivity: ActivityRecord{b u0 com.google.android.youtube.tv/.Main t2}
+                """
+            ]
+        ])
+
+        let snapshot = try await ADBTVInstalledAppManager().activitySnapshot(
+            using: &session,
+            capturedAt: capturedAt
+        )
+
+        XCTAssertEqual(snapshot.userID, 0)
+        XCTAssertEqual(snapshot.capturedAt, capturedAt)
+        XCTAssertEqual(
+            snapshot.apps.map(\.package.packageName),
+            ["com.google.android.youtube.tv", "com.netflix.ninja"]
+        )
+        XCTAssertEqual(snapshot.apps.map(\.kind), [.system, .user])
+        XCTAssertEqual(snapshot.apps.map(\.isForeground), [true, true])
+        XCTAssertEqual(snapshot.apps.map(\.processCount), [1, 2])
+        XCTAssertEqual(snapshot.apps.map(\.memoryByteCount), [307_200, 153_600])
+        XCTAssertFalse(snapshot.diagnostics.isPartial)
+        XCTAssertEqual(session.commands.count, 7)
+        XCTAssertEqual(
+            session.maximumOutputByteCounts["ps -A -w -o PID,UID,NAME"],
+            1024 * 1024 + 1024
+        )
+        XCTAssertEqual(
+            session.maximumOutputByteCounts["dumpsys meminfo -c"],
+            2 * 1024 * 1024 + 1024
+        )
+    }
+
+    func testActivitySnapshotKeepsAppWhenMemoryDoesNotMatchPIDAndName() async throws {
+        var session = AppActivitySession.basic(
+            userPackages: """
+            package:com.example.player uid:10001
+            package:com.example.other uid:10002
+            """,
+            processes: """
+            PID UID NAME
+            malformed
+            11 10001 com.example.player
+            """,
+            memory: """
+            version,1
+            proc,fore,com.example.other,11,400,N/A,a
+            """,
+            activities: """
+              ResumedActivity: ActivityRecord{a u0 com.example.other/.Main t1}
+            """
+        )
+
+        let snapshot = try await ADBTVInstalledAppManager().activitySnapshot(using: &session)
+
+        XCTAssertEqual(snapshot.apps.count, 1)
+        XCTAssertEqual(snapshot.apps[0].package.packageName, "com.example.player")
+        XCTAssertNil(snapshot.apps[0].memoryByteCount)
+        XCTAssertFalse(snapshot.apps[0].isForeground)
+        XCTAssertEqual(snapshot.diagnostics.omittedProcessCount, 1)
+        XCTAssertEqual(snapshot.diagnostics.missingMemoryProcessCount, 1)
+        XCTAssertEqual(snapshot.diagnostics.invalidMemoryRowCount, 0)
+        XCTAssertEqual(snapshot.diagnostics.unresolvedForegroundCount, 1)
+    }
+
+    func testActivitySnapshotExcludesProcessesForSharedPackageUID() async throws {
+        var session = AppActivitySession.basic(
+            userPackages: """
+            package:com.example.first uid:10001
+            package:com.example.second uid:10001
+            """,
+            processes: """
+            PID UID NAME
+            11 10001 com.example.first
+            12 10001 com.example.second
+            """,
+            memory: """
+            version,1
+            proc,fore,com.example.first,11,100,N/A,a
+            proc,fore,com.example.second,12,100,N/A,a
+            """
+        )
+
+        let snapshot = try await ADBTVInstalledAppManager().activitySnapshot(using: &session)
+
+        XCTAssertTrue(snapshot.apps.isEmpty)
+        XCTAssertEqual(snapshot.diagnostics.omittedProcessCount, 2)
+        XCTAssertTrue(snapshot.diagnostics.isPartial)
+    }
+
+    func testActivitySnapshotNeverDoubleCountsConflictingMemoryRows() async throws {
+        var session = AppActivitySession.basic(
+            userPackages: "package:com.example.player uid:10001",
+            processes: """
+            PID UID NAME
+            11 10001 com.example.player
+            """,
+            memory: """
+            version,1
+            proc,fore,com.example.player,11,100,N/A,a
+            proc,fore,com.example.player,11,200,N/A,a
+            """
+        )
+
+        let snapshot = try await ADBTVInstalledAppManager().activitySnapshot(using: &session)
+
+        XCTAssertEqual(snapshot.apps.count, 1)
+        XCTAssertNil(snapshot.apps[0].memoryByteCount)
+        XCTAssertEqual(snapshot.diagnostics.missingMemoryProcessCount, 1)
+        XCTAssertEqual(snapshot.diagnostics.invalidMemoryRowCount, 1)
+    }
+
+    func testActivitySnapshotRejectsUnknownCompactMemoryVersion() async throws {
+        var session = AppActivitySession.basic(
+            memory: "version,2\n"
+        )
+
+        do {
+            _ = try await ADBTVInstalledAppManager().activitySnapshot(using: &session)
+            XCTFail("Expected compact memory version validation to fail.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .invalidCompactMemoryVersion("version,2"))
+        }
+    }
+
+    func testActivitySnapshotRejectsActiveUserChange() async throws {
+        var session = AppActivitySession.basic(userIDs: ["0\n", "10\n"])
+
+        do {
+            _ = try await ADBTVInstalledAppManager().activitySnapshot(using: &session)
+            XCTFail("Expected active-user verification to fail.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
+        }
+    }
+
     func testSystemSnapshotLoadsStateAndProtectedRolesForActiveUser() async throws {
         var session = InstalledAppSession(outputs: [
             checkedOutput("10\n"),
@@ -452,6 +620,70 @@ private struct InstalledAppSession: ADBShellCommandRunningSession {
         commands.append(command.rawValue)
         return outputs.removeFirst()
     }
+}
+
+private struct AppActivitySession: ADBDeviceToolsSession {
+    var outputs: [String: [String]]
+    var commands: [String] = []
+    var maximumOutputByteCounts: [String: Int] = [:]
+
+    static func basic(
+        userIDs: [String] = ["0\n", "0\n"],
+        userPackages: String = "package:com.example.player uid:10001",
+        systemPackages: String = "",
+        processes: String = "PID UID NAME\n11 10001 com.example.player",
+        memory: String = "version,1\nproc,fore,com.example.player,11,100,N/A,a",
+        activities: String = ""
+    ) -> Self {
+        Self(outputs: [
+            "am get-current-user": userIDs,
+            "pm list packages -3 -U --user 0": [userPackages],
+            "pm list packages -s -U --user 0": [systemPackages],
+            "ps -A -w -o PID,UID,NAME": [processes],
+            "dumpsys meminfo -c": [memory],
+            "dumpsys activity activities": [activities]
+        ])
+    }
+
+    mutating func connect(systemIdentity: String) async throws -> ADBConnectedDevice {
+        ADBConnectedDevice(protocolVersion: 1, maxData: 4096, banner: "device::")
+    }
+
+    mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput {
+        throw AppActivitySessionError.unexpectedShellCommand(command.rawValue)
+    }
+
+    mutating func runService(
+        _ service: String,
+        maximumOutputByteCount: Int
+    ) async throws -> ADBServiceOutput {
+        guard service.hasPrefix("shell:"),
+              let marker = service.range(of: "; __adbtv_status=$?") else {
+            throw AppActivitySessionError.invalidService(service)
+        }
+        let start = service.index(service.startIndex, offsetBy: "shell:".count)
+        let command = String(service[start ..< marker.lowerBound])
+        commands.append(command)
+        maximumOutputByteCounts[command] = maximumOutputByteCount
+        guard var commandOutputs = outputs[command], !commandOutputs.isEmpty else {
+            throw AppActivitySessionError.missingOutput(command)
+        }
+        let value = commandOutputs.removeFirst()
+        outputs[command] = commandOutputs
+        let bytes = checkedOutput(value).bytes
+        guard bytes.count <= maximumOutputByteCount else {
+            throw ADBDeviceSessionError.serviceOutputTooLarge(
+                maximumByteCount: maximumOutputByteCount
+            )
+        }
+        return ADBServiceOutput(bytes: bytes)
+    }
+}
+
+private enum AppActivitySessionError: Error {
+    case unexpectedShellCommand(String)
+    case invalidService(String)
+    case missingOutput(String)
 }
 
 private func checkedOutput(_ value: String, exitCode: Int = 0) -> ADBShellOutput {
