@@ -137,6 +137,43 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertEqual(snapshot.diagnostics.unresolvedForegroundCount, 1)
     }
 
+    func testActivitySnapshotRejectsUnownedProcessesAndSortsUnavailableMemoryLast() async throws {
+        var session = AppActivitySession.basic(
+            userPackages: """
+            package:com.example.player uid:10001
+            package:com.example.other uid:10002
+            package:com.example.unknown uid:10003
+            """,
+            processes: """
+            PID UID NAME
+            11 10001 com.example.player
+            12 10002 com.example.other
+            13 10003 com.example.unknown
+            14 1010001 com.example.player
+            15 10001 com.example.player:
+            16 10001 com.example.player.fake
+            """,
+            memory: """
+            version,1
+            proc,fore,com.example.player,11,100,N/A,a
+            proc,cached,com.example.other,12,50,N/A,c
+            """,
+            activities: """
+              mResumedActivity: ActivityRecord{a u0 com.example.player/.Main t1}
+            """
+        )
+
+        let snapshot = try await ADBTVInstalledAppManager().activitySnapshot(using: &session)
+
+        XCTAssertEqual(
+            snapshot.apps.map(\.package.packageName),
+            ["com.example.player", "com.example.other", "com.example.unknown"]
+        )
+        XCTAssertEqual(snapshot.apps.map(\.memoryByteCount), [102_400, 51_200, nil])
+        XCTAssertEqual(snapshot.diagnostics.omittedProcessCount, 2)
+        XCTAssertEqual(snapshot.diagnostics.missingMemoryProcessCount, 1)
+    }
+
     func testActivitySnapshotExcludesProcessesForSharedPackageUID() async throws {
         var session = AppActivitySession.basic(
             userPackages: """

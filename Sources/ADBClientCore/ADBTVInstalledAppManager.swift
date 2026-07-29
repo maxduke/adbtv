@@ -910,18 +910,19 @@ public struct ADBTVInstalledAppManager: Sendable {
         var issueCount = 0
 
         for process in processes {
-            guard process.uid / Self.androidUIDsPerUser == userID else {
-                continue
-            }
-            let packageName = process.name.split(
+            let nameParts = process.name.split(
                 separator: ":",
                 maxSplits: 1,
                 omittingEmptySubsequences: false
-            ).first.map(String.init) ?? ""
+            )
+            let packageName = nameParts.first.map(String.init) ?? ""
             guard let package = packages[packageName] else {
                 continue
             }
-            guard process.uid == package.uid, !sharedUIDs.contains(process.uid) else {
+            guard nameParts.count == 1 || !nameParts[1].isEmpty,
+                  process.uid / Self.androidUIDsPerUser == userID,
+                  process.uid == package.uid,
+                  !sharedUIDs.contains(process.uid) else {
                 issueCount += 1
                 continue
             }
