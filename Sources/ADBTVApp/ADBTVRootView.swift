@@ -4545,27 +4545,32 @@ private struct InstalledAppDetailsView: View {
         NavigationStack {
             List {
                 Section("Package Identifier") {
-                    HStack(alignment: .top, spacing: 12) {
-                        InstalledAppIconView(icon: details?.icon)
-
-                        VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .center, spacing: 12) {
+                            InstalledAppIconView(icon: details?.icon)
                             if let displayName = details?.displayName {
                                 Text(displayName)
                                     .font(.headline)
+                                    .lineLimit(3)
                             }
-                            Text(package.packageName)
-                                .font(.body.monospaced())
-                                .textSelection(.enabled)
-                        }
 
-                        Spacer(minLength: 0)
+                            Spacer(minLength: 0)
 
-                        Button(action: copyPackageName) {
-                            Label("Copy Package Identifier", systemImage: "doc.on.doc")
+                            Button(action: copyPackageName) {
+                                Label(
+                                    "Copy Package Identifier",
+                                    systemImage: "doc.on.doc"
+                                )
                                 .labelStyle(.iconOnly)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Copy Package Identifier")
                         }
-                        .buttonStyle(.borderless)
-                        .help("Copy Package Identifier")
+
+                        Text(package.packageName)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
