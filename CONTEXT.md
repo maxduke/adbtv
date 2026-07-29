@@ -88,6 +88,22 @@ _Avoid_: Multiple apps
 An application currently installed for the user on a Managed Device.
 _Avoid_: Install Package
 
+**Preinstalled App**:
+An Installed App supplied with the Android TV system rather than installed by
+the user.
+_Avoid_: System Service, Built-in Service
+
+**Disabled Preinstalled App**:
+A Preinstalled App made unavailable to the current Android TV user while
+remaining installed and recoverable.
+_Avoid_: Startup-disabled App, Disabled Service
+
+**Protected Preinstalled App**:
+A Preinstalled App that ADB TV prevents the user from disabling because it
+fulfills an identifiable core role or is known to be required for ADB TV
+management.
+_Avoid_: Safe App, Trusted App
+
 **Operation Progress**:
 User-visible status for a running ADB Operation, ideally including progress when the underlying operation can report it.
 _Avoid_: Loading state when the operation has meaningful progress
