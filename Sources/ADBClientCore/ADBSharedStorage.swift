@@ -115,22 +115,33 @@ public struct ADBSharedStorageManager<Session: ADBSharedStorageSession>: Sendabl
         eventHandler: @escaping ADBSyncPushEventHandler = { _ in }
     ) async throws -> ADBSharedStoragePath {
         let destination = try directory.appendingPathComponent(localURL.lastPathComponent)
+        let temporary = try directory.appendingPathComponent(
+            ".adbtv-upload-\(UUID().uuidString)"
+        )
         let values = try localURL.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
         let fileSize = values.fileSize
         let modificationTime = values.contentModificationDate.map { date in
             UInt32(clamping: max(Int64(date.timeIntervalSince1970), 0))
         } ?? 0
         let plan = try ADBSyncPushPlan(
-            remotePath: destination.remotePath,
+            remotePath: temporary.remotePath,
             modificationTime: modificationTime,
             totalByteCount: fileSize
         )
-        _ = try await session.pushFile(
-            from: localURL,
-            plan: plan,
-            eventHandler: eventHandler
-        )
-        return destination
+        do {
+            _ = try await session.pushFile(
+                from: localURL,
+                plan: plan,
+                eventHandler: eventHandler
+            )
+            try await runChecked(
+                "mv -f \(temporary.remotePath.shellEscaped) \(destination.remotePath.shellEscaped)"
+            )
+            return destination
+        } catch {
+            try? await runChecked("rm -f \(temporary.remotePath.shellEscaped)")
+            throw error
+        }
     }
 
     @discardableResult

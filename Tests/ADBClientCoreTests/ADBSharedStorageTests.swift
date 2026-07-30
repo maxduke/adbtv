@@ -72,6 +72,46 @@ final class ADBSharedStorageTests: XCTestCase {
         XCTAssertEqual(manager.session.shellCommands, [])
     }
 
+    func testUploadReplacesDestinationOnlyAfterTemporaryUploadCompletes() async throws {
+        let localURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBSharedStorageTests-\(UUID().uuidString).txt")
+        try Data([1, 2, 3]).write(to: localURL)
+        defer { try? FileManager.default.removeItem(at: localURL) }
+        var manager = ADBSharedStorageManager(session: RecordingSharedStorageSession())
+
+        let destination = try await manager.upload(localURL, to: .root)
+
+        XCTAssertEqual(destination.rawValue, "/sdcard/\(localURL.lastPathComponent)")
+        let temporaryPath = try XCTUnwrap(manager.session.pushPlans.first?.remotePath.rawValue)
+        XCTAssertTrue(temporaryPath.hasPrefix("/sdcard/.adbtv-upload-"))
+        XCTAssertEqual(manager.session.shellCommands.count, 1)
+        XCTAssertTrue(manager.session.shellCommands[0].contains(
+            "mv -f '\(temporaryPath)' '\(destination.rawValue)'"
+        ))
+    }
+
+    func testFailedUploadRemovesTemporaryFileWithoutReplacingDestination() async throws {
+        let localURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBSharedStorageTests-\(UUID().uuidString).txt")
+        try Data([1, 2, 3]).write(to: localURL)
+        defer { try? FileManager.default.removeItem(at: localURL) }
+        var manager = ADBSharedStorageManager(
+            session: RecordingSharedStorageSession(pushError: TestSharedStorageError.pushFailed)
+        )
+
+        do {
+            _ = try await manager.upload(localURL, to: .root)
+            XCTFail("Expected upload to fail.")
+        } catch {
+            XCTAssertEqual(error as? TestSharedStorageError, .pushFailed)
+        }
+
+        let temporaryPath = try XCTUnwrap(manager.session.pushPlans.first?.remotePath.rawValue)
+        XCTAssertEqual(manager.session.shellCommands.count, 1)
+        XCTAssertTrue(manager.session.shellCommands[0].contains("rm -f '\(temporaryPath)'"))
+        XCTAssertFalse(manager.session.shellCommands[0].contains("mv -f"))
+    }
+
     private func sharedItem(name: String, kind: UInt32) throws -> ADBSharedStorageItem {
         ADBSharedStorageItem(
             path: try ADBSharedStoragePath.root.appendingPathComponent(name),
@@ -88,6 +128,8 @@ final class ADBSharedStorageTests: XCTestCase {
 private struct RecordingSharedStorageSession: ADBSharedStorageSession {
     var entries: [ADBSyncDirectoryEntry] = []
     var shellCommands: [String] = []
+    var pushPlans: [ADBSyncPushPlan] = []
+    var pushError: TestSharedStorageError?
 
     mutating func listDirectory(_ path: ADBRemotePath) async throws -> [ADBSyncDirectoryEntry] {
         entries
@@ -107,11 +149,19 @@ private struct RecordingSharedStorageSession: ADBSharedStorageSession {
         plan: ADBSyncPushPlan,
         eventHandler: @escaping ADBSyncPushEventHandler
     ) async throws -> [ADBSyncPushEvent] {
-        [.completed]
+        pushPlans.append(plan)
+        if let pushError {
+            throw pushError
+        }
+        return [.completed]
     }
 
     mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput {
         shellCommands.append(command.rawValue)
         return ADBShellOutput(bytes: Array("\n__ADBTV_EXIT_STATUS__=0\n".utf8))
     }
+}
+
+private enum TestSharedStorageError: Error, Equatable {
+    case pushFailed
 }
