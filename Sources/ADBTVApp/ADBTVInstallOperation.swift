@@ -353,7 +353,7 @@ public enum ADBTVInstallFileStager: Sendable {
                 fileURL: stagedFileURL,
                 plan: try ADBAPKInstallPlan.singleAPK(
                     fileName: fileName,
-                    byteCount: expectedByteCount ?? Int64(stagedByteCount)
+                    byteCount: Int64(stagedByteCount)
                 ),
                 temporaryDirectoryURL: temporaryDirectoryURL
             )
