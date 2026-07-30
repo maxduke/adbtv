@@ -4,7 +4,8 @@ ADB TV is a native SwiftUI iOS app for managing Android TV devices over Wireless
 
 ## Status
 
-Version [0.9.0](https://github.com/maxduke/adbtv/releases/tag/v0.9.0) is the current release with the following Swift package and native SwiftUI iOS app features:
+Version 0.10.0 is the current release candidate with the following Swift
+package and native SwiftUI iOS app features:
 
 - `ADBClientCore`: native ADB packet, stream, shell, sync, remote-control, and APK install foundations.
 - `ADBTVApp`: SwiftUI app shell for saved devices, APK install sources, install state, and Android TV remote actions.
@@ -86,6 +87,7 @@ Implemented so far:
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - searchable user and system app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, launch, force stop, user-app uninstall, and checked command diagnostics;
+- helper-free Active Apps snapshots with foreground state, grouped process count, bounded proportional memory, manual refresh, and no activity history;
 - guarded active-user system app state, with confirmed Disable and Restore Android Default actions that preserve package data and protect critical Android roles;
 - structured device information for Android version, display resolution, storage, uptime, and build identity;
 - bounded binary-safe Android TV screenshots with PNG validation, preview, native sharing, and clear protected-content/device-blocked failures;
@@ -163,6 +165,12 @@ The repository contains `ADBClientCore`, `ADBTVApp`, and the source for the opti
 ASCII remote text uses Android's built-in `input text` command with checked exit status. Chinese and other non-ASCII text uses the optional bundled ADB TV Input helper because Android's built-in command cannot generate characters absent from the TV's virtual key map. Enter Unicode text, install the helper from the Remote panel once, focus a TV text field, and send again. The app temporarily selects the helper for each send and restores the previous TV keyboard afterward.
 
 The same helper returns installed-app names, versions, install/update dates, summed APK size, icons, and Android's stopped state through a shell-only provider. APK size covers the base and split APK files, not app data or cache. When the helper is missing, the Apps list remains fully functional and falls back to package identifiers, generic icons, and an available Force Stop action. Install the versioned v3 helper from the Apps toolbar or Remote panel; if Android rejects an update signed by a different CI key, ADB TV offers to replace only the helper and retry. Unicode input continues to support v2 during migration.
+
+Active Apps is a point-in-time, helper-free view of Installed Apps with a live
+process. It groups child processes by package, shows foreground state, process
+count, and proportional memory, and refreshes only on request or after an app
+action. Missing memory is shown as unavailable; ADB TV does not persist activity
+or recommend which apps to stop.
 
 System Apps shows Android's effective state for the active user. Open app details
 to disable an eligible package or restore Android's package default. Disable

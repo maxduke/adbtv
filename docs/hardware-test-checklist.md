@@ -120,6 +120,15 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 - [ ] Open **Apps** and confirm user-installed package identifiers load in sorted order without system packages.
 - [ ] Switch to **System Apps**, confirm system package identifiers replace the user list, and switch back without stale rows or metadata.
+- [ ] On Android 8.0 and Android 10.0 without the helper, open **Active**, confirm only Installed Apps with live processes appear, and verify User/System classification.
+- [ ] Compare foreground labels, grouped process counts, and PSS memory with the same TV's ADB output; record refresh time and byte counts for package, process, memory, and activity output.
+- [ ] Confirm Active refresh normally completes within 10 seconds on both compatibility targets and every measured output remains below its configured cap with headroom.
+- [ ] Confirm multiple foreground apps are represented when Android reports them, and missing memory remains listed as **Unavailable** with partial-data Technical Details.
+- [ ] Refresh Active and confirm the previous snapshot and update time remain visible until the new snapshot completes; make refresh fail and confirm the previous rows remain visible with the error.
+- [ ] During a delayed or unreachable Active refresh, exercise Cancel, User/System changes, tool changes, back navigation, device selection, backgrounding, and immediate retry; confirm late results never replace the current state.
+- [ ] Force stop a user app from Active and confirm the refreshed result either removes it or explains that Android kept or restarted it.
+- [ ] Open an Active system app, confirm Activity appears immediately, then confirm System Control loads with the existing protection and stronger Force Stop warning.
+- [ ] Install the helper after loading Active and confirm optional names and icons appear without changing process, foreground, memory, or Force Stop state.
 - [ ] Open a system app and confirm Details and Launch remain available while Uninstall is absent from both the row menu and details screen.
 - [ ] Search by a partial package identifier and confirm the list filters without another device request.
 - [ ] Install the bundled Android helper from the **Apps** toolbar, confirm the Install panel exposes progress and cancellation, refresh **Apps**, and confirm names and real icons appear for Android TV and sideloaded apps.

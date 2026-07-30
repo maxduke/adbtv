@@ -82,8 +82,9 @@ jobs:
                 capture "$udid" "$prefix-remote-media-expanded" \
                   --ui-preview --ui-media-expanded
                 capture "$udid" "$prefix-install" --ui-preview --ui-install
-                capture "$udid" "$prefix-apps" --ui-apps
-                capture "$udid" "$prefix-app-details" --ui-apps --ui-app-details
+                capture "$udid" "$prefix-apps" --ui-apps --ui-active
+                capture "$udid" "$prefix-app-details" \
+                  --ui-apps --ui-active --ui-app-details
                 capture "$udid" "$prefix-tools" --ui-tools
                 capture "$udid" "$prefix-files" --ui-files
               done

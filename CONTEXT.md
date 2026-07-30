@@ -88,6 +88,18 @@ _Avoid_: Multiple apps
 An application currently installed for the user on a Managed Device.
 _Avoid_: Install Package
 
+**Active App**:
+An Installed App with at least one live Android process associated with its
+package at the moment activity is refreshed. Multiple processes belonging to
+the same package still represent one Active App.
+_Avoid_: Running App, Raw Process
+
+**App Activity Snapshot**:
+A point-in-time list of Active Apps on one Managed Device, grouped by package
+and identifying any foreground apps. It is not continuous monitoring or
+historical activity.
+_Avoid_: Process List, Activity History
+
 **Preinstalled App**:
 An Installed App supplied with the Android TV system rather than installed by
 the user.
