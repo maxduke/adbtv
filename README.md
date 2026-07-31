@@ -4,8 +4,8 @@ ADB TV is a native SwiftUI iOS app for managing Android TV devices over Wireless
 
 ## Status
 
-Version 0.10.0 is the current release candidate with the following Swift
-package and native SwiftUI iOS app features:
+Version 0.10.1 is the current release with the following Swift package and
+native SwiftUI iOS app features:
 
 - `ADBClientCore`: native ADB packet, stream, shell, sync, remote-control, and APK install foundations.
 - `ADBTVApp`: SwiftUI app shell for saved devices, APK install sources, install state, and Android TV remote actions.
@@ -62,6 +62,7 @@ Implemented so far:
 - live URL download and acknowledged APK transfer progress with byte counts in the install UI;
 - file-backed single-APK transfer with at most one ADB sync frame and one 1 MiB transport batch in memory;
 - owned local package staging with cleanup after validation, success, failure, cancellation, or timeout;
+- staged shared-storage uploads that preserve an existing destination until transfer completes;
 - explicit APK-install cancellation that retains operation ownership through bounded fresh-connection staging cleanup, with cleanup failures exposed before same-source retry;
 - operation-unique remote staging with checked removal and cleanup failures preserved in technical diagnostics;
 - single active long-running device operation, bound to its originating device until completion or cancellation;

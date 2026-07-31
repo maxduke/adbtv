@@ -8,6 +8,17 @@ ADB TV is an iOS app for managing Android TV devices over the local network usin
 An iOS app build installed outside the App Store using a user's own sideloading workflow.
 _Avoid_: Self-signed app, public IPA
 
+**Stabilization Release**:
+A bounded maintenance release that fixes confirmed defects and quality gaps
+without adding product features or redesigning established workflows.
+_Avoid_: Cleanup release, refactor release
+
+**App Store Submission Candidate**:
+A version whose app behavior, signed build, privacy and export declarations,
+store metadata, and review materials are ready to submit for Apple's review.
+It does not imply that Apple has approved the app.
+_Avoid_: App Store compliant build, approved build
+
 **Android TV Device**:
 An Android-powered television, streaming box, or TV dongle that is the primary management target for this app.
 _Avoid_: Android device when specifically referring to the TV-first target

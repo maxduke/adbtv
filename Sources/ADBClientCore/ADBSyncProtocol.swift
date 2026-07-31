@@ -159,6 +159,7 @@ public enum ADBSyncResponse: Equatable, Sendable {
 }
 
 public struct ADBSyncResponseDecoder: Sendable {
+    private static let maximumMessageByteCount = 64 * 1024
     private var buffer: [UInt8] = []
 
     public init() {}
@@ -186,6 +187,9 @@ public struct ADBSyncResponseDecoder: Sendable {
                 responses.append(.okay)
             case .fail:
                 let messageByteCount = Int(value)
+                guard messageByteCount <= Self.maximumMessageByteCount else {
+                    throw ADBSyncFramingError.failureMessageTooLarge(messageByteCount)
+                }
                 let frameByteCount = ADBSyncFrame.headerLength + messageByteCount
                 guard buffer.count >= frameByteCount else {
                     return responses

@@ -290,6 +290,23 @@ final class ADBTVInstallOperationTests: XCTestCase {
         ))
     }
 
+    func testFileStagerUsesCopiedFileSizeWhenPickerMetadataIsStale() throws {
+        let sourceURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBTVInstallOperationTests-\(UUID().uuidString).apk")
+        let contents = makeADBTVTestAPK()
+        try Data(contents).write(to: sourceURL)
+        defer { try? FileManager.default.removeItem(at: sourceURL) }
+
+        let preparedAPK = try ADBTVInstallFileStager.stageAPK(
+            from: sourceURL,
+            fileName: "app.apk",
+            expectedByteCount: 1
+        )
+        defer { try? preparedAPK.removeTemporaryFiles() }
+
+        XCTAssertEqual(preparedAPK.plan.package.byteCount, Int64(contents.count))
+    }
+
     func testFileStagerRejectsPackageAboveLimit() throws {
         let fileURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("ADBTVInstallOperationTests-\(UUID().uuidString).apk")
