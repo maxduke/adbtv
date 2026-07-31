@@ -146,6 +146,10 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] With the current helper installed, refresh Apps and confirm Force Stop shows as **Stopped** and is disabled only for packages Android reports as stopped; launch one and confirm the action becomes available again.
 - [ ] Open a system app's details, confirm Force Stop requires the stronger system warning, and cancel without affecting the TV.
 - [ ] Force stop a disposable system app from details, confirm the operation is bounded, and confirm Android can launch or restart it afterward.
+- [ ] On Android 8.0 and Android 10.0, open App Settings for one user app and one system app; confirm the TV opens the matching native App Info screen.
+- [ ] Cancel Clear App Data for a disposable user app and confirm its data remains unchanged.
+- [ ] Clear data for a disposable user app, confirm it remains installed, becomes stopped, and opens in first-run state when launched again.
+- [ ] Confirm Clear App Data is absent from system-app details and both recovery actions work without the Android helper installed.
 - [ ] Cancel the uninstall confirmation and confirm the package remains installed.
 - [ ] Confirm uninstall for a disposable package, verify its app data is removed, and confirm the row disappears.
 - [ ] Refresh after installing an app outside ADB TV and confirm the new package appears.

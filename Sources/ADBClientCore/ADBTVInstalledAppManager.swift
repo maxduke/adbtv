@@ -482,6 +482,50 @@ public struct ADBTVInstalledAppManager: Sendable {
         }
     }
 
+    public func openAppSettings<Session: ADBShellCommandRunningSession>(
+        _ package: ADBTVInstalledPackage,
+        using session: inout Session
+    ) async throws {
+        let userID = try await activeUserID(using: &session)
+        try await requireInstalledPackage(
+            package,
+            userID: userID,
+            scope: nil,
+            using: &session
+        )
+        try await requireActiveUser(userID, using: &session)
+        let output = try await runChecked(
+            "am start --user \(userID) -W "
+                + "-a android.settings.APPLICATION_DETAILS_SETTINGS "
+                + "-d 'package:\(package.packageName)'",
+            using: &session
+        )
+        try Self.validateControlOutput(output)
+    }
+
+    public func clearData<Session: ADBShellCommandRunningSession>(
+        _ package: ADBTVInstalledPackage,
+        using session: inout Session
+    ) async throws {
+        let userID = try await activeUserID(using: &session)
+        try await requireInstalledPackage(
+            package,
+            userID: userID,
+            scope: .user,
+            using: &session
+        )
+        try await requireActiveUser(userID, using: &session)
+        let output = try await runChecked(
+            "pm clear --user \(userID) \(package.shellEscaped)",
+            using: &session
+        )
+        try Self.validateControlOutput(output)
+        let result = output.utf8String.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard result == "Success" else {
+            throw ADBTVInstalledAppError.unexpectedClearDataOutput(result)
+        }
+    }
+
     public func details<Session: ADBShellCommandRunningSession>(
         for packages: [ADBTVInstalledPackage],
         using session: inout Session
@@ -645,6 +689,33 @@ public struct ADBTVInstalledAppManager: Sendable {
             using: &session
         )
         return try Self.parsePackages(try validatedPackageListOutput(output))
+    }
+
+    private func requireInstalledPackage<Session: ADBShellCommandRunningSession>(
+        _ package: ADBTVInstalledPackage,
+        userID: Int,
+        scope: ADBTVInstalledAppScope?,
+        using session: inout Session
+    ) async throws {
+        try Self.validate(userID: userID)
+        let flag = scope == .user ? " -3" : ""
+        let output = try await runChecked(
+            "pm list packages\(flag) --user \(userID) \(package.shellEscaped)",
+            using: &session
+        )
+        let packages = try Self.parsePackages(try validatedPackageListOutput(output))
+        guard packages.contains(package) else {
+            if scope == .user {
+                throw ADBTVInstalledAppError.packageNotUserInstalled(
+                    packageName: package.packageName,
+                    userID: userID
+                )
+            }
+            throw ADBTVInstalledAppError.packageNotInstalled(
+                packageName: package.packageName,
+                userID: userID
+            )
+        }
     }
 
     private func listDisabledSystemPackages<Session: ADBShellCommandRunningSession>(
@@ -1200,6 +1271,8 @@ public enum ADBTVInstalledAppError: Error, Equatable, Sendable {
     case invalidActiveUserID(String)
     case invalidUserID(Int)
     case activeUserChanged(expected: Int, actual: Int)
+    case packageNotInstalled(packageName: String, userID: Int)
+    case packageNotUserInstalled(packageName: String, userID: Int)
     case invalidComponentOutput(String)
     case packageListResponseTooLarge(Int)
     case controlResponseTooLarge(Int)
@@ -1213,6 +1286,7 @@ public enum ADBTVInstalledAppError: Error, Equatable, Sendable {
         actual: ADBTVInstalledAppState
     )
     case unexpectedUninstallOutput(String)
+    case unexpectedClearDataOutput(String)
     case iconPNGTooLarge(Int)
     case invalidIconPNG
     case invalidIconDimensions(width: Int, height: Int)

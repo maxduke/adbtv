@@ -540,6 +540,127 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertTrue(session.commands[0].hasPrefix("pm uninstall 'com.example.player'; "))
     }
 
+    func testOpenAppSettingsVerifiesPackageAndActiveUser() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("10\n"),
+            checkedOutput("package:com.example.player\n"),
+            checkedOutput("10\n"),
+            checkedOutput("Status: ok\n")
+        ])
+
+        try await ADBTVInstalledAppManager().openAppSettings(package, using: &session)
+
+        XCTAssertTrue(
+            session.commands[1].hasPrefix(
+                "pm list packages --user 10 'com.example.player'; "
+            )
+        )
+        XCTAssertTrue(
+            session.commands[3].hasPrefix(
+                "am start --user 10 -W "
+                    + "-a android.settings.APPLICATION_DETAILS_SETTINGS "
+                    + "-d 'package:com.example.player'; "
+            )
+        )
+    }
+
+    func testOpenAppSettingsRejectsPackageThatDisappeared() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
+            checkedOutput("")
+        ])
+
+        do {
+            try await ADBTVInstalledAppManager().openAppSettings(package, using: &session)
+            XCTFail("Expected package verification to fail.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(
+                error,
+                .packageNotInstalled(packageName: package.packageName, userID: 0)
+            )
+        }
+        XCTAssertEqual(session.commands.count, 2)
+        XCTAssertFalse(session.commands.contains { $0.contains("am start") })
+    }
+
+    func testClearDataUsesNumericUserAndRequiresExactSuccess() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
+            checkedOutput("package:com.example.player\n"),
+            checkedOutput("0\n"),
+            checkedOutput("Success\n")
+        ])
+
+        try await ADBTVInstalledAppManager().clearData(package, using: &session)
+
+        XCTAssertTrue(
+            session.commands[1].hasPrefix(
+                "pm list packages -3 --user 0 'com.example.player'; "
+            )
+        )
+        XCTAssertTrue(
+            session.commands[3].hasPrefix(
+                "pm clear --user 0 'com.example.player'; "
+            )
+        )
+    }
+
+    func testClearDataRejectsSystemPackageBeforeMutation() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.system")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
+            checkedOutput("")
+        ])
+
+        do {
+            try await ADBTVInstalledAppManager().clearData(package, using: &session)
+            XCTFail("Expected user-app verification to fail.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(
+                error,
+                .packageNotUserInstalled(packageName: package.packageName, userID: 0)
+            )
+        }
+        XCTAssertFalse(session.commands.contains { $0.contains("pm clear") })
+    }
+
+    func testClearDataRejectsChangedActiveUserBeforeMutation() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
+            checkedOutput("package:com.example.player\n"),
+            checkedOutput("10\n")
+        ])
+
+        do {
+            try await ADBTVInstalledAppManager().clearData(package, using: &session)
+            XCTFail("Expected active-user verification to fail.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
+        }
+        XCTAssertFalse(session.commands.contains { $0.contains("pm clear") })
+    }
+
+    func testClearDataRejectsUnexpectedOutput() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"),
+            checkedOutput("package:com.example.player\n"),
+            checkedOutput("0\n"),
+            checkedOutput("Failed\n")
+        ])
+
+        do {
+            try await ADBTVInstalledAppManager().clearData(package, using: &session)
+            XCTFail("Expected clear-data output validation to fail.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .unexpectedClearDataOutput("Failed"))
+        }
+    }
+
     func testDetailsLoadMetadataAndIgnoreInvalidIconsAndUnrequestedItems() async throws {
         let validPNG = try XCTUnwrap(Data(base64Encoded: Self.onePixelPNGBase64))
         let response = """

@@ -279,6 +279,12 @@ public struct ADBTVRootView: View {
                         uninstallInstalledApp: { package in
                             runInstalledAppCommand(.uninstall(package), on: device)
                         },
+                        openInstalledAppSettings: { package in
+                            runInstalledAppCommand(.openSettings(package), on: device)
+                        },
+                        clearInstalledAppData: { package in
+                            runInstalledAppCommand(.clearData(package), on: device)
+                        },
                         disableSystemApp: { package, userID in
                             runInstalledAppCommand(
                                 .disable(package, userID: userID),
@@ -1673,7 +1679,8 @@ public struct ADBTVRootView: View {
             installedAppsState.mode = .active
         case .activeSystemSnapshot:
             break
-        case .launch, .forceStop, .uninstall, .disable, .restoreDefault:
+        case .launch, .forceStop, .uninstall, .openSettings, .clearData,
+             .disable, .restoreDefault:
             break
         }
         installedAppsState.status = command.inProgressStatus
@@ -1723,6 +1730,7 @@ public struct ADBTVRootView: View {
     ) {
         cancelActivityRefreshIfNeeded()
         installedAppsState.pendingForceStopPackage = nil
+        installedAppsState.pendingClearDataPackage = nil
         if let scope = mode.scope {
             runInstalledAppCommand(.list(scope), on: device)
         } else {
@@ -1750,6 +1758,7 @@ public struct ADBTVRootView: View {
             return false
         }
         installedAppsState.pendingForceStopPackage = nil
+        installedAppsState.pendingClearDataPackage = nil
         installedAppsState.status = .ready(message: message)
         return true
     }
@@ -1783,10 +1792,15 @@ public struct ADBTVRootView: View {
             let forceStoppedName = forceStoppedPackage.flatMap {
                 installedAppsState.activityDetails[$0.packageName]?.displayName
             } ?? forceStoppedPackage?.packageName
+            let clearedDataPackage = installedAppsState.pendingClearDataPackage
+            let clearedDataName = clearedDataPackage.flatMap {
+                installedAppsState.activityDetails[$0.packageName]?.displayName
+            } ?? clearedDataPackage?.packageName
             installedAppsState.activitySnapshot = snapshot
             installedAppsState.activityDetails = [:]
             installedAppsState.activeSystemSnapshot = nil
             installedAppsState.pendingForceStopPackage = nil
+            installedAppsState.pendingClearDataPackage = nil
             if let forceStoppedPackage, let forceStoppedName {
                 let remainsActive = snapshot.apps.contains {
                     $0.package == forceStoppedPackage
@@ -1795,6 +1809,15 @@ public struct ADBTVRootView: View {
                     message: remainsActive
                         ? "Android kept or restarted \(forceStoppedName); it remains active."
                         : "Stopped \(forceStoppedName)."
+                )
+            } else if let clearedDataPackage, let clearedDataName {
+                let remainsActive = snapshot.apps.contains {
+                    $0.package == clearedDataPackage
+                }
+                installedAppsState.status = .ready(
+                    message: remainsActive
+                        ? "Cleared data for \(clearedDataName), but Android reports it active."
+                        : "Cleared data for \(clearedDataName)."
                 )
             } else {
                 installedAppsState.status = .ready(message: nil)
@@ -1810,6 +1833,7 @@ public struct ADBTVRootView: View {
         case .success(.launched(let package)):
             if installedAppsState.mode == .active {
                 installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = nil
                 refreshesActivity = true
                 break
             }
@@ -1822,6 +1846,7 @@ public struct ADBTVRootView: View {
         case .success(.stopped(let package)):
             if installedAppsState.mode == .active {
                 installedAppsState.pendingForceStopPackage = package
+                installedAppsState.pendingClearDataPackage = nil
                 refreshesActivity = true
                 break
             }
@@ -1838,6 +1863,7 @@ public struct ADBTVRootView: View {
         case .success(.uninstalled(let package)):
             if installedAppsState.mode == .active {
                 installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = nil
                 refreshesActivity = true
                 break
             }
@@ -1848,9 +1874,34 @@ public struct ADBTVRootView: View {
             installedAppsState.status = .ready(
                 message: "Uninstalled \(name)."
             )
+        case .success(.openedSettings(let package)):
+            let name = installedAppsState.details[package.packageName]?.displayName
+                ?? installedAppsState.activityDetails[package.packageName]?.displayName
+                ?? package.packageName
+            installedAppsState.status = .ready(
+                message: "Opened App Settings for \(name) on the TV."
+            )
+        case .success(.clearedData(let package)):
+            if installedAppsState.mode == .active {
+                installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = package
+                refreshesActivity = true
+                break
+            }
+            if installedAppsState.details[package.packageName] == nil {
+                installedAppsState.details[package.packageName] = ADBTVInstalledAppDetails(
+                    isStopped: true
+                )
+            } else {
+                installedAppsState.details[package.packageName]?.isStopped = true
+            }
+            let name = installedAppsState.details[package.packageName]?.displayName
+                ?? package.packageName
+            installedAppsState.status = .ready(message: "Cleared data for \(name).")
         case .success(.disabled(let package)):
             if installedAppsState.mode == .active {
                 installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = nil
                 refreshesActivity = true
                 break
             }
@@ -1861,6 +1912,7 @@ public struct ADBTVRootView: View {
         case .success(.restoredDefault(let package, let state)):
             if installedAppsState.mode == .active {
                 installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = nil
                 refreshesActivity = true
                 break
             }
@@ -1873,6 +1925,7 @@ public struct ADBTVRootView: View {
             installedAppsState.status = .ready(message: message)
         case .failure(let userMessage, let diagnosticDetail):
             installedAppsState.pendingForceStopPackage = nil
+            installedAppsState.pendingClearDataPackage = nil
             installedAppsState.status = .failed(
                 userMessage: userMessage,
                 diagnosticDetail: diagnosticDetail
@@ -2092,6 +2145,12 @@ public struct ADBTVRootView: View {
             case .uninstall(let package):
                 try await manager.uninstall(package, using: &connection)
                 return .uninstalled(package)
+            case .openSettings(let package):
+                try await manager.openAppSettings(package, using: &connection)
+                return .openedSettings(package)
+            case .clearData(let package):
+                try await manager.clearData(package, using: &connection)
+                return .clearedData(package)
             case .disable(let package, let userID):
                 try await manager.disable(package, userID: userID, using: &connection)
                 return .disabled(package)
@@ -2475,6 +2534,8 @@ private enum ADBTVInstalledAppCommand: Sendable {
     case launch(ADBTVInstalledPackage)
     case forceStop(ADBTVInstalledPackage)
     case uninstall(ADBTVInstalledPackage)
+    case openSettings(ADBTVInstalledPackage)
+    case clearData(ADBTVInstalledPackage)
     case disable(ADBTVInstalledPackage, userID: Int)
     case restoreDefault(ADBTVInstalledPackage, userID: Int)
 
@@ -2492,6 +2553,10 @@ private enum ADBTVInstalledAppCommand: Sendable {
             return .stopping(package)
         case .uninstall(let package):
             return .uninstalling(package)
+        case .openSettings(let package):
+            return .openingSettings(package)
+        case .clearData(let package):
+            return .clearingData(package)
         case .disable(let package, _):
             return .disabling(package)
         case .restoreDefault(let package, _):
@@ -2513,6 +2578,10 @@ private enum ADBTVInstalledAppCommand: Sendable {
             return "forceStopInstalledApp"
         case .uninstall:
             return "uninstallInstalledApp"
+        case .openSettings:
+            return "openInstalledAppSettings"
+        case .clearData:
+            return "clearInstalledAppData"
         case .disable:
             return "disableSystemApp"
         case .restoreDefault:
@@ -2527,6 +2596,8 @@ private enum ADBTVInstalledAppCommand: Sendable {
         case .launch(let package),
              .forceStop(let package),
              .uninstall(let package),
+             .openSettings(let package),
+             .clearData(let package),
              .disable(let package, _),
              .restoreDefault(let package, _):
             return package.packageName
@@ -2547,6 +2618,10 @@ private enum ADBTVInstalledAppCommand: Sendable {
             return "Could not stop this app."
         case .uninstall:
             return "Could not uninstall this app."
+        case .openSettings:
+            return "Could not open App Settings on the TV."
+        case .clearData:
+            return "Could not clear this app's data."
         case .disable:
             return "Could not disable this system app."
         case .restoreDefault:
@@ -2563,6 +2638,8 @@ private enum ADBTVInstalledAppResult: Sendable {
     case launched(ADBTVInstalledPackage)
     case stopped(ADBTVInstalledPackage)
     case uninstalled(ADBTVInstalledPackage)
+    case openedSettings(ADBTVInstalledPackage)
+    case clearedData(ADBTVInstalledPackage)
     case disabled(ADBTVInstalledPackage)
     case restoredDefault(ADBTVInstalledPackage, state: ADBTVInstalledAppState)
 }
@@ -2636,6 +2713,7 @@ private struct ADBTVInstalledAppsViewState: Equatable {
     var activityDetails: [String: ADBTVInstalledAppDetails]
     var activeSystemSnapshot: ADBTVSystemAppSnapshot?
     var pendingForceStopPackage: ADBTVInstalledPackage?
+    var pendingClearDataPackage: ADBTVInstalledPackage?
     var status: ADBTVInstalledAppsStatus
 
     init(
@@ -2648,6 +2726,7 @@ private struct ADBTVInstalledAppsViewState: Equatable {
         activityDetails: [String: ADBTVInstalledAppDetails] = [:],
         activeSystemSnapshot: ADBTVSystemAppSnapshot? = nil,
         pendingForceStopPackage: ADBTVInstalledPackage? = nil,
+        pendingClearDataPackage: ADBTVInstalledPackage? = nil,
         status: ADBTVInstalledAppsStatus = .idle
     ) {
         self.deviceID = deviceID
@@ -2659,6 +2738,7 @@ private struct ADBTVInstalledAppsViewState: Equatable {
         self.activityDetails = activityDetails
         self.activeSystemSnapshot = activeSystemSnapshot
         self.pendingForceStopPackage = pendingForceStopPackage
+        self.pendingClearDataPackage = pendingClearDataPackage
         self.status = status
     }
 
@@ -2798,6 +2878,8 @@ private enum ADBTVInstalledAppsStatus: Equatable {
     case launching(ADBTVInstalledPackage)
     case stopping(ADBTVInstalledPackage)
     case uninstalling(ADBTVInstalledPackage)
+    case openingSettings(ADBTVInstalledPackage)
+    case clearingData(ADBTVInstalledPackage)
     case disabling(ADBTVInstalledPackage)
     case restoringDefault(ADBTVInstalledPackage)
     case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
@@ -2805,7 +2887,8 @@ private enum ADBTVInstalledAppsStatus: Equatable {
     var isBusy: Bool {
         switch self {
         case .loading, .loadingActivity, .loadingSystemControl,
-             .launching, .stopping, .uninstalling, .disabling, .restoringDefault:
+             .launching, .stopping, .uninstalling, .openingSettings, .clearingData,
+             .disabling, .restoringDefault:
             return true
         case .idle, .ready, .failed:
             return false
@@ -3819,6 +3902,8 @@ private struct DeviceDetailView: View {
     var launchInstalledApp: (ADBTVInstalledPackage) -> Void
     var forceStopInstalledApp: (ADBTVInstalledPackage) -> Void
     var uninstallInstalledApp: (ADBTVInstalledPackage) -> Void
+    var openInstalledAppSettings: (ADBTVInstalledPackage) -> Void
+    var clearInstalledAppData: (ADBTVInstalledPackage) -> Void
     var disableSystemApp: (ADBTVInstalledPackage, Int) -> Void
     var restoreSystemAppDefault: (ADBTVInstalledPackage, Int) -> Void
     var cancelInstalledAppOperation: () -> Void
@@ -3926,6 +4011,8 @@ private struct DeviceDetailView: View {
             launch: launchInstalledApp,
             forceStop: forceStopInstalledApp,
             uninstall: uninstallInstalledApp,
+            openSettings: openInstalledAppSettings,
+            clearData: clearInstalledAppData,
             disableSystemApp: disableSystemApp,
             restoreSystemAppDefault: restoreSystemAppDefault,
             loadActiveSystemSnapshot: loadActiveSystemSnapshot,
@@ -4024,6 +4111,8 @@ private struct InstalledAppsPanel: View {
     var launch: (ADBTVInstalledPackage) -> Void
     var forceStop: (ADBTVInstalledPackage) -> Void
     var uninstall: (ADBTVInstalledPackage) -> Void
+    var openSettings: (ADBTVInstalledPackage) -> Void
+    var clearData: (ADBTVInstalledPackage) -> Void
     var disableSystemApp: (ADBTVInstalledPackage, Int) -> Void
     var restoreSystemAppDefault: (ADBTVInstalledPackage, Int) -> Void
     var loadActiveSystemSnapshot: (Int) -> Void
@@ -4034,6 +4123,7 @@ private struct InstalledAppsPanel: View {
     @State private var pendingUninstall: ADBTVInstalledPackage?
     @State private var selectedPackage: ADBTVInstalledPackage? =
         ProcessInfo.processInfo.arguments.contains("--ui-app-details")
+            || ProcessInfo.processInfo.arguments.contains("--ui-user-app-details")
             ? (try? ADBTVInstalledPackage(
                 packageName: ProcessInfo.processInfo.arguments.contains("--ui-active")
                     ? "com.google.android.youtube.tv"
@@ -4174,6 +4264,8 @@ private struct InstalledAppsPanel: View {
                 launch: launch,
                 forceStop: forceStop,
                 uninstall: uninstall,
+                openSettings: openSettings,
+                clearData: clearData,
                 disableSystemApp: disableSystemApp,
                 restoreSystemAppDefault: restoreSystemAppDefault
             )
@@ -4197,6 +4289,13 @@ private struct InstalledAppsPanel: View {
             progressLabel("Stopping \(appTitle(for: package))", cancel: cancel)
         case .uninstalling(let package):
             progressLabel("Uninstalling \(appTitle(for: package))", cancel: cancel)
+        case .openingSettings(let package):
+            progressLabel(
+                "Opening App Settings for \(appTitle(for: package))",
+                cancel: cancel
+            )
+        case .clearingData(let package):
+            progressLabel("Clearing data for \(appTitle(for: package))", cancel: cancel)
         case .disabling(let package):
             progressLabel("Disabling \(appTitle(for: package))", cancel: cancel)
         case .restoringDefault(let package):
@@ -4533,11 +4632,14 @@ private struct InstalledAppDetailsView: View {
     var launch: (ADBTVInstalledPackage) -> Void
     var forceStop: (ADBTVInstalledPackage) -> Void
     var uninstall: (ADBTVInstalledPackage) -> Void
+    var openSettings: (ADBTVInstalledPackage) -> Void
+    var clearData: (ADBTVInstalledPackage) -> Void
     var disableSystemApp: (ADBTVInstalledPackage, Int) -> Void
     var restoreSystemAppDefault: (ADBTVInstalledPackage, Int) -> Void
 
     @State private var confirmsForceStop = false
     @State private var confirmsUninstall = false
+    @State private var confirmsClearData = false
     @State private var confirmsDisable = false
     @State private var confirmsRestoreDefault = false
 
@@ -4637,6 +4739,26 @@ private struct InstalledAppDetailsView: View {
                     unavailableSystemControlSection
                 }
 
+                Section("App Maintenance") {
+                    Button {
+                        dismiss()
+                        openSettings(package)
+                    } label: {
+                        Label("Open App Settings on TV", systemImage: "gearshape")
+                    }
+                    .disabled(actionsDisabled)
+
+                    if appKind == .user {
+                        Button(role: .destructive) {
+                            confirmsClearData = true
+                        } label: {
+                            Label("Clear App Data", systemImage: "eraser")
+                                .foregroundStyle(.red)
+                        }
+                        .disabled(actionsDisabled)
+                    }
+                }
+
                 Section {
                     Button {
                         dismiss()
@@ -4688,6 +4810,21 @@ private struct InstalledAppDetailsView: View {
                         dismiss()
                     }
                 }
+            }
+            .confirmationDialog(
+                "Clear App Data?",
+                isPresented: $confirmsClearData
+            ) {
+                Button("Clear Data for \(appTitle)", role: .destructive) {
+                    dismiss()
+                    clearData(package)
+                }
+            } message: {
+                Text(
+                    "\(package.packageName)\n\nThis permanently removes accounts, "
+                        + "settings, downloads, and other data stored by this app. "
+                        + "The app remains installed."
+                )
             }
             .confirmationDialog(
                 "Disable System App?",
