@@ -1,4 +1,4 @@
-# ADB TV 0.11.0 App Store Inputs
+# ADB TV App Store Inputs
 
 This is a prioritized input list for a future App Store Submission Candidate.
 It does not change the `0.10.1` unsigned release.
