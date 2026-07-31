@@ -4123,6 +4123,7 @@ private struct InstalledAppsPanel: View {
     @State private var pendingUninstall: ADBTVInstalledPackage?
     @State private var selectedPackage: ADBTVInstalledPackage? =
         ProcessInfo.processInfo.arguments.contains("--ui-app-details")
+            || ProcessInfo.processInfo.arguments.contains("--ui-user-app-details")
             ? (try? ADBTVInstalledPackage(
                 packageName: ProcessInfo.processInfo.arguments.contains("--ui-active")
                     ? "com.google.android.youtube.tv"
