@@ -134,7 +134,7 @@ final class ADBTVRemoteControlTests: XCTestCase {
 
         XCTAssertEqual(
             invocation.shellCommand.rawValue,
-            "input keyevent 176; __adbtv_status=$?; "
+            "(\ninput keyevent 176\n); __adbtv_status=$?; "
                 + "printf '\\n__ADBTV_EXIT_STATUS__=%s\\n' \"$__adbtv_status\""
         )
         XCTAssertEqual(

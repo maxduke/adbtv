@@ -6,7 +6,7 @@ public struct ADBCheckedShellInvocation: Equatable, Sendable {
 
     public init(command: ADBShellCommand) throws {
         shellCommand = try ADBShellCommand(
-            "\(command.rawValue); "
+            "(\n\(command.rawValue)\n); "
                 + "__adbtv_status=$?; "
                 + "printf '\\n\(Self.exitStatusMarker)%s\\n' \"$__adbtv_status\""
         )

@@ -97,7 +97,7 @@ final class ADBTVDeviceToolsTests: XCTestCase {
         XCTAssertEqual(result.output.utf8String, "permission denied\n")
         XCTAssertEqual(result.exitCode, 1)
         XCTAssertEqual(tools.session.services.count, 1)
-        XCTAssertTrue(tools.session.services[0].hasPrefix("shell:cat /data/secret; "))
+        XCTAssertTrue(tools.session.services[0].hasPrefix("shell:(\ncat /data/secret\n); "))
     }
 
     func testRejectsWhitespaceOnlyShellCommand() async {
@@ -205,10 +205,11 @@ private struct FakeDeviceToolsSession: ADBDeviceToolsSession {
     }
 
     private func originalCommand(from checkedCommand: String) throws -> String {
-        guard let separator = checkedCommand.range(of: "; __adbtv_status=$?") else {
+        guard checkedCommand.hasPrefix("(\n"),
+              let separator = checkedCommand.range(of: "\n); __adbtv_status=$?", options: .backwards) else {
             throw TestError.invalidCheckedCommand
         }
-        return String(checkedCommand[..<separator.lowerBound])
+        return String(checkedCommand.dropFirst(2)[..<separator.lowerBound])
     }
 }
 

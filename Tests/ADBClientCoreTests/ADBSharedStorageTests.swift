@@ -79,7 +79,7 @@ final class ADBSharedStorageTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: localURL) }
         var manager = ADBSharedStorageManager(session: RecordingSharedStorageSession())
 
-        let destination = try await manager.upload(localURL, to: .root)
+        let destination = try await manager.upload(localURL, to: .root, replacingExisting: true)
 
         XCTAssertEqual(destination.rawValue, "/sdcard/\(localURL.lastPathComponent)")
         let temporaryPath = try XCTUnwrap(manager.session.pushPlans.first?.remotePath.rawValue)
@@ -112,6 +112,126 @@ final class ADBSharedStorageTests: XCTestCase {
         XCTAssertFalse(manager.session.shellCommands[0].contains("mv -f"))
     }
 
+    func testUploadCleanupFailurePreservesBothErrorsAndExactStagingPath() async throws {
+        let localURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBSharedStorageTests-\(UUID().uuidString).txt")
+        try Data([1]).write(to: localURL)
+        defer { try? FileManager.default.removeItem(at: localURL) }
+        var manager = ADBSharedStorageManager(session: RecordingSharedStorageSession(
+            pushError: .pushFailed,
+            shellError: .cleanupFailed
+        ))
+
+        do {
+            _ = try await manager.upload(localURL, to: .root)
+            XCTFail("Expected cleanup failure.")
+        } catch let error as ADBSharedStorageUploadCleanupError {
+            XCTAssertEqual(error.temporaryPath.remotePath, manager.session.pushPlans.first?.remotePath)
+            XCTAssertTrue(error.underlyingError.contains("pushFailed"))
+            XCTAssertTrue(error.cleanupError.contains("cleanupFailed"))
+        }
+    }
+
+    func testUploadUsesProvidedCleanupInsteadOfFailedSession() async throws {
+        let localURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBSharedStorageTests-\(UUID().uuidString).txt")
+        try Data([1]).write(to: localURL)
+        defer { try? FileManager.default.removeItem(at: localURL) }
+        let cleanup = SharedStorageCleanupObservation()
+        var manager = ADBSharedStorageManager(session: RecordingSharedStorageSession(
+            pushError: .pushFailed,
+            shellError: .cleanupFailed
+        ))
+
+        do {
+            _ = try await manager.upload(localURL, to: .root, cleanup: { path in
+                await cleanup.record(path)
+                return nil
+            })
+            XCTFail("Expected upload failure.")
+        } catch {
+            XCTAssertEqual(error as? TestSharedStorageError, .pushFailed)
+        }
+        let cleanedPath = await cleanup.path
+        XCTAssertEqual(cleanedPath?.remotePath, manager.session.pushPlans.first?.remotePath)
+        XCTAssertTrue(manager.session.shellCommands.isEmpty)
+    }
+
+#if os(macOS) || os(Linux)
+    func testUploadCommitRejectsFileCreatedAfterDirectorySnapshot() throws {
+        try withUploadFixture { source, target in
+            try Data("original".utf8).write(to: target)
+
+            XCTAssertNotEqual(try commit(source, to: target, replacing: false), 0)
+            XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "original")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        }
+    }
+
+    func testUploadCommitRejectsDirectoryEvenWhenReplacementWasConfirmed() throws {
+        try withUploadFixture { source, target in
+            try FileManager.default.createDirectory(at: target, withIntermediateDirectories: false)
+
+            XCTAssertNotEqual(try commit(source, to: target, replacing: true), 0)
+            XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: target.path), [])
+            XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        }
+    }
+
+    func testUploadCommitRejectsSymlinkWithoutChangingItsTarget() throws {
+        try withUploadFixture { source, target in
+            let original = target.deletingLastPathComponent().appendingPathComponent("original")
+            try Data("original".utf8).write(to: original)
+            try FileManager.default.createSymbolicLink(at: target, withDestinationURL: original)
+
+            XCTAssertNotEqual(try commit(source, to: target, replacing: true), 0)
+            XCTAssertEqual(try String(contentsOf: original, encoding: .utf8), "original")
+        }
+    }
+
+    func testUploadCommitCreatesNewFileAndAllowsConfirmedReplacement() throws {
+        for replacing in [false, true] {
+            try withUploadFixture { source, target in
+                if replacing { try Data("original".utf8).write(to: target) }
+
+                XCTAssertEqual(try commit(source, to: target, replacing: replacing), 0)
+                XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "uploaded")
+                XCTAssertFalse(FileManager.default.fileExists(atPath: source.path))
+            }
+        }
+    }
+
+    private func withUploadFixture(_ work: (URL, URL) throws -> Void) throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ADBSharedStorageTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent(".adbtv-upload-test")
+        let target = directory.appendingPathComponent("O'Reilly file.txt")
+        try Data("uploaded".utf8).write(to: source)
+        try work(source, target)
+    }
+
+    private func commit(_ source: URL, to target: URL, replacing: Bool) throws -> Int32 {
+        let command = ADBSharedStorageManager<RecordingSharedStorageSession>.uploadCommitCommand(
+            temporary: try ADBRemotePath(source.path),
+            destination: try ADBRemotePath(target.path),
+            replacingExisting: replacing
+        )
+        let invocation = try ADBCheckedShellInvocation(command: ADBShellCommand(command))
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", invocation.shellCommand.rawValue]
+        process.standardOutput = output
+        process.standardError = output
+        try process.run()
+        let bytes = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return Int32(try invocation.result(from: ADBShellOutput(bytes: Array(bytes))).exitCode)
+    }
+#endif
+
     private func sharedItem(name: String, kind: UInt32) throws -> ADBSharedStorageItem {
         ADBSharedStorageItem(
             path: try ADBSharedStoragePath.root.appendingPathComponent(name),
@@ -130,6 +250,7 @@ private struct RecordingSharedStorageSession: ADBSharedStorageSession {
     var shellCommands: [String] = []
     var pushPlans: [ADBSyncPushPlan] = []
     var pushError: TestSharedStorageError?
+    var shellError: TestSharedStorageError?
 
     mutating func listDirectory(_ path: ADBRemotePath) async throws -> [ADBSyncDirectoryEntry] {
         entries
@@ -158,10 +279,20 @@ private struct RecordingSharedStorageSession: ADBSharedStorageSession {
 
     mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput {
         shellCommands.append(command.rawValue)
+        if let shellError { throw shellError }
         return ADBShellOutput(bytes: Array("\n__ADBTV_EXIT_STATUS__=0\n".utf8))
     }
 }
 
 private enum TestSharedStorageError: Error, Equatable {
     case pushFailed
+    case cleanupFailed
+}
+
+private actor SharedStorageCleanupObservation {
+    private(set) var path: ADBSharedStoragePath?
+
+    func record(_ path: ADBSharedStoragePath) {
+        self.path = path
+    }
 }

@@ -112,6 +112,8 @@ public struct ADBSharedStorageManager<Session: ADBSharedStorageSession>: Sendabl
     public mutating func upload(
         _ localURL: URL,
         to directory: ADBSharedStoragePath,
+        replacingExisting: Bool = false,
+        cleanup: (@Sendable (ADBSharedStoragePath) async -> String?)? = nil,
         eventHandler: @escaping ADBSyncPushEventHandler = { _ in }
     ) async throws -> ADBSharedStoragePath {
         let destination = try directory.appendingPathComponent(localURL.lastPathComponent)
@@ -134,14 +136,59 @@ public struct ADBSharedStorageManager<Session: ADBSharedStorageSession>: Sendabl
                 plan: plan,
                 eventHandler: eventHandler
             )
-            try await runChecked(
-                "mv -f \(temporary.remotePath.shellEscaped) \(destination.remotePath.shellEscaped)"
-            )
+            try Task.checkCancellation()
+            try await runChecked(Self.uploadCommitCommand(
+                temporary: temporary.remotePath,
+                destination: destination.remotePath,
+                replacingExisting: replacingExisting
+            ))
             return destination
         } catch {
-            try? await runChecked("rm -f \(temporary.remotePath.shellEscaped)")
+            let cleanupError: String?
+            if let cleanup {
+                cleanupError = await cleanup(temporary)
+            } else {
+                do {
+                    try await cleanupUpload(at: temporary)
+                    cleanupError = nil
+                } catch {
+                    cleanupError = String(describing: error)
+                }
+            }
+            if let cleanupError {
+                throw ADBSharedStorageUploadCleanupError(
+                    temporaryPath: temporary,
+                    underlyingError: String(describing: error),
+                    cleanupError: cleanupError
+                )
+            }
             throw error
         }
+    }
+
+    public mutating func cleanupUpload(at path: ADBSharedStoragePath) async throws {
+        let value = path.remotePath.shellEscaped
+        try await runChecked("rm -f \(value) && test ! -e \(value) && test ! -L \(value)")
+    }
+
+    static func uploadCommitCommand(
+        temporary: ADBRemotePath,
+        destination: ADBRemotePath,
+        replacingExisting: Bool
+    ) -> String {
+        let source = temporary.shellEscaped
+        let target = destination.shellEscaped
+        let conflictCheck = replacingExisting
+            ? ""
+            : "elif [ -e \(target) ]; then printf 'Destination already exists\\n'; exit 1; "
+        // Android 8's mv has no -T. Check type before moving and require a
+        // regular file at the exact destination before reporting success.
+        return "if [ -L \(target) ] || { [ -e \(target) ] && [ ! -f \(target) ]; }; then "
+            + "printf 'Destination is not a regular file\\n'; exit 1; "
+            + conflictCheck
+            + "fi; mv \(replacingExisting ? "-f" : "-n") \(source) \(target) "
+            + "&& test ! -e \(source) && test ! -L \(source) "
+            + "&& test -f \(target) && test ! -L \(target)"
     }
 
     @discardableResult
@@ -221,6 +268,22 @@ public enum ADBSharedStorageError: Error, Equatable, Sendable {
     case cannotModifyRoot
     case destinationInsideSource
     case notARegularFile
+}
+
+public struct ADBSharedStorageUploadCleanupError: Error, Equatable, Sendable {
+    public let temporaryPath: ADBSharedStoragePath
+    public let underlyingError: String
+    public let cleanupError: String
+
+    public init(
+        temporaryPath: ADBSharedStoragePath,
+        underlyingError: String,
+        cleanupError: String
+    ) {
+        self.temporaryPath = temporaryPath
+        self.underlyingError = underlyingError
+        self.cleanupError = cleanupError
+    }
 }
 
 private extension Array where Element == ADBSharedStorageItem {
