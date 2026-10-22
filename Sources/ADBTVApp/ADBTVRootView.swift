@@ -33,6 +33,7 @@ public struct ADBTVRootView: View {
     @State private var remoteInputTask: Task<Void, Never>?
     @State private var installedAppsTask: Task<Void, Never>?
     @State private var installedAppsOperationID: UUID?
+    @State private var quickLaunchOperationID: UUID?
     @State private var installedAppDetailsTask: Task<Void, Never>?
     @State private var installedAppDetailsOperationID: UUID?
     @State private var installedAppsState = ADBTVInstalledAppsViewState()
@@ -284,6 +285,10 @@ public struct ADBTVRootView: View {
                         launchInstalledApp: { package in
                             runInstalledAppCommand(.launch(package), on: device)
                         },
+                        loadQuickLaunchUser: { try await Self.loadQuickLaunchUser(on: device) },
+                        launchQuickApp: { package, userID in
+                            try await launchQuickApp(package, userID: userID, on: device)
+                        },
                         forceStopInstalledApp: { package in
                             runInstalledAppCommand(.forceStop(package), on: device)
                         },
@@ -509,6 +514,7 @@ public struct ADBTVRootView: View {
             stopRemoteSession()
             installedAppsTask?.cancel()
             installedAppsOperationID = nil
+            quickLaunchOperationID = nil
             installedAppDetailsTask?.cancel()
             installedAppDetailsOperationID = nil
             deviceToolsTask?.cancel()
@@ -714,17 +720,24 @@ public struct ADBTVRootView: View {
             deviceConnectionState = .idle
         }
         model.removeDevices(ids: ids)
-        saveDevices()
+        if saveDevices() {
+            for id in ids where !model.devices.contains(where: { $0.id == id }) {
+                ADBTVQuickLaunchStore().removeDevice(id)
+            }
+        }
     }
 
-    private func saveDevices() {
+    @discardableResult
+    private func saveDevices() -> Bool {
         do {
             try deviceStore.saveDevices(model.devices)
+            return true
         } catch {
             devicePersistenceError = DiagnosticDetail(
                 summary: String(describing: error),
                 context: ["operation": "saveDevices"]
             )
+            return false
         }
     }
 
@@ -1601,9 +1614,12 @@ public struct ADBTVRootView: View {
     }
 
     private func stopRemoteSession() {
-        guard let session = remoteSession else {
-            return
-        }
+        guard let session = detachRemoteSession() else { return }
+        Task { await session.close() }
+    }
+
+    private func detachRemoteSession() -> ADBTVRemoteSession? {
+        guard let session = remoteSession else { return nil }
         remoteSession = nil
         remoteSessionDeviceID = nil
         remoteSessionToken = nil
@@ -1612,7 +1628,49 @@ public struct ADBTVRootView: View {
         if model.activeDeviceOperation == nil {
             model.remoteStatus = .idle
         }
-        Task { await session.close() }
+        return session
+    }
+
+    @MainActor
+    private func launchQuickApp(
+        _ package: ADBTVInstalledPackage, userID: Int, on device: ADBTVDeviceSummary
+    ) async throws {
+        try Task.checkCancellation()
+        guard model.startInstalledAppOperation(on: device.id) else {
+            throw ADBTVQuickLaunchError.deviceBusy
+        }
+        let token = UUID()
+        quickLaunchOperationID = token
+        defer {
+            if quickLaunchOperationID == token {
+                quickLaunchOperationID = nil
+                _ = model.finishInstalledAppOperation(on: device.id)
+                if model.selectedDeviceID == device.id, scenePhase == .active {
+                    startRemoteSession(for: device)
+                }
+            }
+        }
+        // Drop pending navigation before changing the TV's foreground app.
+        // An already-dispatched key remains uncertain and is never replayed.
+        let session = detachRemoteSession()
+        await session?.close()
+        try Task.checkCancellation()
+        _ = try await Self.performInstalledAppCommand(.launch(package), on: device, userID: userID)
+        if installedAppsState.deviceID == device.id, installedAppsState.mode == .active {
+            installedAppsState.status = .idle
+        }
+    }
+
+    private static func loadQuickLaunchUser(on device: ADBTVDeviceSummary) async throws -> Int {
+#if canImport(Network) && canImport(Security)
+        return try await ADBTVOperationTimeoutPolicy.installedApps.run(operation: .installedApps) {
+            var connection = try await connectedDevice(for: device)
+            defer { connection.cancel() }
+            return try await ADBTVInstalledAppManager().activeUserID(using: &connection)
+        }
+#else
+        throw ADBTVInstalledAppOperationError.unsupportedPlatform
+#endif
     }
 
     private func retryRemoteSession() {
@@ -3527,7 +3585,8 @@ private struct RenameDeviceView: View {
         NavigationStack {
             Form {
                 Section("Device Name") {
-                    TextField("Name", text: $displayName)
+                    TextField("Name", text: $displayName, axis: .vertical)
+                        .lineLimit(1...4)
                 }
 
                 if let saveError {
@@ -3903,6 +3962,8 @@ private struct DeviceDetailView: View {
     var retryInstalledAppDetails: () -> Void
     var loadActiveSystemSnapshot: (Int) -> Void
     var launchInstalledApp: (ADBTVInstalledPackage) -> Void
+    var loadQuickLaunchUser: () async throws -> Int
+    var launchQuickApp: (ADBTVInstalledPackage, Int) async throws -> Void
     var forceStopInstalledApp: (ADBTVInstalledPackage) -> Void
     var uninstallInstalledApp: (ADBTVInstalledPackage) -> Void
     var openInstalledAppSettings: (ADBTVInstalledPackage) -> Void
@@ -3998,7 +4059,17 @@ private struct DeviceDetailView: View {
             retrySession: retryRemoteSession,
             cancelRemoteOperation: cancelRemoteOperation,
             installUnicodeInputHelper: installUnicodeInputHelper
-        )
+        ) {
+            ADBTVQuickLaunchView(
+                deviceID: device.id,
+                deviceOperationInProgress: deviceOperationInProgress,
+                detailsUserID: installedAppsState.userID,
+                details: installedAppsState.displayedDetails,
+                loadUser: loadQuickLaunchUser,
+                launch: launchQuickApp,
+                chooseApps: { selectedTool = .apps }
+            )
+        }
     }
 
     private var appsPanel: some View {
@@ -4357,7 +4428,7 @@ private struct InstallStatusView: View {
     }
 }
 
-private struct RemoteActionsPanel: View {
+private struct RemoteActionsPanel<QuickLaunch: View>: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -4375,6 +4446,7 @@ private struct RemoteActionsPanel: View {
     var retrySession: () -> Void
     var cancelRemoteOperation: () -> Void
     var installUnicodeInputHelper: () -> Void
+    @ViewBuilder var quickLaunch: () -> QuickLaunch
 
     @State private var isMediaControlsExpanded = ProcessInfo.processInfo.arguments.contains(
         "--ui-media-expanded"
@@ -4397,6 +4469,8 @@ private struct RemoteActionsPanel: View {
                     cancel: cancelRemoteOperation
                 )
             }
+
+            quickLaunch()
 
             VStack(spacing: 16) {
                 HStack {

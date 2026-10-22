@@ -182,62 +182,99 @@ struct ADBTVFileBrowserView: View {
 
     @ViewBuilder
     private func itemRow(_ item: ADBSharedStorageItem) -> some View {
-        HStack(spacing: 10) {
-            if item.kind == .directory {
-                NavigationLink {
-                    ADBTVFileBrowserView(device: device, directory: item.path)
-                } label: {
-                    itemLabel(item)
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                itemLink(item)
+                HStack {
+                    Spacer()
+                    itemActions(item)
                 }
-                .disabled(isBusy)
-            } else {
-                itemLabel(item)
             }
-
-            Menu {
-                if item.kind == .file {
-                    Button { download(item) } label: {
-                        Label("Download and Share", systemImage: "arrow.down.doc")
-                    }
-                }
-                Button {
-                    renameName = item.name
-                    renameItem = item
-                } label: {
-                    Label("Rename", systemImage: "pencil")
-                }
-                Button { moveItem = item } label: {
-                    Label("Move", systemImage: "folder")
-                }
-                Button(role: .destructive) { deleteItem = item } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-            } label: {
-                Label("Actions for \(item.name)", systemImage: "ellipsis.circle")
-                    .labelStyle(.iconOnly)
+        } else {
+            HStack(spacing: 10) {
+                itemLink(item)
+                itemActions(item)
             }
-            .disabled(isBusy)
         }
     }
 
+    @ViewBuilder
+    private func itemLink(_ item: ADBSharedStorageItem) -> some View {
+        if item.kind == .directory {
+            NavigationLink {
+                ADBTVFileBrowserView(device: device, directory: item.path)
+            } label: {
+                itemLabel(item)
+            }
+            .disabled(isBusy)
+        } else {
+            itemLabel(item)
+        }
+    }
+
+    private func itemActions(_ item: ADBSharedStorageItem) -> some View {
+        Menu {
+            if item.kind == .file {
+                Button { download(item) } label: {
+                    Label("Download and Share", systemImage: "arrow.down.doc")
+                }
+            }
+            Button {
+                renameName = item.name
+                renameItem = item
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Button { moveItem = item } label: {
+                Label("Move", systemImage: "folder")
+            }
+            Button(role: .destructive) { deleteItem = item } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        } label: {
+            Label("Actions for \(item.name)", systemImage: "ellipsis.circle")
+                .labelStyle(.iconOnly)
+        }
+        .disabled(isBusy)
+    }
+
+    @ViewBuilder
     private func itemLabel(_ item: ADBSharedStorageItem) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: iconName(for: item))
-                .foregroundStyle(iconColor(for: item))
-                .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 24)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 3) {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(item.name)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                Text(itemMetadata(item))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: iconName(for: item))
+                        .font(.system(size: 24))
+                        .foregroundStyle(iconColor(for: item))
+                        .accessibilityHidden(true)
+                    Text(itemMetadata(item))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 12) {
+                Image(systemName: iconName(for: item))
+                    .foregroundStyle(iconColor(for: item))
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.name)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                    Text(itemMetadata(item))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .contentShape(Rectangle())
         }
-        .contentShape(Rectangle())
     }
 
     private func transferBar(_ transfer: ADBTVFileTransferState) -> some View {

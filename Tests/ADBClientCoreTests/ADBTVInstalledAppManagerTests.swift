@@ -2,6 +2,27 @@ import XCTest
 @testable import ADBClientCore
 
 final class ADBTVInstalledAppManagerTests: XCTestCase {
+    func testActiveUserLookupDoesNotLoadInstalledAppsOrRequireHelper() async throws {
+        var session = InstalledAppSession(outputs: [checkedOutput("10\n")])
+        let userID = try await ADBTVInstalledAppManager().activeUserID(using: &session)
+        XCTAssertEqual(userID, 10)
+        XCTAssertEqual(session.commands.count, 1)
+        XCTAssertTrue(session.commands[0].hasPrefix("(\nam get-current-user\n); "))
+    }
+
+    func testActiveUserLookupRejectsMalformedOrNegativeResponses() async {
+        for response in ["", "current", "0 10", "-1", "Error: permission denied"] {
+            var session = InstalledAppSession(outputs: [checkedOutput(response)])
+            do {
+                _ = try await ADBTVInstalledAppManager().activeUserID(using: &session)
+                XCTFail("Expected an invalid user to be rejected: \(response)")
+            } catch {
+                XCTAssertTrue(error is ADBTVInstalledAppError)
+            }
+            XCTAssertEqual(session.commands.count, 1)
+        }
+    }
+
     func testListParsesSortsAndDeduplicatesThirdPartyPackages() async throws {
         var session = InstalledAppSession(outputs: [
             checkedOutput("10\n"),

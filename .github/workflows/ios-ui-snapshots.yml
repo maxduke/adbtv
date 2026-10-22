@@ -9,6 +9,7 @@ on:
         options:
           - full
           - library
+          - quick-launch
         default: full
 
 concurrency:
@@ -67,6 +68,16 @@ jobs:
             xcrun simctl terminate "$udid" com.maxduke.adbtv
           }
 
+          capture_quick_launch() {
+            udid="$1"
+            prefix="$2"
+            capture "$udid" "$prefix-quick-launch" --ui-preview --ui-quick-launch
+            capture "$udid" "$prefix-quick-empty" --ui-preview
+            capture "$udid" "$prefix-quick-manage" --ui-preview --ui-quick-launch --ui-quick-manage
+            capture "$udid" "$prefix-quick-failed" --ui-preview --ui-quick-launch --ui-quick-failed
+            capture "$udid" "$prefix-quick-sent" --ui-preview --ui-quick-launch --ui-quick-sent
+          }
+
           capture_device() {
             udid="$1"
             device_name="$2"
@@ -82,6 +93,16 @@ jobs:
                 prefix="$device_name-$appearance"
                 if [ "$content_size" != large ]; then
                   prefix="$prefix-accessibility"
+                fi
+
+                if [ "$SNAPSHOT_SCOPE" = quick-launch ]; then
+                  capture_quick_launch "$udid" "$prefix"
+                  capture "$udid" "$prefix-device-rename" --ui-rename
+                  capture "$udid" "$prefix-app-details" --ui-apps --ui-active --ui-app-details
+                  capture "$udid" "$prefix-user-app-details" --ui-apps --ui-user-app-details
+                  capture "$udid" "$prefix-uninstall-confirm" --ui-apps --ui-user-app-details --ui-uninstall-confirm
+                  capture "$udid" "$prefix-files" --ui-files
+                  continue
                 fi
 
                 capture "$udid" "$prefix-library-self-signed" --ui-library
@@ -104,6 +125,8 @@ jobs:
                   --ui-apps --ui-user-app-details
                 capture "$udid" "$prefix-tools" --ui-tools
                 capture "$udid" "$prefix-files" --ui-files
+                capture_quick_launch "$udid" "$prefix"
+                capture "$udid" "$prefix-uninstall-confirm" --ui-apps --ui-user-app-details --ui-uninstall-confirm
 
                 if [ "$device_name" = iphone ]; then
                   capture "$udid" "$prefix-remote-failed" --ui-preview --ui-remote-failed
