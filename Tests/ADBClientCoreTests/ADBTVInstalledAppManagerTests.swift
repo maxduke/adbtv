@@ -10,7 +10,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         let packages = try await ADBTVInstalledAppManager().list(using: &session)
 
         XCTAssertEqual(packages.map(\.packageName), ["com.example.player", "com.netflix.ninja"])
-        XCTAssertTrue(session.commands[0].hasPrefix("pm list packages -3; "))
+        XCTAssertTrue(session.commands[0].hasPrefix("(\npm list packages -3\n); "))
     }
 
     func testListRejectsUnexpectedOutput() async {
@@ -37,7 +37,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         )
 
         XCTAssertEqual(packages.map(\.packageName), ["com.android.tv.settings"])
-        XCTAssertTrue(session.commands[0].hasPrefix("pm list packages -s; "))
+        XCTAssertTrue(session.commands[0].hasPrefix("(\npm list packages -s\n); "))
     }
 
     func testActivitySnapshotGroupsProcessesAndSortsForegroundAppsByMemory() async throws {
@@ -295,18 +295,18 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             snapshot.protectionReasons["com.example.keyboard"],
             .activeInputMethod
         )
-        XCTAssertTrue(session.commands[0].hasPrefix("am get-current-user; "))
+        XCTAssertTrue(session.commands[0].hasPrefix("(\nam get-current-user\n); "))
         XCTAssertTrue(
-            session.commands[1].hasPrefix("pm list packages -s --user 10; ")
+            session.commands[1].hasPrefix("(\npm list packages -s --user 10\n); ")
         )
         XCTAssertTrue(
-            session.commands[2].hasPrefix("pm list packages -s -d --user 10; ")
+            session.commands[2].hasPrefix("(\npm list packages -s -d --user 10\n); ")
         )
         XCTAssertTrue(session.commands[3].contains("android.intent.category.HOME"))
         XCTAssertTrue(session.commands[4].contains("android.settings.SETTINGS"))
         XCTAssertTrue(
             session.commands[5].hasPrefix(
-                "settings --user 10 get secure default_input_method; "
+                "(\nsettings --user 10 get secure default_input_method\n); "
             )
         )
     }
@@ -369,11 +369,11 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
 
         XCTAssertTrue(
             session.commands[4].hasPrefix(
-                "pm disable-user --user 10 'com.example.optional'; "
+                "(\npm disable-user --user 10 'com.example.optional'\n); "
             )
         )
         XCTAssertTrue(
-            session.commands[5].hasPrefix("pm list packages -s -d --user 10; ")
+            session.commands[5].hasPrefix("(\npm list packages -s -d --user 10\n); ")
         )
     }
 
@@ -471,7 +471,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertEqual(state, .disabled)
         XCTAssertTrue(
             session.commands[1].hasPrefix(
-                "pm default-state --user 0 'com.example.dormant'; "
+                "(\npm default-state --user 0 'com.example.dormant'\n); "
             )
         )
     }
@@ -522,7 +522,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
 
         XCTAssertTrue(
             session.commands[0].hasPrefix(
-                "am force-stop --user current 'com.example.player'; "
+                "(\nam force-stop --user current 'com.example.player'\n); "
             )
         )
     }
@@ -537,7 +537,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         } catch let error as ADBTVInstalledAppError {
             XCTAssertEqual(error, .unexpectedUninstallOutput("Failure [blocked]"))
         }
-        XCTAssertTrue(session.commands[0].hasPrefix("pm uninstall 'com.example.player'; "))
+        XCTAssertTrue(session.commands[0].hasPrefix("(\npm uninstall 'com.example.player'\n); "))
     }
 
     func testOpenAppSettingsVerifiesPackageAndActiveUser() async throws {
@@ -553,14 +553,14 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
 
         XCTAssertTrue(
             session.commands[1].hasPrefix(
-                "pm list packages --user 10 'com.example.player'; "
+                "(\npm list packages --user 10 'com.example.player'\n); "
             )
         )
         XCTAssertTrue(
             session.commands[3].hasPrefix(
-                "am start --user 10 -W "
+                "(\nam start --user 10 -W "
                     + "-a android.settings.APPLICATION_DETAILS_SETTINGS "
-                    + "-d 'package:com.example.player'; "
+                    + "-d 'package:com.example.player'\n); "
             )
         )
     }
@@ -598,12 +598,12 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
 
         XCTAssertTrue(
             session.commands[1].hasPrefix(
-                "pm list packages -3 --user 0 'com.example.player'; "
+                "(\npm list packages -3 --user 0 'com.example.player'\n); "
             )
         )
         XCTAssertTrue(
             session.commands[3].hasPrefix(
-                "pm clear --user 0 'com.example.player'; "
+                "(\npm clear --user 0 'com.example.player'\n); "
             )
         )
     }
@@ -728,6 +728,39 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertEqual(session.commands.count, 1)
     }
 
+    func testDetailsLoadPackagesBeyondTheFormer128PackageLimitInBoundedBatches() async throws {
+        let packages = try (0 ..< 145).map {
+            try ADBTVInstalledPackage(packageName: "com.example.app\($0)")
+        }
+        let outputs = stride(from: 0, to: packages.count, by: 16).map { start in
+            let records = packages[start ..< min(start + 16, packages.count)].map {
+                "{\"package\":\"\($0.packageName)\",\"label\":\"App \($0.packageName)\"}"
+            }
+            return checkedOutput("[" + records.joined(separator: ",") + "]")
+        }
+        var session = InstalledAppSession(outputs: outputs)
+
+        let details = await ADBTVInstalledAppManager().details(for: packages, using: &session)
+
+        XCTAssertEqual(details.count, 145)
+        XCTAssertNotNil(details["com.example.app144"])
+        XCTAssertEqual(session.commands.count, 10)
+        XCTAssertTrue(session.commands.last?.contains("com.example.app144") == true)
+    }
+
+    func testCancelledDetailsRequestDoesNotStartAnotherBatch() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        let result = await Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            var session = InstalledAppSession(outputs: [])
+            let details = await ADBTVInstalledAppManager().details(for: [package], using: &session)
+            return (details.count, session.commands.count)
+        }.value
+
+        XCTAssertEqual(result.0, 0)
+        XCTAssertEqual(result.1, 0)
+    }
+
     func testDetailsDiscardUnsafeOrInvalidOptionalMetadata() {
         let details = ADBTVInstalledAppDetails(
             displayName: "  Example TV  ",
@@ -815,11 +848,11 @@ private struct AppActivitySession: ADBDeviceToolsSession {
         _ service: String,
         maximumOutputByteCount: Int
     ) async throws -> ADBServiceOutput {
-        guard service.hasPrefix("shell:"),
-              let marker = service.range(of: "; __adbtv_status=$?") else {
+        guard service.hasPrefix("shell:(\n"),
+              let marker = service.range(of: "\n); __adbtv_status=$?", options: .backwards) else {
             throw AppActivitySessionError.invalidService(service)
         }
-        let start = service.index(service.startIndex, offsetBy: "shell:".count)
+        let start = service.index(service.startIndex, offsetBy: "shell:(\n".count)
         let command = String(service[start ..< marker.lowerBound])
         commands.append(command)
         maximumOutputByteCounts[command] = maximumOutputByteCount

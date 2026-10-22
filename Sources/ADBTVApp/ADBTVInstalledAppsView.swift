@@ -1,0 +1,982 @@
+import ADBClientCore
+import SwiftUI
+#if os(iOS)
+import UIKit
+#elseif os(macOS)
+import AppKit
+#endif
+
+private extension ADBTVAppsMode {
+    var emptyTitle: String {
+        switch self {
+        case .user:
+            return "No User Apps"
+        case .system:
+            return "No System Apps"
+        case .active:
+            return "No Active Apps"
+        }
+    }
+}
+
+struct InstalledAppsPanel: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var state: ADBTVInstalledAppsViewState
+    var deviceOperationInProgress: Bool
+    var showInstaller: () -> Void
+    var selectMode: (ADBTVAppsMode) -> Void
+    var installHelper: () -> Void
+    var launch: (ADBTVInstalledPackage) -> Void
+    var forceStop: (ADBTVInstalledPackage) -> Void
+    var uninstall: (ADBTVInstalledPackage) -> Void
+    var openSettings: (ADBTVInstalledPackage) -> Void
+    var clearData: (ADBTVInstalledPackage) -> Void
+    var disableSystemApp: (ADBTVInstalledPackage, Int) -> Void
+    var restoreSystemAppDefault: (ADBTVInstalledPackage, Int) -> Void
+    var loadActiveSystemSnapshot: (Int) -> Void
+    var cancel: () -> Void
+
+    @State private var searchText = ""
+    @State private var pendingForceStop: ADBTVInstalledPackage?
+    @State private var pendingUninstall: ADBTVInstalledPackage?
+    @State private var selectedPackage: ADBTVInstalledPackage? =
+        ProcessInfo.processInfo.arguments.contains("--ui-app-details")
+            || ProcessInfo.processInfo.arguments.contains("--ui-user-app-details")
+            ? (try? ADBTVInstalledPackage(
+                packageName: ProcessInfo.processInfo.arguments.contains("--ui-active")
+                    ? "com.google.android.youtube.tv"
+                    : "com.netflix.ninja"
+            ))
+            : nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("Apps")
+                    .font(.title2.bold())
+                Spacer()
+                Menu {
+                    Button(action: showInstaller) {
+                        Label("Install Package", systemImage: "square.and.arrow.down")
+                    }
+                    Button(action: installHelper) {
+                        Label("Install Android Helper", systemImage: "arrow.down.app")
+                    }
+                } label: {
+                    Label("Add App", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .disabled(deviceOperationInProgress || state.status.isBusy)
+                .help("Add App")
+                Button { selectMode(state.mode) } label: {
+                    Label("Refresh Apps", systemImage: "arrow.clockwise")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .disabled(deviceOperationInProgress || state.status.isBusy)
+                .help("Refresh Apps")
+            }
+
+            Picker("App View", selection: Binding(
+                get: { state.mode },
+                set: selectMode
+            )) {
+                ForEach(ADBTVAppsMode.allCases) { mode in
+                    Text(mode.title)
+                        .accessibilityLabel(mode.accessibilityTitle)
+                        .tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(
+                (deviceOperationInProgress || state.status.isBusy)
+                    && !state.status.isActivityRefresh
+            )
+
+            TextField("Search apps or packages", text: $searchText)
+                .autocorrectionDisabled()
+
+            statusContent
+            activitySnapshotStatus
+
+            if !filteredPackages.isEmpty {
+                LazyVStack(spacing: 0) {
+                    ForEach(filteredPackages) { package in
+                        installedAppRow(
+                            package,
+                            details: displayedDetails[package.packageName],
+                            activity: activeApp(for: package)
+                        )
+                        Divider()
+                    }
+                }
+            } else if !state.status.isBusy {
+                ContentUnavailableView(
+                    searchText.isEmpty ? state.mode.emptyTitle : "No Matching Apps",
+                    systemImage: searchText.isEmpty ? "square.grid.2x2" : "magnifyingglass"
+                )
+            }
+        }
+        .onAppear {
+            if state.status == .idle {
+                selectMode(state.mode)
+            }
+        }
+        .onChange(of: state.mode) { _, _ in
+            searchText = ""
+            pendingForceStop = nil
+            pendingUninstall = nil
+            selectedPackage = nil
+        }
+        .confirmationDialog(
+            "Force Stop App?",
+            isPresented: Binding(
+                get: { pendingForceStop != nil },
+                set: { if !$0 { pendingForceStop = nil } }
+            ),
+            presenting: pendingForceStop
+        ) { package in
+            Button("Force Stop \(appTitle(for: package))", role: .destructive) {
+                forceStop(package)
+                pendingForceStop = nil
+            }
+        } message: { package in
+            if appKind(for: package) == .system {
+                Text(
+                    "This is a system app. Stopping it may temporarily affect TV features, "
+                        + "and Android may restart it."
+                )
+            } else {
+                Text(
+                    "This stops the app, background activity, and playback without "
+                        + "removing its data."
+                )
+            }
+        }
+        .confirmationDialog(
+            "Uninstall app?",
+            isPresented: Binding(
+                get: { pendingUninstall != nil },
+                set: { if !$0 { pendingUninstall = nil } }
+            ),
+            presenting: pendingUninstall
+        ) { package in
+            Button("Uninstall \(package.packageName)", role: .destructive) {
+                uninstall(package)
+                pendingUninstall = nil
+            }
+        } message: { package in
+            Text("This removes \(package.packageName) and its app data from the TV.")
+        }
+        .sheet(item: $selectedPackage) { package in
+            InstalledAppDetailsView(
+                package: package,
+                details: displayedDetails[package.packageName],
+                activity: activeApp(for: package),
+                activityCapturedAt: state.activitySnapshot?.capturedAt,
+                systemSnapshot: systemSnapshot(for: package),
+                systemControlStatus: state.status,
+                actionsDisabled: deviceOperationInProgress || state.status.isBusy,
+                appKind: appKind(for: package),
+                launch: launch,
+                forceStop: forceStop,
+                uninstall: uninstall,
+                openSettings: openSettings,
+                clearData: clearData,
+                disableSystemApp: disableSystemApp,
+                restoreSystemAppDefault: restoreSystemAppDefault
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var statusContent: some View {
+        switch state.status {
+        case .idle:
+            EmptyView()
+        case .loading:
+            progressLabel("Loading installed apps", cancel: cancel)
+        case .loadingActivity:
+            progressLabel("Refreshing active apps", cancel: cancel)
+        case .loadingSystemControl:
+            progressLabel("Loading system controls", cancel: cancel)
+        case .launching(let package):
+            progressLabel("Launching \(appTitle(for: package))", cancel: cancel)
+        case .stopping(let package):
+            progressLabel("Stopping \(appTitle(for: package))", cancel: cancel)
+        case .uninstalling(let package):
+            progressLabel("Uninstalling \(appTitle(for: package))", cancel: cancel)
+        case .openingSettings(let package):
+            progressLabel(
+                "Opening App Settings for \(appTitle(for: package))",
+                cancel: cancel
+            )
+        case .clearingData(let package):
+            progressLabel("Clearing data for \(appTitle(for: package))", cancel: cancel)
+        case .disabling(let package):
+            progressLabel("Disabling \(appTitle(for: package))", cancel: cancel)
+        case .restoringDefault(let package):
+            progressLabel(
+                "Restoring \(appTitle(for: package)) to Android default",
+                cancel: cancel
+            )
+        case .ready(let message):
+            if let message {
+                Label(message, systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+            }
+        case .failed(let userMessage, let diagnosticDetail):
+            VStack(alignment: .leading, spacing: 8) {
+                Label(userMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var activitySnapshotStatus: some View {
+        if state.mode == .active, let snapshot = state.activitySnapshot {
+            HStack(spacing: 6) {
+                Image(systemName: "clock")
+                    .foregroundStyle(.secondary)
+                Text("Updated")
+                    .foregroundStyle(.secondary)
+                Text(snapshot.capturedAt, style: .relative)
+                    .foregroundStyle(.secondary)
+            }
+            .font(.caption)
+            .accessibilityElement(children: .combine)
+
+            if snapshot.diagnostics.isPartial {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(
+                        "Some activity details are unavailable.",
+                        systemImage: "exclamationmark.triangle.fill"
+                    )
+                    .foregroundStyle(.orange)
+                    DiagnosticDisclosure(
+                        diagnosticDetail: DiagnosticDetail(
+                            summary: "The app activity snapshot contains partial data.",
+                            context: [
+                                "invalidMemoryRows": String(
+                                    snapshot.diagnostics.invalidMemoryRowCount
+                                ),
+                                "missingMemoryProcesses": String(
+                                    snapshot.diagnostics.missingMemoryProcessCount
+                                ),
+                                "omittedProcesses": String(
+                                    snapshot.diagnostics.omittedProcessCount
+                                ),
+                                "operation": "loadAppActivity",
+                                "unresolvedForegroundApps": String(
+                                    snapshot.diagnostics.unresolvedForegroundCount
+                                )
+                            ]
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    private func progressLabel(_ title: String, cancel: @escaping () -> Void) -> some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text(title)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            Button(action: cancel) {
+                Label("Cancel", systemImage: "xmark")
+            }
+            .buttonStyle(.bordered)
+        }
+    }
+
+    private func installedAppRow(
+        _ package: ADBTVInstalledPackage,
+        details: ADBTVInstalledAppDetails?,
+        activity: ADBTVActiveApp?
+    ) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                selectPackage(package)
+            } label: {
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize, let activity {
+                        VStack(alignment: .leading, spacing: 8) {
+                            installedAppIdentity(
+                                package,
+                                details: details,
+                                activity: activity
+                            )
+                            activityMemory(activity)
+                        }
+                    } else {
+                        HStack(spacing: 12) {
+                            installedAppIdentity(
+                                package,
+                                details: details,
+                                activity: activity
+                            )
+                            if let activity {
+                                activityMemory(activity)
+                            }
+                        }
+                    }
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(rowAccessibilityLabel(
+                package,
+                details: details,
+                activity: activity
+            ))
+
+            Menu {
+                Button {
+                    selectPackage(package)
+                } label: {
+                    Label("Details", systemImage: "info.circle")
+                }
+
+                Button {
+                    launch(package)
+                } label: {
+                    Label("Launch", systemImage: "play.fill")
+                }
+                .disabled(
+                    deviceOperationInProgress
+                        || state.status.isBusy
+                        || (state.mode == .system && state.systemSnapshot == nil)
+                        || systemState(for: package) == .disabled
+                )
+
+                if appKind(for: package) == .user || state.mode == .active {
+                    Button(role: .destructive) {
+                        pendingForceStop = package
+                    } label: {
+                        Label(
+                            activity == nil && details?.isStopped == true
+                                ? "Stopped" : "Force Stop",
+                            systemImage: activity == nil && details?.isStopped == true
+                                ? "stop.circle.fill" : "stop.circle"
+                        )
+                    }
+                    .disabled(
+                        deviceOperationInProgress
+                            || state.status.isBusy
+                            || (activity == nil && details?.isStopped == true)
+                            || systemState(for: package) == .disabled
+                    )
+                }
+
+                if appKind(for: package) == .user {
+                    Divider()
+
+                    Button(role: .destructive) {
+                        pendingUninstall = package
+                    } label: {
+                        Label("Uninstall", systemImage: "trash")
+                    }
+                    .disabled(deviceOperationInProgress || state.status.isBusy)
+                }
+            } label: {
+                Label("Actions for \(package.packageName)", systemImage: "ellipsis")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .help("App Actions")
+        }
+        .padding(.vertical, 8)
+    }
+
+    private func installedAppIdentity(
+        _ package: ADBTVInstalledPackage,
+        details: ADBTVInstalledAppDetails?,
+        activity: ADBTVActiveApp?
+    ) -> some View {
+        HStack(spacing: 12) {
+            InstalledAppIconView(icon: details?.icon)
+
+            VStack(alignment: .leading, spacing: 2) {
+                if let displayName = details?.displayName {
+                    Text(displayName)
+                        .font(.headline)
+                        .lineLimit(2)
+                    Text(package.packageName)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(package.packageName)
+                        .font(.subheadline.monospaced())
+                }
+                if let activity {
+                    Text(activityStatus(activity))
+                        .font(.caption)
+                        .foregroundStyle(activity.isForeground ? .primary : .secondary)
+                        .lineLimit(2)
+                } else if systemState(for: package) == .disabled {
+                    Label("Disabled", systemImage: "pause.circle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func activityMemory(_ activity: ADBTVActiveApp) -> some View {
+        Text(activity.memoryByteCount.map(Self.formattedBytes) ?? "Unavailable")
+            .font(.subheadline.monospacedDigit())
+            .foregroundStyle(activity.memoryByteCount == nil ? .secondary : .primary)
+            .frame(
+                maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil,
+                alignment: .leading
+            )
+            .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
+    }
+
+    private var displayedPackages: [ADBTVInstalledPackage] {
+        state.mode == .active
+            ? state.activitySnapshot?.apps.map(\.package) ?? []
+            : state.packages
+    }
+
+    private var displayedDetails: [String: ADBTVInstalledAppDetails] {
+        state.mode == .active ? state.activityDetails : state.details
+    }
+
+    private func activeApp(for package: ADBTVInstalledPackage) -> ADBTVActiveApp? {
+        guard state.mode == .active else {
+            return nil
+        }
+        return state.activitySnapshot?.apps.first { $0.package == package }
+    }
+
+    private func appKind(for package: ADBTVInstalledPackage) -> ADBTVInstalledAppKind {
+        if let activity = activeApp(for: package) {
+            return activity.kind
+        }
+        return state.mode == .system ? .system : .user
+    }
+
+    private func systemSnapshot(
+        for package: ADBTVInstalledPackage
+    ) -> ADBTVSystemAppSnapshot? {
+        appKind(for: package) == .system
+            ? (state.mode == .active ? state.activeSystemSnapshot : state.systemSnapshot)
+            : nil
+    }
+
+    private func systemState(
+        for package: ADBTVInstalledPackage
+    ) -> ADBTVInstalledAppState {
+        systemSnapshot(for: package)?.state(for: package) ?? .enabled
+    }
+
+    private func selectPackage(_ package: ADBTVInstalledPackage) {
+        selectedPackage = package
+        guard state.mode == .active,
+              appKind(for: package) == .system,
+              state.activeSystemSnapshot == nil,
+              let userID = state.activitySnapshot?.userID,
+              !state.status.isBusy else {
+            return
+        }
+        loadActiveSystemSnapshot(userID)
+    }
+
+    private func activityStatus(_ activity: ADBTVActiveApp) -> String {
+        let state = activity.isForeground ? "Foreground" : "Background"
+        let kind = activity.kind == .user ? "User" : "System"
+        let processes = activity.processCount == 1
+            ? "1 process" : "\(activity.processCount) processes"
+        return "\(state) | \(kind) | \(processes)"
+    }
+
+    private func rowAccessibilityLabel(
+        _ package: ADBTVInstalledPackage,
+        details: ADBTVInstalledAppDetails?,
+        activity: ADBTVActiveApp?
+    ) -> String {
+        var values = ["Show details for \(details?.displayName ?? package.packageName)"]
+        if let activity {
+            values.append(activityStatus(activity))
+            values.append(
+                activity.memoryByteCount.map(Self.formattedBytes) ?? "Memory unavailable"
+            )
+        } else if systemState(for: package) == .disabled {
+            values.append("Disabled")
+        }
+        return values.joined(separator: ", ")
+    }
+
+    private static func formattedBytes(_ byteCount: Int64) -> String {
+        ByteCountFormatter.string(fromByteCount: byteCount, countStyle: .memory)
+    }
+
+    private var filteredPackages: [ADBTVInstalledPackage] {
+        guard !searchText.isEmpty else {
+            return displayedPackages
+        }
+        return displayedPackages.filter {
+            $0.packageName.localizedCaseInsensitiveContains(searchText)
+                || displayedDetails[$0.packageName]?.displayName?
+                    .localizedCaseInsensitiveContains(searchText) == true
+        }
+    }
+
+    private func appTitle(for package: ADBTVInstalledPackage) -> String {
+        displayedDetails[package.packageName]?.displayName ?? package.packageName
+    }
+}
+
+private struct InstalledAppDetailsView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var package: ADBTVInstalledPackage
+    var details: ADBTVInstalledAppDetails?
+    var activity: ADBTVActiveApp?
+    var activityCapturedAt: Date?
+    var systemSnapshot: ADBTVSystemAppSnapshot?
+    var systemControlStatus: ADBTVInstalledAppsStatus
+    var actionsDisabled: Bool
+    var appKind: ADBTVInstalledAppKind
+    var launch: (ADBTVInstalledPackage) -> Void
+    var forceStop: (ADBTVInstalledPackage) -> Void
+    var uninstall: (ADBTVInstalledPackage) -> Void
+    var openSettings: (ADBTVInstalledPackage) -> Void
+    var clearData: (ADBTVInstalledPackage) -> Void
+    var disableSystemApp: (ADBTVInstalledPackage, Int) -> Void
+    var restoreSystemAppDefault: (ADBTVInstalledPackage, Int) -> Void
+
+    @State private var confirmsForceStop = false
+    @State private var confirmsUninstall = false
+    @State private var confirmsClearData = false
+    @State private var confirmsDisable = false
+    @State private var confirmsRestoreDefault = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Package Identifier") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack(alignment: .center, spacing: 12) {
+                            InstalledAppIconView(icon: details?.icon)
+                            if let displayName = details?.displayName {
+                                Text(displayName)
+                                    .font(.headline)
+                                    .lineLimit(3)
+                            }
+
+                            Spacer(minLength: 0)
+
+                            Button(action: copyPackageName) {
+                                Label(
+                                    "Copy Package Identifier",
+                                    systemImage: "doc.on.doc"
+                                )
+                                .labelStyle(.iconOnly)
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Copy Package Identifier")
+                        }
+
+                        Text(package.packageName)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+
+                if let activity {
+                    Section("Activity") {
+                        LabeledContent(
+                            "Status",
+                            value: activity.isForeground ? "Foreground" : "Background"
+                        )
+                        LabeledContent(
+                            "Memory",
+                            value: activity.memoryByteCount.map {
+                                ByteCountFormatter.string(
+                                    fromByteCount: $0,
+                                    countStyle: .memory
+                                )
+                            } ?? "Unavailable"
+                        )
+                        LabeledContent(
+                            "Processes",
+                            value: String(activity.processCount)
+                        )
+                        if let activityCapturedAt {
+                            LabeledContent("Updated") {
+                                Text(activityCapturedAt, style: .relative)
+                            }
+                        }
+                    }
+                }
+
+                if hasMetadata {
+                    Section("Information") {
+                        if let versionName = details?.versionName {
+                            LabeledContent("Version", value: versionName)
+                        }
+                        if let versionCode = details?.versionCode {
+                            LabeledContent("Version Code", value: String(versionCode))
+                        }
+                        if let apkByteCount = details?.apkByteCount {
+                            LabeledContent(
+                                "APK Size",
+                                value: ByteCountFormatter.string(
+                                    fromByteCount: apkByteCount,
+                                    countStyle: .file
+                                )
+                            )
+                        }
+                        if let firstInstallDate = details?.firstInstallDate {
+                            LabeledContent("Installed") {
+                                Text(firstInstallDate, style: .date)
+                            }
+                        }
+                        if let lastUpdateDate = details?.lastUpdateDate {
+                            LabeledContent("Updated") {
+                                Text(lastUpdateDate, style: .date)
+                            }
+                        }
+                    }
+                }
+
+                if appKind == .system, systemSnapshot != nil {
+                    systemControlSection
+                } else if appKind == .system {
+                    unavailableSystemControlSection
+                }
+
+                Section("App Maintenance") {
+                    Button {
+                        dismiss()
+                        openSettings(package)
+                    } label: {
+                        Label("Open App Settings on TV", systemImage: "gearshape")
+                    }
+                    .disabled(actionsDisabled)
+
+                    if appKind == .user {
+                        Button(role: .destructive) {
+                            confirmsClearData = true
+                        } label: {
+                            Label("Clear App Data", systemImage: "eraser")
+                                .foregroundStyle(.red)
+                        }
+                        .disabled(actionsDisabled)
+                    }
+                }
+
+                Section {
+                    Button {
+                        dismiss()
+                        launch(package)
+                    } label: {
+                        Label("Launch App", systemImage: "play.fill")
+                    }
+                    .disabled(
+                        actionsDisabled
+                            || (activity == nil && appKind == .system && systemSnapshot == nil)
+                            || systemState == .disabled
+                    )
+
+                    Button(role: .destructive) {
+                        confirmsForceStop = true
+                    } label: {
+                        Label(
+                            isStopped ? "Stopped" : "Force Stop",
+                            systemImage: isStopped
+                                ? "stop.circle.fill" : "stop.circle"
+                        )
+                            .foregroundStyle(.red)
+                    }
+                    .disabled(
+                        actionsDisabled
+                            || (activity == nil && appKind == .system && systemSnapshot == nil)
+                            || isStopped
+                            || systemState == .disabled
+                    )
+
+                    if appKind == .user {
+                        Button(role: .destructive) {
+                            confirmsUninstall = true
+                        } label: {
+                            Label("Uninstall App", systemImage: "trash")
+                                .foregroundStyle(.red)
+                        }
+                        .disabled(actionsDisabled)
+                    }
+                }
+            }
+            .navigationTitle(details?.displayName ?? "App Details")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+            .confirmationDialog(
+                "Clear App Data?",
+                isPresented: $confirmsClearData
+            ) {
+                Button("Clear Data for \(appTitle)", role: .destructive) {
+                    dismiss()
+                    clearData(package)
+                }
+            } message: {
+                Text(
+                    "\(package.packageName)\n\nThis permanently removes accounts, "
+                        + "settings, downloads, and other data stored by this app. "
+                        + "The app remains installed."
+                )
+            }
+            .confirmationDialog(
+                "Disable System App?",
+                isPresented: $confirmsDisable
+            ) {
+                Button("Disable \(appTitle)", role: .destructive) {
+                    guard let userID = systemSnapshot?.userID else {
+                        return
+                    }
+                    dismiss()
+                    disableSystemApp(package, userID)
+                }
+            } message: {
+                Text(
+                    "\(package.packageName)\n\nTV features or other apps may stop working. "
+                        + "The app and its data will remain installed."
+                )
+            }
+            .confirmationDialog(
+                "Restore Android Default?",
+                isPresented: $confirmsRestoreDefault
+            ) {
+                Button("Restore Android Default") {
+                    guard let userID = systemSnapshot?.userID else {
+                        return
+                    }
+                    dismiss()
+                    restoreSystemAppDefault(package, userID)
+                }
+            } message: {
+                Text(
+                    "This removes the per-user override for \(package.packageName). "
+                        + "Android may enable an app disabled by the manufacturer or another tool."
+                )
+            }
+            .confirmationDialog(
+                "Force Stop App?",
+                isPresented: $confirmsForceStop
+            ) {
+                Button("Force Stop", role: .destructive) {
+                    dismiss()
+                    forceStop(package)
+                }
+            } message: {
+                if appKind == .user {
+                    Text("This stops the app, background activity, and playback without removing its data.")
+                } else {
+                    Text("This is a system app. Stopping it may temporarily affect TV features, and Android may restart it.")
+                }
+            }
+            .confirmationDialog(
+                "Uninstall app?",
+                isPresented: $confirmsUninstall
+            ) {
+                Button("Uninstall \(package.packageName)", role: .destructive) {
+                    dismiss()
+                    uninstall(package)
+                }
+            } message: {
+                Text("This removes \(package.packageName) and its app data from the TV.")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var unavailableSystemControlSection: some View {
+        Section("System Control") {
+            switch systemControlStatus {
+            case .loadingSystemControl:
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Loading system controls")
+                        .foregroundStyle(.secondary)
+                }
+            case .failed(let userMessage, let diagnosticDetail):
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(userMessage, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
+                }
+            default:
+                Label(
+                    "System controls are unavailable for this snapshot.",
+                    systemImage: "shield.slash"
+                )
+                .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var systemControlSection: some View {
+        Section("System Control") {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(
+                    systemState == .disabled ? "Disabled" : "Enabled",
+                    systemImage: systemState == .disabled
+                        ? "pause.circle.fill" : "checkmark.circle.fill"
+                )
+                .foregroundStyle(systemState == .disabled ? Color.orange : Color.green)
+
+                if systemState == .disabled {
+                    Text("Restore Android's package default without removing app data.")
+                        .foregroundStyle(.secondary)
+                    Button {
+                        confirmsRestoreDefault = true
+                    } label: {
+                        Label(
+                            "Restore Android Default",
+                            systemImage: "arrow.uturn.backward.circle"
+                        )
+                    }
+                    .disabled(actionsDisabled)
+                } else if let protectionReason {
+                    Label(protectionReason.explanation, systemImage: "lock.shield.fill")
+                        .foregroundStyle(.secondary)
+                } else if let failure = systemSnapshot?.safetyCheckFailureDescription {
+                    Label(
+                        "Disable is unavailable because safety checks failed.",
+                        systemImage: "shield.slash"
+                    )
+                        .foregroundStyle(.orange)
+                    DiagnosticDisclosure(
+                        diagnosticDetail: DiagnosticDetail(
+                            summary: failure,
+                            context: ["operation": "loadSystemAppProtection"]
+                        )
+                    )
+                } else {
+                    Button(role: .destructive) {
+                        confirmsDisable = true
+                    } label: {
+                        Label("Disable System App", systemImage: "pause.circle")
+                            .foregroundStyle(.red)
+                    }
+                    .disabled(actionsDisabled)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var systemState: ADBTVInstalledAppState {
+        systemSnapshot?.state(for: package) ?? .enabled
+    }
+
+    private var isStopped: Bool {
+        activity == nil && details?.isStopped == true
+    }
+
+    private var protectionReason: ADBTVInstalledAppProtectionReason? {
+        systemSnapshot?.protectionReason(for: package)
+    }
+
+    private var appTitle: String {
+        details?.displayName ?? package.packageName
+    }
+
+    private var hasMetadata: Bool {
+        details?.versionName != nil
+            || details?.versionCode != nil
+            || details?.apkByteCount != nil
+            || details?.firstInstallDate != nil
+            || details?.lastUpdateDate != nil
+    }
+
+    private func copyPackageName() {
+#if os(iOS)
+        UIPasteboard.general.string = package.packageName
+#elseif os(macOS)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(package.packageName, forType: .string)
+#endif
+    }
+}
+
+private extension ADBTVInstalledAppProtectionReason {
+    var explanation: String {
+        switch self {
+        case .androidCore:
+            return "Protected because Android requires this package."
+        case .ecosystemInfrastructure:
+            return "Protected because core Google services require this package."
+        case .activeLauncher:
+            return "Protected because this is the active TV launcher."
+        case .settings:
+            return "Protected because this provides Android Settings."
+        case .activeInputMethod:
+            return "Protected because this is the active input method."
+        }
+    }
+}
+
+private struct InstalledAppIconView: View {
+    var icon: ADBTVInstalledAppIcon?
+
+    @ViewBuilder
+    var body: some View {
+#if os(iOS)
+        if let icon, let image = UIImage(data: icon.pngData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
+        } else {
+            placeholder
+        }
+#elseif os(macOS)
+        if let icon, let image = NSImage(data: icon.pngData) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 44, height: 44)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .accessibilityHidden(true)
+        } else {
+            placeholder
+        }
+#else
+        placeholder
+#endif
+    }
+
+    private var placeholder: some View {
+        Image(systemName: "app.fill")
+            .resizable()
+            .scaledToFit()
+            .padding(10)
+            .frame(width: 44, height: 44)
+            .foregroundStyle(.secondary)
+            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
+            .accessibilityHidden(true)
+    }
+}
