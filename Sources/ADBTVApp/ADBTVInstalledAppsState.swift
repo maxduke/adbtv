@@ -44,6 +44,7 @@ enum ADBTVAppsMode: String, CaseIterable, Identifiable {
 
 struct ADBTVInstalledAppsViewState: Equatable {
     var deviceID: ADBTVDeviceSummary.ID?
+    var userID: Int?
     var mode: ADBTVAppsMode
     var packages: [ADBTVInstalledPackage]
     var details: [String: ADBTVInstalledAppDetails]
@@ -54,9 +55,12 @@ struct ADBTVInstalledAppsViewState: Equatable {
     var pendingForceStopPackage: ADBTVInstalledPackage?
     var pendingClearDataPackage: ADBTVInstalledPackage?
     var status: ADBTVInstalledAppsStatus
+    var detailsStatus = ADBTVInstalledAppDetailsStatus.idle
+    var pendingDetailsPackages: [ADBTVInstalledPackage] = []
 
     init(
         deviceID: ADBTVDeviceSummary.ID? = nil,
+        userID: Int? = nil,
         mode: ADBTVAppsMode = .user,
         packages: [ADBTVInstalledPackage] = [],
         details: [String: ADBTVInstalledAppDetails] = [:],
@@ -69,6 +73,7 @@ struct ADBTVInstalledAppsViewState: Equatable {
         status: ADBTVInstalledAppsStatus = .idle
     ) {
         self.deviceID = deviceID
+        self.userID = userID
         self.mode = mode
         self.packages = packages
         self.details = details
@@ -83,6 +88,49 @@ struct ADBTVInstalledAppsViewState: Equatable {
 
     func forDevice(_ deviceID: ADBTVDeviceSummary.ID) -> Self {
         self.deviceID == deviceID ? self : Self(deviceID: deviceID)
+    }
+
+    mutating func prepareActivityRefresh() {
+        mode = .active
+        // The previous Active snapshot stays visible during refresh/cancel.
+        // Its rows must retain their own user even when entered from User Apps.
+        userID = activitySnapshot?.userID
+        pendingDetailsPackages = []
+        detailsStatus = .idle
+    }
+
+    mutating func recordDetailsPage(
+        _ details: [String: ADBTVInstalledAppDetails],
+        packages: [ADBTVInstalledPackage],
+        forActivity: Bool
+    ) {
+        let currentPackages = Set(
+            forActivity
+                ? activitySnapshot?.apps.map(\.package.packageName) ?? []
+                : self.packages.map(\.packageName)
+        )
+        let filtered = details.filter { currentPackages.contains($0.key) }
+        if forActivity {
+            activityDetails.merge(filtered) { _, latest in latest }
+        } else {
+            self.details.merge(filtered) { _, latest in latest }
+        }
+        let completed = Set(packages)
+        pendingDetailsPackages.removeAll { completed.contains($0) }
+    }
+
+    mutating func finishDetailsLoad(_ result: ADBTVInstalledAppDetailsLoadResult) {
+        switch result {
+        case .complete:
+            pendingDetailsPackages = []
+            detailsStatus = .ready
+        case .helperUnavailable:
+            pendingDetailsPackages = []
+            detailsStatus = .helperUnavailable
+        case .partial(let packages, let failure):
+            pendingDetailsPackages = packages
+            detailsStatus = .failed(failure)
+        }
     }
 
     mutating func setSystemState(
@@ -185,6 +233,7 @@ struct ADBTVInstalledAppsViewState: Equatable {
         ]
         return Self(
             deviceID: deviceID,
+            userID: 0,
             mode: showsActivity ? .active : showsSystemControl ? .system : .user,
             packages: packages,
             details: details,
@@ -206,6 +255,14 @@ struct ADBTVInstalledAppsViewState: Equatable {
             status: .ready(message: nil)
         )
     }
+}
+
+enum ADBTVInstalledAppDetailsStatus: Equatable {
+    case idle
+    case loading
+    case ready
+    case helperUnavailable
+    case failed(String)
 }
 
 enum ADBTVInstalledAppsStatus: Equatable {

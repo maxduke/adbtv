@@ -118,6 +118,26 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Installed Apps
 
+- [ ] On a TV with two Android users, install the same disposable app for both;
+  load Apps as the secondary user and confirm User, System, Active, names,
+  icons, and App Settings refer to that user. Confirm uninstall removes only
+  that user's installation and data.
+- [ ] Load each Apps mode, switch the active Android user on the TV, then try
+  Launch, Force Stop, Uninstall, App Settings, Clear App Data, and system
+  controls. Confirm the stale action is rejected and refreshing loads the new
+  user's apps. Repeat a user switch during list and metadata loading.
+- [ ] Enter Active from another Apps mode and cancel its refresh; confirm any
+  retained Active rows still belong to their original user and cannot act on
+  a different user's apps.
+- [ ] On Android 8/10, launch a Leanback app and a phone-style app. Confirm
+  launcher fallback works, and a blocked or missing activity is reported as a
+  failure even when Android exits zero.
+- [ ] Interrupt one metadata page in a large app library. Confirm completed
+  pages remain visible, later pages continue, and Retry App Details fills in
+  failed packages. Cancel or change devices during retry and confirm late
+  results do not replace the current list.
+- [ ] Remove the helper for the active Android user; confirm the optional-helper
+  message appears and the app does not repeatedly query every metadata page.
 - [ ] Open **Apps** and confirm user-installed package identifiers load in sorted order without system packages.
 - [ ] Switch to **System Apps**, confirm system package identifiers replace the user list, and switch back without stale rows or metadata.
 - [ ] On Android 8.0 and Android 10.0 without the helper, open **Active**, confirm only Installed Apps with live processes appear, and verify User/System classification.

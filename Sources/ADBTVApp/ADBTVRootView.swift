@@ -264,6 +264,13 @@ public struct ADBTVRootView: View {
                         selectAppsMode: { mode in
                             selectInstalledAppsMode(mode, on: device)
                         },
+                        retryInstalledAppDetails: {
+                            startInstalledAppDetailsLoad(
+                                installedAppsState.pendingDetailsPackages,
+                                on: device,
+                                forActivity: installedAppsState.mode == .active
+                            )
+                        },
                         loadActiveSystemSnapshot: { expectedUserID in
                             runInstalledAppCommand(
                                 .activeSystemSnapshot(expectedUserID: expectedUserID),
@@ -1314,7 +1321,9 @@ public struct ADBTVRootView: View {
             let package = try ADBTVInstalledPackage(
                 packageName: ADBTVUnicodeInputHelper.packageName
             )
-            try await ADBTVInstalledAppManager().uninstall(package, using: &connection)
+            let manager = ADBTVInstalledAppManager()
+            let snapshot = try await manager.list(using: &connection)
+            try await manager.uninstall(package, userID: snapshot.userID, using: &connection)
         }
 #else
         throw ADBTVInstallOperationError.unsupportedPlatform
@@ -1664,19 +1673,22 @@ public struct ADBTVRootView: View {
         if installedAppsState.deviceID != device.id {
             installedAppsState = ADBTVInstalledAppsViewState(deviceID: device.id)
         }
+        let userID = installedAppsState.userID
+        cancelInstalledAppDetailsLoad()
         switch command {
         case .list(let scope):
-            cancelInstalledAppDetailsLoad()
             let mode: ADBTVAppsMode = scope == .user ? .user : .system
             if installedAppsState.mode != mode {
                 installedAppsState.packages = []
+                installedAppsState.userID = nil
             }
             installedAppsState.mode = mode
             installedAppsState.details = [:]
             installedAppsState.systemSnapshot = nil
+            installedAppsState.pendingDetailsPackages = []
+            installedAppsState.detailsStatus = .idle
         case .activitySnapshot:
-            cancelInstalledAppDetailsLoad()
-            installedAppsState.mode = .active
+            installedAppsState.prepareActivityRefresh()
         case .activeSystemSnapshot:
             break
         case .launch, .forceStop, .uninstall, .openSettings, .clearData,
@@ -1692,14 +1704,17 @@ public struct ADBTVRootView: View {
             do {
                 completion = .success(try await Self.performInstalledAppCommand(
                     command,
-                    on: device
+                    on: device,
+                    userID: userID
                 ))
             } catch {
                 guard !Task.isCancelled else {
                     return
                 }
                 completion = .failure(
-                    userMessage: command.failureMessage,
+                    userMessage: Self.appUserChanged(error)
+                        ? "The TV user changed. Refresh Apps before trying again."
+                        : command.failureMessage,
                     diagnosticDetail: DiagnosticDetail(
                         summary: String(describing: error),
                         context: Self.operationDiagnosticContext(
@@ -1778,16 +1793,19 @@ public struct ADBTVRootView: View {
 
         var refreshesActivity = false
         switch completion {
-        case .success(.listedUserApps(let packages)):
-            installedAppsState.packages = packages
+        case .success(.listedUserApps(let snapshot)):
+            installedAppsState.userID = snapshot.userID
+            installedAppsState.packages = snapshot.packages
             installedAppsState.status = .ready(message: nil)
-            startInstalledAppDetailsLoad(packages, on: device)
+            startInstalledAppDetailsLoad(snapshot.packages, on: device)
         case .success(.listedSystemApps(let snapshot)):
+            installedAppsState.userID = snapshot.userID
             installedAppsState.packages = snapshot.packages
             installedAppsState.systemSnapshot = snapshot
             installedAppsState.status = .ready(message: nil)
             startInstalledAppDetailsLoad(snapshot.packages, on: device)
         case .success(.loadedActivity(let snapshot)):
+            installedAppsState.userID = snapshot.userID
             let forceStoppedPackage = installedAppsState.pendingForceStopPackage
             let forceStoppedName = forceStoppedPackage.flatMap {
                 installedAppsState.activityDetails[$0.packageName]?.displayName
@@ -1934,6 +1952,14 @@ public struct ADBTVRootView: View {
         if refreshesActivity {
             installedAppsState.status = .ready(message: nil)
             runInstalledAppCommand(.activitySnapshot, on: device)
+        } else if case .success = completion,
+                  installedAppsState.detailsStatus == .idle,
+                  !installedAppsState.pendingDetailsPackages.isEmpty {
+            startInstalledAppDetailsLoad(
+                installedAppsState.pendingDetailsPackages,
+                on: device,
+                forActivity: installedAppsState.mode == .active
+            )
         }
     }
 
@@ -2036,38 +2062,49 @@ public struct ADBTVRootView: View {
         forActivity: Bool = false
     ) {
         cancelInstalledAppDetailsLoad()
-        guard !packages.isEmpty else {
+        guard !packages.isEmpty, let userID = installedAppsState.userID else {
             return
         }
 
         let operationID = UUID()
         installedAppDetailsOperationID = operationID
+        installedAppsState.detailsStatus = .loading
+        installedAppsState.pendingDetailsPackages = packages
         installedAppDetailsTask = Task { @MainActor in
-            // Bound each connection to a page and publish it before fetching
-            // the next one, so large inventories keep making visible progress.
-            let pageSize = 128
-            for start in stride(from: 0, to: packages.count, by: pageSize) {
-                guard !Task.isCancelled else { return }
-                let page = Array(packages[start ..< min(start + pageSize, packages.count)])
-                let details = await Self.loadInstalledAppDetails(page, on: device)
+            let loader = ADBTVInstalledAppDetailsOperation { page, userID in
+                try await Self.loadInstalledAppDetails(page, userID: userID, on: device)
+            }
+            do {
+                let result = try await loader.load(packages, userID: userID) { page, details in
+                    await MainActor.run {
+                        guard !Task.isCancelled,
+                              installedAppDetailsOperationID == operationID,
+                              installedAppsState.deviceID == device.id,
+                              installedAppsState.userID == userID else { return }
+                        installedAppsState.recordDetailsPage(
+                            details, packages: page, forActivity: forActivity
+                        )
+                    }
+                }
                 guard !Task.isCancelled,
                       installedAppDetailsOperationID == operationID,
-                      installedAppsState.deviceID == device.id else {
-                    return
-                }
-                guard !details.isEmpty else { break }
-                let currentPackages = Set(
-                    forActivity
-                        ? installedAppsState.activitySnapshot?.apps.map(\.package.packageName) ?? []
-                        : installedAppsState.packages.map(\.packageName)
-                )
-                let filteredDetails = details.filter {
-                    currentPackages.contains($0.key)
-                }
-                if forActivity {
-                    installedAppsState.activityDetails.merge(filteredDetails) { _, latest in latest }
-                } else {
-                    installedAppsState.details.merge(filteredDetails) { _, latest in latest }
+                      installedAppsState.deviceID == device.id,
+                      installedAppsState.userID == userID else { return }
+                installedAppsState.finishDetailsLoad(result)
+            } catch {
+                guard !Task.isCancelled,
+                      installedAppDetailsOperationID == operationID else { return }
+                installedAppsState.detailsStatus = .failed(String(describing: error))
+                if Self.appUserChanged(error) {
+                    installedAppsState.userID = nil
+                    installedAppsState.pendingDetailsPackages = []
+                    installedAppsState.status = .failed(
+                        userMessage: "The TV user changed. Refresh Apps before trying again.",
+                        diagnosticDetail: DiagnosticDetail(
+                            summary: String(describing: error),
+                            context: ["operation": "loadInstalledAppDetails"]
+                        )
+                    )
                 }
             }
             guard installedAppDetailsOperationID == operationID else { return }
@@ -2076,39 +2113,54 @@ public struct ADBTVRootView: View {
         }
     }
 
+    private static func appUserChanged(_ error: Error) -> Bool {
+        guard let error = error as? ADBTVInstalledAppError else { return false }
+        if case .activeUserChanged = error { return true }
+        return false
+    }
+
+    private static func requiredAppUserID(_ userID: Int?) throws -> Int {
+        guard let userID else {
+            throw ADBTVInstalledAppOperationError.missingUserSnapshot
+        }
+        return userID
+    }
+
     private func cancelInstalledAppDetailsLoad() {
         installedAppDetailsTask?.cancel()
         installedAppDetailsTask = nil
         installedAppDetailsOperationID = nil
+        if installedAppsState.detailsStatus == .loading {
+            installedAppsState.detailsStatus = .idle
+        }
     }
 
     private static func loadInstalledAppDetails(
         _ packages: [ADBTVInstalledPackage],
+        userID: Int,
         on device: ADBTVDeviceSummary
-    ) async -> [String: ADBTVInstalledAppDetails] {
+    ) async throws -> [String: ADBTVInstalledAppDetails] {
 #if canImport(Network) && canImport(Security)
-        do {
-            return try await ADBTVOperationTimeoutPolicy.installedApps.run(
-                operation: .installedApps
-            ) {
-                var connection = try await connectedDevice(for: device)
-                defer { connection.cancel() }
-                return await ADBTVInstalledAppManager().details(
-                    for: packages,
-                    using: &connection
-                )
-            }
-        } catch {
-            return [:]
+        return try await ADBTVOperationTimeoutPolicy.installedApps.run(
+            operation: .installedApps
+        ) {
+            var connection = try await connectedDevice(for: device)
+            defer { connection.cancel() }
+            return try await ADBTVInstalledAppManager().details(
+                for: packages,
+                userID: userID,
+                using: &connection
+            )
         }
 #else
-        return [:]
+        throw ADBTVInstalledAppOperationError.unsupportedPlatform
 #endif
     }
 
     private static func performInstalledAppCommand(
         _ command: ADBTVInstalledAppCommand,
-        on device: ADBTVDeviceSummary
+        on device: ADBTVDeviceSummary,
+        userID: Int?
     ) async throws -> ADBTVInstalledAppResult {
 #if canImport(Network) && canImport(Security)
         return try await ADBTVOperationTimeoutPolicy.installedApps.run(
@@ -2142,19 +2194,29 @@ public struct ADBTVRootView: View {
                 }
                 return .loadedActiveSystemSnapshot(snapshot)
             case .launch(let package):
-                try await manager.launch(package, using: &connection)
+                try await manager.launch(
+                    package, userID: requiredAppUserID(userID), using: &connection
+                )
                 return .launched(package)
             case .forceStop(let package):
-                try await manager.forceStop(package, using: &connection)
+                try await manager.forceStop(
+                    package, userID: requiredAppUserID(userID), using: &connection
+                )
                 return .stopped(package)
             case .uninstall(let package):
-                try await manager.uninstall(package, using: &connection)
+                try await manager.uninstall(
+                    package, userID: requiredAppUserID(userID), using: &connection
+                )
                 return .uninstalled(package)
             case .openSettings(let package):
-                try await manager.openAppSettings(package, using: &connection)
+                try await manager.openAppSettings(
+                    package, userID: requiredAppUserID(userID), using: &connection
+                )
                 return .openedSettings(package)
             case .clearData(let package):
-                try await manager.clearData(package, using: &connection)
+                try await manager.clearData(
+                    package, userID: requiredAppUserID(userID), using: &connection
+                )
                 return .clearedData(package)
             case .disable(let package, let userID):
                 try await manager.disable(package, userID: userID, using: &connection)
@@ -2636,7 +2698,7 @@ private enum ADBTVInstalledAppCommand: Sendable {
 }
 
 private enum ADBTVInstalledAppResult: Sendable {
-    case listedUserApps([ADBTVInstalledPackage])
+    case listedUserApps(ADBTVInstalledAppSnapshot)
     case listedSystemApps(ADBTVSystemAppSnapshot)
     case loadedActivity(ADBTVAppActivitySnapshot)
     case loadedActiveSystemSnapshot(ADBTVSystemAppSnapshot)
@@ -2669,6 +2731,7 @@ private enum ADBTVDeviceToolOperationError: Error {
 
 private enum ADBTVInstalledAppOperationError: Error {
     case unsupportedPlatform
+    case missingUserSnapshot
 }
 
 private struct ADBTVAboutView: View {
@@ -3665,6 +3728,7 @@ private struct DeviceDetailView: View {
     var cancelRemoteOperation: () -> Void
     var installUnicodeInputHelper: () -> Void
     var selectAppsMode: (ADBTVAppsMode) -> Void
+    var retryInstalledAppDetails: () -> Void
     var loadActiveSystemSnapshot: (Int) -> Void
     var launchInstalledApp: (ADBTVInstalledPackage) -> Void
     var forceStopInstalledApp: (ADBTVInstalledPackage) -> Void
@@ -3771,6 +3835,7 @@ private struct DeviceDetailView: View {
             deviceOperationInProgress: deviceOperationInProgress,
             showInstaller: { isInstallerPresented = true },
             selectMode: selectAppsMode,
+            retryDetails: retryInstalledAppDetails,
             installHelper: {
                 isInstallerPresented = true
                 installUnicodeInputHelper()

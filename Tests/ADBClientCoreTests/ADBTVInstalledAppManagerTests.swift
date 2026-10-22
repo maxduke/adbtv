@@ -4,17 +4,20 @@ import XCTest
 final class ADBTVInstalledAppManagerTests: XCTestCase {
     func testListParsesSortsAndDeduplicatesThirdPartyPackages() async throws {
         var session = InstalledAppSession(outputs: [
-            checkedOutput("package:com.netflix.ninja\npackage:com.example.player\npackage:com.netflix.ninja\n")
+            checkedOutput("10\n"),
+            checkedOutput("package:com.netflix.ninja\npackage:com.example.player\npackage:com.netflix.ninja\n"),
+            checkedOutput("10\n")
         ])
 
-        let packages = try await ADBTVInstalledAppManager().list(using: &session)
+        let snapshot = try await ADBTVInstalledAppManager().list(using: &session)
 
-        XCTAssertEqual(packages.map(\.packageName), ["com.example.player", "com.netflix.ninja"])
-        XCTAssertTrue(session.commands[0].hasPrefix("(\npm list packages -3\n); "))
+        XCTAssertEqual(snapshot.userID, 10)
+        XCTAssertEqual(snapshot.packages.map(\.packageName), ["com.example.player", "com.netflix.ninja"])
+        XCTAssertTrue(session.commands[1].hasPrefix("(\npm list packages -3 --user 10\n); "))
     }
 
     func testListRejectsUnexpectedOutput() async {
-        var session = InstalledAppSession(outputs: [checkedOutput("warning: unavailable\n")])
+        var session = InstalledAppSession(outputs: [checkedOutput("0\n"), checkedOutput("warning: unavailable\n")])
 
         do {
             _ = try await ADBTVInstalledAppManager().list(using: &session)
@@ -28,7 +31,9 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
 
     func testListRequestsSystemPackages() async throws {
         var session = InstalledAppSession(outputs: [
-            checkedOutput("package:com.android.tv.settings\n")
+            checkedOutput("10\n"),
+            checkedOutput("package:com.android.tv.settings\n"),
+            checkedOutput("10\n")
         ])
 
         let packages = try await ADBTVInstalledAppManager().list(
@@ -36,8 +41,20 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             using: &session
         )
 
-        XCTAssertEqual(packages.map(\.packageName), ["com.android.tv.settings"])
-        XCTAssertTrue(session.commands[0].hasPrefix("(\npm list packages -s\n); "))
+        XCTAssertEqual(packages.packages.map(\.packageName), ["com.android.tv.settings"])
+        XCTAssertTrue(session.commands[1].hasPrefix("(\npm list packages -s --user 10\n); "))
+    }
+
+    func testListRejectsUserChangeDuringSnapshot() async throws {
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"), checkedOutput("package:com.example.player\n"), checkedOutput("10\n")
+        ])
+        do {
+            _ = try await ADBTVInstalledAppManager().list(using: &session)
+            XCTFail("Expected the stale snapshot to be rejected.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
+        }
     }
 
     func testActivitySnapshotGroupsProcessesAndSortsForegroundAppsByMemory() async throws {
@@ -263,7 +280,8 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             checkedOutput("package:com.example.optional\n"),
             checkedOutput("com.example.launcher/.MainActivity\n"),
             checkedOutput("com.example.settings/.SettingsActivity\n"),
-            checkedOutput("com.example.keyboard/.InputMethod\n")
+            checkedOutput("com.example.keyboard/.InputMethod\n"),
+            checkedOutput("10\n")
         ])
 
         let snapshot = try await ADBTVInstalledAppManager().systemSnapshot(using: &session)
@@ -316,7 +334,8 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             checkedOutput("0\n"),
             checkedOutput("package:android\npackage:com.example.optional\n"),
             checkedOutput(""),
-            checkedOutput("No activity found\n")
+            checkedOutput("No activity found\n"),
+            checkedOutput("0\n")
         ])
 
         let snapshot = try await ADBTVInstalledAppManager().systemSnapshot(using: &session)
@@ -339,7 +358,8 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             checkedOutput(""),
             checkedOutput("com.example.launcher/.MainActivity\n"),
             checkedOutput("com.example.settings/.SettingsActivity\n"),
-            checkedOutput("null\n")
+            checkedOutput("null\n"),
+            checkedOutput("0\n")
         ])
 
         let snapshot = try await ADBTVInstalledAppManager().systemSnapshot(using: &session)
@@ -357,6 +377,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             checkedOutput("com.example.launcher/.MainActivity\n"),
             checkedOutput("com.example.settings/.SettingsActivity\n"),
             checkedOutput("null\n"),
+            checkedOutput("10\n"),
             checkedOutput("Package com.example.optional new state: disabled-user\n"),
             checkedOutput("package:com.example.optional\n")
         ])
@@ -368,12 +389,12 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         )
 
         XCTAssertTrue(
-            session.commands[4].hasPrefix(
+            session.commands[5].hasPrefix(
                 "(\npm disable-user --user 10 'com.example.optional'\n); "
             )
         )
         XCTAssertTrue(
-            session.commands[5].hasPrefix("(\npm list packages -s -d --user 10\n); ")
+            session.commands[6].hasPrefix("(\npm list packages -s -d --user 10\n); ")
         )
     }
 
@@ -431,6 +452,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             checkedOutput("com.example.launcher/.MainActivity\n"),
             checkedOutput("com.example.settings/.SettingsActivity\n"),
             checkedOutput("null\n"),
+            checkedOutput("0\n"),
             checkedOutput("Package com.example.optional new state: disabled-user\n"),
             checkedOutput("")
         ])
@@ -504,40 +526,150 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
 
     func testLaunchTriesLeanbackBeforeStandardLauncher() async throws {
         let package = try ADBTVInstalledPackage(packageName: "com.example.player")
-        var session = InstalledAppSession(outputs: [checkedOutput("")])
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("10\n"),
+            checkedOutput("package:com.example.player\n"),
+            checkedOutput("No activity found\n"),
+            checkedOutput("com.example.player/.MainActivity\n"),
+            checkedOutput("10\n"),
+            checkedOutput("Status: ok\n")
+        ])
 
-        try await ADBTVInstalledAppManager().launch(package, using: &session)
+        try await ADBTVInstalledAppManager().launch(package, userID: 10, using: &session)
 
-        XCTAssertTrue(session.commands[0].contains("android.intent.category.LEANBACK_LAUNCHER"))
-        XCTAssertTrue(session.commands[0].contains("|| monkey"))
-        XCTAssertTrue(session.commands[0].contains("android.intent.category.LAUNCHER"))
-        XCTAssertTrue(session.commands[0].contains("'com.example.player'"))
+        XCTAssertTrue(session.commands[2].contains("--user 10"))
+        XCTAssertTrue(session.commands[2].contains("android.intent.category.LEANBACK_LAUNCHER"))
+        XCTAssertTrue(session.commands[3].contains("android.intent.category.LAUNCHER"))
+        XCTAssertTrue(session.commands[5].hasPrefix(
+            "(\nam start --user 10 -W -n 'com.example.player/.MainActivity'\n); "
+        ))
     }
 
-    func testForceStopTargetsCurrentUserAndValidatedPackage() async throws {
+    func testForceStopTargetsSnapshotUserAndValidatedPackage() async throws {
         let package = try ADBTVInstalledPackage(packageName: "com.example.player")
-        var session = InstalledAppSession(outputs: [checkedOutput("")])
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("10\n"), checkedOutput("package:com.example.player\n"),
+            checkedOutput("10\n"), checkedOutput("")
+        ])
 
-        try await ADBTVInstalledAppManager().forceStop(package, using: &session)
+        try await ADBTVInstalledAppManager().forceStop(package, userID: 10, using: &session)
 
         XCTAssertTrue(
-            session.commands[0].hasPrefix(
-                "(\nam force-stop --user current 'com.example.player'\n); "
+            session.commands[3].hasPrefix(
+                "(\nam force-stop --user 10 'com.example.player'\n); "
             )
         )
     }
 
     func testUninstallRequiresSuccessOutput() async throws {
         let package = try ADBTVInstalledPackage(packageName: "com.example.player")
-        var session = InstalledAppSession(outputs: [checkedOutput("Failure [blocked]\n")])
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("10\n"), checkedOutput("package:com.example.player\n"),
+            checkedOutput("10\n"), checkedOutput("Failure [blocked]\n")
+        ])
 
         do {
-            try await ADBTVInstalledAppManager().uninstall(package, using: &session)
+            try await ADBTVInstalledAppManager().uninstall(package, userID: 10, using: &session)
             XCTFail("Expected uninstall output validation to fail.")
         } catch let error as ADBTVInstalledAppError {
             XCTAssertEqual(error, .unexpectedUninstallOutput("Failure [blocked]"))
         }
-        XCTAssertTrue(session.commands[0].hasPrefix("(\npm uninstall 'com.example.player'\n); "))
+        XCTAssertTrue(session.commands[3].hasPrefix("(\npm uninstall --user 10 'com.example.player'\n); "))
+    }
+
+    func testUninstallIsLimitedToSnapshotUserAndThirdPartyPackage() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("10\n"), checkedOutput("package:com.example.player\n"),
+            checkedOutput("10\n"), checkedOutput("Success\n")
+        ])
+        try await ADBTVInstalledAppManager().uninstall(package, userID: 10, using: &session)
+        XCTAssertTrue(session.commands[1].contains("pm list packages -3 --user 10 'com.example.player'"))
+        XCTAssertTrue(session.commands[3].contains("pm uninstall --user 10 'com.example.player'"))
+        XCTAssertFalse(session.commands.contains { $0.contains("--user all") })
+    }
+
+    func testUninstallRejectsSystemOrMissingPackage() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.system")
+        var session = InstalledAppSession(outputs: [checkedOutput("10\n"), checkedOutput("")])
+        do {
+            try await ADBTVInstalledAppManager().uninstall(package, userID: 10, using: &session)
+            XCTFail("Expected third-party package validation.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .packageNotUserInstalled(packageName: package.packageName, userID: 10))
+        }
+        XCTAssertEqual(session.commands.count, 2)
+    }
+
+    func testAppActionsRejectStaleSnapshotUserBeforeAnyMutation() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        let manager = ADBTVInstalledAppManager()
+        let actions: [(inout InstalledAppSession) async throws -> Void] = [
+            { try await manager.launch(package, userID: 0, using: &$0) },
+            { try await manager.forceStop(package, userID: 0, using: &$0) },
+            { try await manager.uninstall(package, userID: 0, using: &$0) },
+            { try await manager.openAppSettings(package, userID: 0, using: &$0) },
+            { try await manager.clearData(package, userID: 0, using: &$0) }
+        ]
+        for action in actions {
+            var session = InstalledAppSession(outputs: [checkedOutput("10\n")])
+            do {
+                try await action(&session)
+                XCTFail("Expected stale-user rejection.")
+            } catch let error as ADBTVInstalledAppError {
+                XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
+            }
+            XCTAssertEqual(session.commands.count, 1)
+        }
+    }
+
+    func testUninstallRechecksUserAfterPackageValidation() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"), checkedOutput("package:com.example.player\n"), checkedOutput("10\n")
+        ])
+        do {
+            try await ADBTVInstalledAppManager().uninstall(package, userID: 0, using: &session)
+            XCTFail("Expected the user change to prevent uninstall.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
+        }
+        XCTAssertFalse(session.commands.contains { $0.contains("pm uninstall") })
+    }
+
+    func testLaunchRejectsForeignOrUnsafeResolvedComponents() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        for component in ["com.other.app/.Main", "com.example.player/.Main';reboot"] {
+            var session = InstalledAppSession(outputs: [
+                checkedOutput("10\n"), checkedOutput("package:com.example.player\n"),
+                checkedOutput(component)
+            ])
+            do {
+                try await ADBTVInstalledAppManager().launch(package, userID: 10, using: &session)
+                XCTFail("Expected invalid launcher rejection.")
+            } catch let error as ADBTVInstalledAppError {
+                XCTAssertEqual(error, .invalidComponentOutput(component))
+            }
+            XCTAssertFalse(session.commands.contains { $0.contains("am start") })
+        }
+    }
+
+    func testLaunchRejectsZeroExitAndroidFailureWithoutReplaying() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        let failure = "Error: Activity not started, unable to resolve Intent"
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("10\n"), checkedOutput("package:com.example.player\n"),
+            checkedOutput("com.example.player/.TVActivity\n"), checkedOutput("10\n"),
+            checkedOutput(failure)
+        ])
+        do {
+            try await ADBTVInstalledAppManager().launch(package, userID: 10, using: &session)
+            XCTFail("A zero exit code does not establish that Android launched the activity.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .unexpectedActivityStartOutput(failure))
+        }
+        XCTAssertEqual(session.commands.filter { $0.contains("am start") }.count, 1)
+        XCTAssertFalse(session.commands.contains { $0.contains("android.intent.category.LAUNCHER") })
     }
 
     func testOpenAppSettingsVerifiesPackageAndActiveUser() async throws {
@@ -549,7 +681,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             checkedOutput("Status: ok\n")
         ])
 
-        try await ADBTVInstalledAppManager().openAppSettings(package, using: &session)
+        try await ADBTVInstalledAppManager().openAppSettings(package, userID: 10, using: &session)
 
         XCTAssertTrue(
             session.commands[1].hasPrefix(
@@ -565,6 +697,51 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         )
     }
 
+    func testOpenAppSettingsRejectsZeroExitErrorAndTimeoutOutput() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        for output in ["Error: Activity not started", "Status: timeout", ""] {
+            var session = InstalledAppSession(outputs: [
+                checkedOutput("10\n"), checkedOutput("package:com.example.player\n"),
+                checkedOutput("10\n"), checkedOutput(output)
+            ])
+            do {
+                try await ADBTVInstalledAppManager().openAppSettings(package, userID: 10, using: &session)
+                XCTFail("Expected Android's unsuccessful result to be rejected.")
+            } catch let error as ADBTVInstalledAppError {
+                XCTAssertEqual(error, .unexpectedActivityStartOutput(output))
+            }
+        }
+    }
+
+    func testSystemSnapshotRejectsUserChangeEvenWhenProtectionLookupFails() async throws {
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"), checkedOutput("package:android\n"), checkedOutput(""),
+            checkedOutput("No activity found\n"), checkedOutput("10\n")
+        ])
+        do {
+            _ = try await ADBTVInstalledAppManager().systemSnapshot(using: &session)
+            XCTFail("A partial system snapshot must still belong to the active user.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
+        }
+    }
+
+    func testDisableRechecksUserAfterProtectionChecks() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.optional")
+        var session = InstalledAppSession(outputs: [
+            checkedOutput("0\n"), checkedOutput("com.example.launcher/.Main\n"),
+            checkedOutput("com.example.settings/.Main\n"), checkedOutput("null\n"),
+            checkedOutput("10\n")
+        ])
+        do {
+            try await ADBTVInstalledAppManager().disable(package, userID: 0, using: &session)
+            XCTFail("Expected the user change to prevent disabling the app.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
+        }
+        XCTAssertFalse(session.commands.contains { $0.contains("pm disable-user") })
+    }
+
     func testOpenAppSettingsRejectsPackageThatDisappeared() async throws {
         let package = try ADBTVInstalledPackage(packageName: "com.example.player")
         var session = InstalledAppSession(outputs: [
@@ -573,7 +750,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         ])
 
         do {
-            try await ADBTVInstalledAppManager().openAppSettings(package, using: &session)
+            try await ADBTVInstalledAppManager().openAppSettings(package, userID: 0, using: &session)
             XCTFail("Expected package verification to fail.")
         } catch let error as ADBTVInstalledAppError {
             XCTAssertEqual(
@@ -594,7 +771,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
             checkedOutput("Success\n")
         ])
 
-        try await ADBTVInstalledAppManager().clearData(package, using: &session)
+        try await ADBTVInstalledAppManager().clearData(package, userID: 0, using: &session)
 
         XCTAssertTrue(
             session.commands[1].hasPrefix(
@@ -616,7 +793,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         ])
 
         do {
-            try await ADBTVInstalledAppManager().clearData(package, using: &session)
+            try await ADBTVInstalledAppManager().clearData(package, userID: 0, using: &session)
             XCTFail("Expected user-app verification to fail.")
         } catch let error as ADBTVInstalledAppError {
             XCTAssertEqual(
@@ -636,7 +813,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         ])
 
         do {
-            try await ADBTVInstalledAppManager().clearData(package, using: &session)
+            try await ADBTVInstalledAppManager().clearData(package, userID: 0, using: &session)
             XCTFail("Expected active-user verification to fail.")
         } catch let error as ADBTVInstalledAppError {
             XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
@@ -654,7 +831,7 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         ])
 
         do {
-            try await ADBTVInstalledAppManager().clearData(package, using: &session)
+            try await ADBTVInstalledAppManager().clearData(package, userID: 0, using: &session)
             XCTFail("Expected clear-data output validation to fail.")
         } catch let error as ADBTVInstalledAppError {
             XCTAssertEqual(error, .unexpectedClearDataOutput("Failed"))
@@ -680,13 +857,13 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
           {"package":"com.unrequested.app","label":"Unrequested"}
         ]
         """
-        var session = InstalledAppSession(outputs: [checkedOutput(response)])
+        var session = InstalledAppSession(outputs: metadataOutputs([response], userID: 10))
         let packages = [
             try ADBTVInstalledPackage(packageName: "com.example.player"),
             try ADBTVInstalledPackage(packageName: "com.example.invalid")
         ]
 
-        let details = await ADBTVInstalledAppManager().details(for: packages, using: &session)
+        let details = try await ADBTVInstalledAppManager().details(for: packages, userID: 10, using: &session)
 
         XCTAssertEqual(details["com.example.player"]?.displayName, "Example Player")
         XCTAssertEqual(details["com.example.player"]?.versionName, "2.4.1")
@@ -698,9 +875,10 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         XCTAssertNil(details["com.example.invalid"]?.isStopped)
         XCTAssertNil(details["com.example.invalid"]?.icon)
         XCTAssertNil(details["com.unrequested.app"])
-        XCTAssertTrue(session.commands[0].contains("content://com.maxduke.adbtv.helper.v3.apps/apps"))
-        XCTAssertFalse(session.commands[0].contains("head -c"))
-        XCTAssertFalse(session.commands[0].contains("2>/dev/null"))
+        XCTAssertTrue(session.commands[2].contains("content read --user 10"))
+        XCTAssertTrue(session.commands[2].contains("content://com.maxduke.adbtv.helper.v3.apps/apps"))
+        XCTAssertFalse(session.commands[2].contains("head -c"))
+        XCTAssertFalse(session.commands[2].contains("2>/dev/null"))
     }
 
     func testDetailsRejectOversizedProviderResponse() async throws {
@@ -708,44 +886,52 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         let response = """
         [{"package":"com.example.player","label":"Must Not Load"}]
         """ + String(repeating: " ", count: 1024 * 1024)
-        var session = InstalledAppSession(outputs: [checkedOutput(response)])
+        var session = InstalledAppSession(outputs: metadataOutputs([response]))
 
-        let details = await ADBTVInstalledAppManager().details(for: [package], using: &session)
-
-        XCTAssertTrue(details.isEmpty)
-        XCTAssertEqual(session.commands.count, 1)
+        do {
+            _ = try await ADBTVInstalledAppManager().details(for: [package], userID: 0, using: &session)
+            XCTFail("Expected the oversized response to be reported for retry.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .detailsResponseTooLarge(response.utf8.count))
+        }
+        XCTAssertEqual(session.commands.count, 3)
     }
 
     func testDetailsStopAfterUnavailableHelper() async throws {
         let packages = try (0 ..< 17).map {
             try ADBTVInstalledPackage(packageName: "com.example.app\($0)")
         }
-        var session = InstalledAppSession(outputs: [checkedOutput("helper unavailable")])
+        var session = InstalledAppSession(outputs: [checkedOutput("0\n"), checkedOutput("")])
 
-        let details = await ADBTVInstalledAppManager().details(for: packages, using: &session)
-
-        XCTAssertTrue(details.isEmpty)
-        XCTAssertEqual(session.commands.count, 1)
+        do {
+            _ = try await ADBTVInstalledAppManager().details(for: packages, userID: 0, using: &session)
+            XCTFail("Expected a distinct helper-unavailable result.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .detailsHelperUnavailable)
+        }
+        XCTAssertEqual(session.commands.count, 2)
+        XCTAssertFalse(session.commands.contains { $0.contains("content read") })
     }
 
     func testDetailsLoadPackagesBeyondTheFormer128PackageLimitInBoundedBatches() async throws {
         let packages = try (0 ..< 145).map {
             try ADBTVInstalledPackage(packageName: "com.example.app\($0)")
         }
-        let outputs = stride(from: 0, to: packages.count, by: 16).map { start in
+        let responses = stride(from: 0, to: packages.count, by: 16).map { start in
             let records = packages[start ..< min(start + 16, packages.count)].map {
                 "{\"package\":\"\($0.packageName)\",\"label\":\"App \($0.packageName)\"}"
             }
-            return checkedOutput("[" + records.joined(separator: ",") + "]")
+            return "[" + records.joined(separator: ",") + "]"
         }
-        var session = InstalledAppSession(outputs: outputs)
+        var session = InstalledAppSession(outputs: metadataOutputs(responses))
 
-        let details = await ADBTVInstalledAppManager().details(for: packages, using: &session)
+        let details = try await ADBTVInstalledAppManager().details(for: packages, userID: 0, using: &session)
 
         XCTAssertEqual(details.count, 145)
         XCTAssertNotNil(details["com.example.app144"])
-        XCTAssertEqual(session.commands.count, 10)
-        XCTAssertTrue(session.commands.last?.contains("com.example.app144") == true)
+        let queries = session.commands.filter { $0.contains("content read") }
+        XCTAssertEqual(queries.count, 10)
+        XCTAssertTrue(queries.last?.contains("com.example.app144") == true)
     }
 
     func testCancelledDetailsRequestDoesNotStartAnotherBatch() async throws {
@@ -753,12 +939,41 @@ final class ADBTVInstalledAppManagerTests: XCTestCase {
         let result = await Task {
             withUnsafeCurrentTask { $0?.cancel() }
             var session = InstalledAppSession(outputs: [])
-            let details = await ADBTVInstalledAppManager().details(for: [package], using: &session)
-            return (details.count, session.commands.count)
+            do {
+                _ = try await ADBTVInstalledAppManager().details(for: [package], userID: 0, using: &session)
+                XCTFail("Expected cancellation to propagate.")
+            } catch is CancellationError {
+                // Cancellation must not be converted into an empty successful page.
+            } catch {
+                XCTFail("Unexpected error: \(error)")
+            }
+            return session.commands.count
         }.value
 
-        XCTAssertEqual(result.0, 0)
-        XCTAssertEqual(result.1, 0)
+        XCTAssertEqual(result, 0)
+    }
+
+    func testDetailsRejectChangedSnapshotUser() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: [checkedOutput("10\n")])
+        do {
+            _ = try await ADBTVInstalledAppManager().details(for: [package], userID: 0, using: &session)
+            XCTFail("Expected stale-user rejection before querying the helper.")
+        } catch let error as ADBTVInstalledAppError {
+            XCTAssertEqual(error, .activeUserChanged(expected: 0, actual: 10))
+        }
+        XCTAssertEqual(session.commands.count, 1)
+    }
+
+    func testDetailsPropagateMalformedPageForRetry() async throws {
+        let package = try ADBTVInstalledPackage(packageName: "com.example.player")
+        var session = InstalledAppSession(outputs: metadataOutputs(["invalid JSON"]))
+        do {
+            _ = try await ADBTVInstalledAppManager().details(for: [package], userID: 0, using: &session)
+            XCTFail("Expected malformed metadata to propagate.")
+        } catch is DecodingError {
+            XCTAssertEqual(session.commands.count, 3)
+        }
     }
 
     func testDetailsDiscardUnsafeOrInvalidOptionalMetadata() {
@@ -809,6 +1024,7 @@ private struct InstalledAppSession: ADBShellCommandRunningSession {
 
     mutating func runShellCommand(_ command: ADBShellCommand) async throws -> ADBShellOutput {
         commands.append(command.rawValue)
+        guard !outputs.isEmpty else { throw AppActivitySessionError.missingOutput(command.rawValue) }
         return outputs.removeFirst()
     }
 }
@@ -881,4 +1097,10 @@ private func checkedOutput(_ value: String, exitCode: Int = 0) -> ADBShellOutput
     ADBShellOutput(bytes: Array(
         (value + "\n\(ADBCheckedShellInvocation.exitStatusMarker)\(exitCode)\n").utf8
     ))
+}
+
+private func metadataOutputs(_ pages: [String], userID: Int = 0) -> [ADBShellOutput] {
+    [checkedOutput("\(userID)\n"), checkedOutput("package:\(ADBTVUnicodeInputHelper.packageName)\n")]
+        + pages.map { checkedOutput($0) }
+        + [checkedOutput("\(userID)\n")]
 }

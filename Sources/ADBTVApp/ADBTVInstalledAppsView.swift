@@ -26,6 +26,7 @@ struct InstalledAppsPanel: View {
     var deviceOperationInProgress: Bool
     var showInstaller: () -> Void
     var selectMode: (ADBTVAppsMode) -> Void
+    var retryDetails: () -> Void
     var installHelper: () -> Void
     var launch: (ADBTVInstalledPackage) -> Void
     var forceStop: (ADBTVInstalledPackage) -> Void
@@ -100,6 +101,7 @@ struct InstalledAppsPanel: View {
 
             statusContent
             activitySnapshotStatus
+            detailsLoadingStatus
 
             if !filteredPackages.isEmpty {
                 LazyVStack(spacing: 0) {
@@ -168,7 +170,7 @@ struct InstalledAppsPanel: View {
                 pendingUninstall = nil
             }
         } message: { package in
-            Text("This removes \(package.packageName) and its app data from the TV.")
+            Text("This removes \(package.packageName) and its app data for the current TV user.")
         }
         .sheet(item: $selectedPackage) { package in
             InstalledAppDetailsView(
@@ -178,7 +180,7 @@ struct InstalledAppsPanel: View {
                 activityCapturedAt: state.activitySnapshot?.capturedAt,
                 systemSnapshot: systemSnapshot(for: package),
                 systemControlStatus: state.status,
-                actionsDisabled: deviceOperationInProgress || state.status.isBusy,
+                actionsDisabled: deviceOperationInProgress || state.status.isBusy || state.userID == nil,
                 appKind: appKind(for: package),
                 launch: launch,
                 forceStop: forceStop,
@@ -188,6 +190,43 @@ struct InstalledAppsPanel: View {
                 disableSystemApp: disableSystemApp,
                 restoreSystemAppDefault: restoreSystemAppDefault
             )
+        }
+    }
+
+    @ViewBuilder
+    private var detailsLoadingStatus: some View {
+        switch state.detailsStatus {
+        case .loading:
+            HStack(spacing: 8) {
+                ProgressView()
+                Text("Loading app names and icons")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        case .helperUnavailable:
+            Text("Install the Android Helper to show app names and icons.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        case .failed(let failure):
+            if state.userID != nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Some app names and icons could not be loaded.", systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                    Button("Retry App Details", action: retryDetails)
+                        .disabled(deviceOperationInProgress || state.status.isBusy)
+                    DiagnosticDisclosure(diagnosticDetail: DiagnosticDetail(
+                        summary: failure,
+                        context: ["operation": "loadInstalledAppDetails"]
+                    ))
+                }
+            }
+        case .idle:
+            if !state.pendingDetailsPackages.isEmpty {
+                Button("Load App Names and Icons", action: retryDetails)
+                    .disabled(deviceOperationInProgress || state.status.isBusy || state.userID == nil)
+            }
+        case .ready:
+            EmptyView()
         }
     }
 
@@ -352,6 +391,7 @@ struct InstalledAppsPanel: View {
                 .disabled(
                     deviceOperationInProgress
                         || state.status.isBusy
+                        || state.userID == nil
                         || (state.mode == .system && state.systemSnapshot == nil)
                         || systemState(for: package) == .disabled
                 )
@@ -370,6 +410,7 @@ struct InstalledAppsPanel: View {
                     .disabled(
                         deviceOperationInProgress
                             || state.status.isBusy
+                            || state.userID == nil
                             || (activity == nil && details?.isStopped == true)
                             || systemState(for: package) == .disabled
                     )
@@ -383,7 +424,7 @@ struct InstalledAppsPanel: View {
                     } label: {
                         Label("Uninstall", systemImage: "trash")
                     }
-                    .disabled(deviceOperationInProgress || state.status.isBusy)
+                    .disabled(deviceOperationInProgress || state.status.isBusy || state.userID == nil)
                 }
             } label: {
                 Label("Actions for \(package.packageName)", systemImage: "ellipsis")
@@ -803,7 +844,7 @@ private struct InstalledAppDetailsView: View {
                     uninstall(package)
                 }
             } message: {
-                Text("This removes \(package.packageName) and its app data from the TV.")
+                Text("This removes \(package.packageName) and its app data for the current TV user.")
             }
         }
     }
