@@ -84,3 +84,22 @@ struct ADBTVLabeledValue: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+struct ADBTVAdaptiveLabeledContentStyle: LabeledContentStyle {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    @ViewBuilder
+    func makeBody(configuration: Configuration) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 6) {
+                configuration.label
+                configuration.content
+                    .foregroundStyle(.secondary)
+            }
+            .fixedSize(horizontal: false, vertical: true)
+        } else {
+            LabeledContent(configuration)
+                .labeledContentStyle(.automatic)
+        }
+    }
+}

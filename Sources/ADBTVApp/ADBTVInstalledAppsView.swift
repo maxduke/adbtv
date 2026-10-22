@@ -42,6 +42,8 @@ struct InstalledAppsPanel: View {
         ? "unmatched app" : ""
     @State private var pendingForceStop: ADBTVInstalledPackage?
     @State private var pendingUninstall: ADBTVInstalledPackage?
+    @State private var pinnedApps: [ADBTVPinnedApp] = []
+    @State private var pinFailure: DiagnosticDetail?
     @State private var selectedPackage: ADBTVInstalledPackage? =
         ProcessInfo.processInfo.arguments.contains("--ui-app-details")
             || ProcessInfo.processInfo.arguments.contains("--ui-user-app-details")
@@ -134,6 +136,17 @@ struct InstalledAppsPanel: View {
                 selectMode(state.mode)
             }
         }
+        .task(id: "\(state.deviceID?.uuidString ?? "none")/\(state.userID.map(String.init) ?? "none")") {
+            loadPinnedApps()
+        }
+        .alert("Quick Launch", isPresented: Binding(
+            get: { pinFailure != nil },
+            set: { if !$0 { pinFailure = nil } }
+        ), presenting: pinFailure) { _ in
+            Button("OK", role: .cancel) {}
+        } message: { failure in
+            Text(failure.summary)
+        }
         .onChange(of: state.mode) { _, _ in
             searchText = ""
             pendingForceStop = nil
@@ -165,20 +178,21 @@ struct InstalledAppsPanel: View {
                 )
             }
         }
-        .confirmationDialog(
-            "Uninstall app?",
+        .alert(
+            pendingUninstall.map { "Uninstall \(appTitle(for: $0))?" } ?? "Uninstall App?",
             isPresented: Binding(
                 get: { pendingUninstall != nil },
                 set: { if !$0 { pendingUninstall = nil } }
             ),
             presenting: pendingUninstall
         ) { package in
-            Button("Uninstall \(package.packageName)", role: .destructive) {
+            Button("Uninstall", role: .destructive) {
                 uninstall(package)
                 pendingUninstall = nil
             }
+            Button("Cancel", role: .cancel) { pendingUninstall = nil }
         } message: { package in
-            Text("This removes \(package.packageName) and its app data for the current TV user.")
+            Text("This removes \(appTitle(for: package)) and its app data for the current TV user.\n\n\(package.packageName)")
         }
         .sheet(item: $selectedPackage) { package in
             InstalledAppDetailsView(
@@ -396,6 +410,20 @@ struct InstalledAppsPanel: View {
                     Label("Details", systemImage: "info.circle")
                 }
 
+                let isPinned = pinnedApps.contains { $0.packageName == package.packageName }
+                Button { togglePin(package) } label: {
+                    Label(
+                        isPinned ? "Remove from Quick Launch"
+                            : pinnedApps.count >= ADBTVQuickLaunchStore.maximumAppCount
+                                ? "Quick Launch Full (6)" : "Pin to Remote",
+                        systemImage: isPinned ? "pin.slash" : "pin"
+                    )
+                }
+                .disabled(
+                    deviceOperationInProgress || state.status.isBusy || state.userID == nil
+                        || (!isPinned && pinnedApps.count >= ADBTVQuickLaunchStore.maximumAppCount)
+                )
+
                 Button {
                     launch(package)
                 } label: {
@@ -500,6 +528,38 @@ struct InstalledAppsPanel: View {
         state.displayedDetails
     }
 
+    private func loadPinnedApps() {
+        guard let deviceID = state.deviceID, let userID = state.userID else {
+            pinnedApps = []
+            return
+        }
+        do {
+            pinnedApps = try ADBTVQuickLaunchStore().apps(deviceID: deviceID, userID: userID)
+        } catch {
+            pinnedApps = []
+            pinFailure = DiagnosticDetail(summary: ADBTVQuickLaunchError.invalidArchive.userMessage)
+        }
+    }
+
+    private func togglePin(_ package: ADBTVInstalledPackage) {
+        guard let deviceID = state.deviceID, let userID = state.userID,
+              !deviceOperationInProgress, !state.status.isBusy else { return }
+        do {
+            let store = ADBTVQuickLaunchStore()
+            if pinnedApps.contains(where: { $0.packageName == package.packageName }) {
+                pinnedApps = try store.remove(packageNames: [package.packageName], deviceID: deviceID, userID: userID)
+            } else {
+                pinnedApps = try store.pin(
+                    package, displayName: displayedDetails[package.packageName]?.displayName,
+                    deviceID: deviceID, userID: userID
+                )
+            }
+        } catch {
+            pinFailure = DiagnosticDetail(summary: (error as? ADBTVQuickLaunchError)?.userMessage
+                ?? "Could not save Quick Launch apps.")
+        }
+    }
+
     private func activeApp(for package: ADBTVInstalledPackage) -> ADBTVActiveApp? {
         guard state.mode == .active else {
             return nil
@@ -580,6 +640,7 @@ struct InstalledAppsPanel: View {
 
 private struct InstalledAppDetailsView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var package: ADBTVInstalledPackage
     var details: ADBTVInstalledAppDetails?
@@ -598,7 +659,7 @@ private struct InstalledAppDetailsView: View {
     var restoreSystemAppDefault: (ADBTVInstalledPackage, Int) -> Void
 
     @State private var confirmsForceStop = false
-    @State private var confirmsUninstall = false
+    @State private var confirmsUninstall = ProcessInfo.processInfo.arguments.contains("--ui-uninstall-confirm")
     @State private var confirmsClearData = false
     @State private var confirmsDisable = false
     @State private var confirmsRestoreDefault = false
@@ -608,29 +669,32 @@ private struct InstalledAppDetailsView: View {
             List {
                 Section("Package Identifier") {
                     VStack(alignment: .leading, spacing: 12) {
-                        HStack(alignment: .center, spacing: 12) {
-                            InstalledAppIconView(icon: details?.icon)
+                        if dynamicTypeSize.isAccessibilitySize {
+                            HStack {
+                                InstalledAppIconView(icon: details?.icon)
+                                Spacer()
+                                copyPackageButton
+                            }
                             if let displayName = details?.displayName {
                                 Text(displayName)
                                     .font(.headline)
-                                    .lineLimit(3)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
-
-                            Spacer(minLength: 0)
-
-                            Button(action: copyPackageName) {
-                                Label(
-                                    "Copy Package Identifier",
-                                    systemImage: "doc.on.doc"
-                                )
-                                .labelStyle(.iconOnly)
+                        } else {
+                            HStack(alignment: .center, spacing: 12) {
+                                InstalledAppIconView(icon: details?.icon)
+                                if let displayName = details?.displayName {
+                                    Text(displayName)
+                                        .font(.headline)
+                                        .lineLimit(3)
+                                }
+                                Spacer(minLength: 0)
+                                copyPackageButton
                             }
-                            .buttonStyle(.borderless)
-                            .help("Copy Package Identifier")
                         }
 
                         Text(package.packageName)
-                            .font(.body.monospaced())
+                            .font(dynamicTypeSize.isAccessibilitySize ? .caption.monospaced() : .body.monospaced())
                             .textSelection(.enabled)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -760,6 +824,7 @@ private struct InstalledAppDetailsView: View {
                     }
                 }
             }
+            .labeledContentStyle(ADBTVAdaptiveLabeledContentStyle())
             .navigationTitle(details?.displayName ?? "App Details")
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -835,16 +900,17 @@ private struct InstalledAppDetailsView: View {
                     Text("This is a system app. Stopping it may temporarily affect TV features, and Android may restart it.")
                 }
             }
-            .confirmationDialog(
-                "Uninstall app?",
+            .alert(
+                "Uninstall \(appTitle)?",
                 isPresented: $confirmsUninstall
             ) {
-                Button("Uninstall \(package.packageName)", role: .destructive) {
+                Button("Uninstall", role: .destructive) {
                     dismiss()
                     uninstall(package)
                 }
+                Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This removes \(package.packageName) and its app data for the current TV user.")
+                Text("This removes \(appTitle) and its app data for the current TV user.\n\n\(package.packageName)")
             }
         }
     }
@@ -873,6 +939,15 @@ private struct InstalledAppDetailsView: View {
                 .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var copyPackageButton: some View {
+        Button(action: copyPackageName) {
+            Label("Copy Package Identifier", systemImage: "doc.on.doc")
+                .labelStyle(.iconOnly)
+        }
+        .buttonStyle(.borderless)
+        .help("Copy Package Identifier")
     }
 
     @ViewBuilder
@@ -978,7 +1053,7 @@ private extension ADBTVInstalledAppProtectionReason {
     }
 }
 
-private struct InstalledAppIconView: View {
+struct InstalledAppIconView: View {
     var icon: ADBTVInstalledAppIcon?
 
     @ViewBuilder

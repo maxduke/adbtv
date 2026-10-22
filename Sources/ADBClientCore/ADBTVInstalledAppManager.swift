@@ -635,7 +635,7 @@ public struct ADBTVInstalledAppManager: Sendable {
         return details
     }
 
-    private func activeUserID<Session: ADBShellCommandRunningSession>(
+    public func activeUserID<Session: ADBShellCommandRunningSession>(
         using session: inout Session
     ) async throws -> Int {
         let output = try await runChecked("am get-current-user", using: &session)

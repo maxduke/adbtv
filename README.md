@@ -95,6 +95,7 @@ Implemented so far:
 - searchable user and system app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, launch, native TV App Settings, force stop, confirmed user-app data clearing and uninstall, and checked command diagnostics;
 - incremental installed-app metadata pages that continue beyond the first 128 packages;
 - user-scoped app snapshots and actions, with uninstall limited to the snapshot's Android user;
+- local Quick Launch pins for up to six apps per TV/Android user, with Remote launch, reordering, removal, and checked user/package validation;
 - recoverable app-name/icon loading that retains completed pages and retries failed packages;
 - helper-free Active Apps snapshots with foreground state, grouped process count, bounded proportional memory, manual refresh, and no activity history;
 - guarded active-user system app state, with confirmed Disable and Restore Android Default actions that preserve package data and protect critical Android roles;
@@ -168,7 +169,7 @@ The ADB identity is a synchronizable, When Unlocked Keychain item. To reuse it a
 
 `PolicyDenied` means Local Network access is disabled; enable it in iOS Settings and retry. `NoAuth` is a distinct Bonjour capability denial and can indicate inconsistent entitlement signing. The default self-signed IPA hides Discovery and QR Pairing and keeps **Pair with Code** and **Add Manually** available because granting Local Network access does not add the restricted entitlement. The packaged app still declares both Android Wireless Debugging Bonjour service types, and the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
 
-For a manually entered ADB endpoint, **Connect & Save** now verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
+For a manually entered ADB endpoint, **Connect** verifies the ADB session and reads the TV model before saving. A legacy endpoint such as port 5555 may show an RSA debugging authorization prompt on the TV the first time it sees this app's Keychain identity. Accept that prompt before the connection can finish. Modern Android Wireless Debugging connection ports continue to use paired TLS.
 
 The repository contains `ADBClientCore`, `ADBTVApp`, and the source for the optional `ADBTVInput` Android helper. GitHub Actions runs Swift package tests, iOS simulator and unsigned IPA builds, plus Android helper unit tests and APK packaging.
 
@@ -182,6 +183,15 @@ users retain their installation. If the active TV user changes, refresh Apps
 before acting on the new user's apps. Helper metadata is read for the same
 user. Temporary metadata failures preserve loaded names and icons, continue
 later pages, and offer **Retry App Details** for the failed packages.
+
+In **Apps**, open an app's actions menu and choose **Pin to Remote**. Remote's
+**Quick Launch** row holds up to six apps for each TV/Android user; **Manage**
+lets you reorder or remove them. Pins stay local and survive renaming or
+connection repair. Deleting the saved TV also deletes its pins. Names are saved
+when available; the helper is optional and missing metadata falls back to a
+package identifier and generic icon. Remote checks the current Android user
+before showing pins and checks again before launching. If the TV user changes,
+refresh Quick Launch; an uncertain launch is never replayed automatically.
 
 Replacing a helper signed by a different key can still fail if another Android
 user retains the old helper. ADB TV does not remove other users' helper data to

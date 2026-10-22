@@ -3,6 +3,26 @@ import XCTest
 @testable import ADBTVApp
 
 final class ADBTVRemoteSessionTests: XCTestCase {
+    func testClosingBeforeQuickLaunchDiscardsQueuedKeysAndNeverReplaysInFlightKey() async throws {
+        let gate = TestGate()
+        let channel = TestRemoteChannel(gate: gate)
+        let events = RemoteEventRecorder()
+        let session = ADBTVRemoteSession(channelFactory: { channel }, eventHandler: { await events.record($0) })
+        await session.start()
+        _ = await session.enqueue(.up)
+        try await waitUntil { await channel.actions().count == 1 }
+        _ = await session.enqueue(.right)
+        _ = await session.enqueue(.select)
+        await session.close()
+        await gate.open()
+        let afterClose = await session.enqueue(.home)
+        XCTAssertEqual(afterClose, .unavailable)
+        let actions = await channel.actions()
+        XCTAssertEqual(actions, [.up])
+        let closed = await events.contains(.closed)
+        XCTAssertTrue(closed)
+    }
+
     func testOrdersActionsAndRejectsNewestWhenBufferIsFull() async throws {
         let gate = TestGate()
         let channel = TestRemoteChannel(gate: gate)

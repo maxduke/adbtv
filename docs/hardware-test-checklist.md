@@ -133,6 +133,27 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Hold a repeating control while switching tools or backgrounding ADB TV; confirm no further actions arrive after release/reopen.
 - [ ] Trigger an Android-side `input` failure and confirm a warning haptic and reconnect state appear without freezing the interface.
 
+## Quick Launch
+
+- [ ] Pin and unpin apps from User, System, and Active Apps. Confirm a seventh
+  pin is rejected and removing a pin still works at the six-app limit.
+- [ ] Reorder/remove pins in Remote's Manage sheet, relaunch ADB TV, and confirm
+  the order and names persist. Check VoiceOver actions for reorder/removal.
+- [ ] Pin different apps on two TVs and two Android users. Confirm each Remote
+  shows only its current user's pins, including after background/resume.
+- [ ] Change the Android user after loading pins and attempt launch; confirm the
+  stale action is rejected and Refresh loads the new user's pins.
+- [ ] Launch pinned apps without the helper. Uninstall or disable a pinned app
+  on the TV and confirm a clear failure, no automatic replay, and working removal.
+- [ ] Queue remote keys, then launch a pin. Confirm queued navigation does not
+  continue into the newly opened app and normal remote controls reconnect.
+- [ ] Cancel/disconnect/background during launch and immediately retry after
+  cancellation finishes; confirm no stale completion clears the new operation.
+- [ ] Rename and repair a saved TV, then confirm its pins remain. Delete that TV
+  and confirm its pins are removed while other TVs' pins remain intact.
+- [ ] At the largest text size, read long app names and Manage rows, folder names
+  and metadata, App Details fields, and the full Rename input without clipping.
+
 ## Installed Apps
 
 - [ ] On a TV with two Android users, install the same disposable app for both;
