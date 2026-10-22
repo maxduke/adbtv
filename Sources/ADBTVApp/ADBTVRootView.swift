@@ -521,11 +521,15 @@ public struct ADBTVRootView: View {
     }
 
     private var emptyLibraryContent: some View {
-        ContentUnavailableView {
-            Label("Connect Your TV", systemImage: "tv")
-        } description: {
-            Text("Connect to the same Wi-Fi as your TV and enable ADB debugging in its developer options.")
-        } actions: {
+        VStack(spacing: 16) {
+            Image(systemName: "tv")
+                .font(.system(size: 32))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text("Connect Your TV")
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+
             VStack(spacing: 12) {
                 Button {
                     model.prepareManualPairing()
@@ -544,13 +548,23 @@ public struct ADBTVRootView: View {
                 }
                 .buttonStyle(.bordered)
 
-                Text("Use a pairing code for Wireless debugging, or connect by IP when network ADB is already enabled.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
             }
-            .multilineTextAlignment(.center)
             .disabled(model.activeDeviceOperation != nil || deviceConnectionState.isConnecting)
+
+            Text("Connect to the same Wi-Fi as your TV and enable ADB debugging in its developer options.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Use a pairing code for Wireless debugging, or connect by IP when network ADB is already enabled.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
         }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
     }
 
     private func handleScenePhase(_ phase: ScenePhase) {

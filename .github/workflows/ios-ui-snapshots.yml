@@ -2,6 +2,14 @@ name: iOS UI Snapshots
 
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Screens to capture
+        type: choice
+        options:
+          - full
+          - library
+        default: full
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -42,6 +50,8 @@ jobs:
             build
 
       - name: Capture portrait layouts
+        env:
+          SNAPSHOT_SCOPE: ${{ inputs.scope }}
         run: |
           app="build/ui-snapshots/DerivedData/Build/Products/Debug-iphonesimulator/ADBTV.app"
           output="build/ui-snapshots/screenshots"
@@ -75,6 +85,9 @@ jobs:
                 fi
 
                 capture "$udid" "$prefix-library-self-signed" --ui-library
+                if [ "$SNAPSHOT_SCOPE" = library ]; then
+                  continue
+                fi
                 capture "$udid" "$prefix-add-device" --ui-add-device
                 capture "$udid" "$prefix-pair-device" --ui-pair-device
                 capture "$udid" "$prefix-about" --ui-about
