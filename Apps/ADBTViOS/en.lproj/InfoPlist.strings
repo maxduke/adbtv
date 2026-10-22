@@ -1,0 +1,4 @@
+"NSCameraUsageDescription" = "ADB TV uses the camera to scan Android Wireless Debugging pairing QR codes.";
+"NSLocalNetworkUsageDescription" = "ADB TV uses the local network to discover and connect to Android TV devices with Wireless Debugging enabled.";
+"NSPhotoLibraryAddUsageDescription" = "ADB TV saves shared Android TV screenshots to your photo library.";
+"Android application package" = "Android application package";

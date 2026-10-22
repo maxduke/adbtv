@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "ADBTV",
+    defaultLocalization: "en",
     platforms: [
         .iOS(.v17),
         .macOS(.v14)
@@ -47,7 +48,9 @@ let package = Package(
             ],
             resources: [
                 .copy("Resources/OpenSourceNotices.txt"),
-                .process("Resources/Colors.xcassets")
+                .process("Resources/Colors.xcassets"),
+                .process("Resources/en.lproj"),
+                .process("Resources/zh-Hans.lproj")
             ]
         ),
         .testTarget(

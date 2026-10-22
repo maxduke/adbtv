@@ -35,10 +35,10 @@ extension View {
 }
 
 struct ADBTVFormField<Content: View>: View {
-    var title: LocalizedStringKey
+    var title: String
     @ViewBuilder var content: () -> Content
 
-    init(_ title: LocalizedStringKey, @ViewBuilder content: @escaping () -> Content) {
+    init(_ title: String, @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.content = content
     }
@@ -56,10 +56,10 @@ struct ADBTVFormField<Content: View>: View {
 struct ADBTVLabeledValue: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    var title: LocalizedStringKey
+    var title: String
     var value: String
 
-    init(_ title: LocalizedStringKey, value: String) {
+    init(_ title: String, value: String) {
         self.title = title
         self.value = value
     }

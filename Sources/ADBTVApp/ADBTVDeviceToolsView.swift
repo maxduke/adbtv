@@ -26,10 +26,10 @@ enum ADBTVDeviceToolOperation: Equatable, Sendable {
 
     var failureMessage: String {
         switch self {
-        case .information: "Could not load device information."
-        case .cacheCleanup: "Could not clean app caches."
-        case .screenshot: "Could not capture the TV screen."
-        case .shell: "Could not run the shell command."
+        case .information: adbTVLocalized("Could not load device information.")
+        case .cacheCleanup: adbTVLocalized("Could not clean app caches.")
+        case .screenshot: adbTVLocalized("Could not capture the TV screen.")
+        case .shell: adbTVLocalized("Could not run the shell command.")
         }
     }
 }
@@ -213,11 +213,11 @@ struct ADBTVShellPreset: Identifiable {
     var id: String { command }
 
     static let all = [
-        Self(title: "Device Properties", command: "getprop"),
-        Self(title: "Network Interfaces", command: "ip addr show"),
-        Self(title: "Storage Usage", command: "df -h"),
-        Self(title: "Third-party Apps", command: "pm list packages -3"),
-        Self(title: "Recent System Log", command: "logcat -d -t 200")
+        Self(title: adbTVLocalized("Device Properties"), command: "getprop"),
+        Self(title: adbTVLocalized("Network Interfaces"), command: "ip addr show"),
+        Self(title: adbTVLocalized("Storage Usage"), command: "df -h"),
+        Self(title: adbTVLocalized("Third-party Apps"), command: "pm list packages -3"),
+        Self(title: adbTVLocalized("Recent System Log"), command: "logcat -d -t 200")
     ]
 }
 
@@ -255,11 +255,11 @@ struct ADBTVDeviceToolsPanel: View {
                 loadInformation()
             }
         }
-        .alert("Clear App Caches?", isPresented: $isCacheCleanupConfirmationPresented) {
-            Button("Clear Caches", role: .destructive) { cleanCaches() }
-            Button("Cancel", role: .cancel) {}
+        .alert(adbTVLocalized("Clear App Caches?"), isPresented: $isCacheCleanupConfirmationPresented) {
+            Button(adbTVLocalized("Clear Caches"), role: .destructive) { cleanCaches() }
+            Button(adbTVLocalized("Cancel"), role: .cancel) {}
         } message: {
-            Text("Android will remove temporary app data. Apps may load more slowly the next time they open.")
+            Text(adbTVLocalized("Android will remove temporary app data. Apps may load more slowly the next time they open."))
         }
     }
 
@@ -279,9 +279,9 @@ struct ADBTVDeviceToolsPanel: View {
                     .foregroundStyle(.blue)
                     .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 30)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Files")
+                    Text(adbTVLocalized("Files"))
                         .font(.headline)
-                    Text("Browse shared storage")
+                    Text(adbTVLocalized("Browse shared storage"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -294,7 +294,7 @@ struct ADBTVDeviceToolsPanel: View {
         }
         .buttonStyle(.plain)
         .disabled(deviceOperationInProgress)
-        .accessibilityHint("Opens shared storage on the Android TV")
+        .accessibilityHint(adbTVLocalized("Opens shared storage on the Android TV"))
     }
 
     private var cacheCleanupSection: some View {
@@ -305,9 +305,9 @@ struct ADBTVDeviceToolsPanel: View {
                     .foregroundStyle(.orange)
                     .frame(width: dynamicTypeSize.isAccessibilitySize ? nil : 30)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Storage Cleanup")
+                    Text(adbTVLocalized("Storage Cleanup"))
                         .font(.headline)
-                    Text("Remove temporary app caches")
+                    Text(adbTVLocalized("Remove temporary app caches"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -316,7 +316,7 @@ struct ADBTVDeviceToolsPanel: View {
                 if state.cacheCleanupStatus == .running {
                     ProgressView()
                     Button(action: cancel) {
-                        Label("Cancel Cache Cleanup", systemImage: "xmark")
+                        Label(adbTVLocalized("Cancel Cache Cleanup"), systemImage: "xmark")
                             .labelStyle(.iconOnly)
                     }
                     .buttonStyle(.bordered)
@@ -324,7 +324,7 @@ struct ADBTVDeviceToolsPanel: View {
                     Button {
                         isCacheCleanupConfirmationPresented = true
                     } label: {
-                        Label("Clear App Caches", systemImage: "trash")
+                        Label(adbTVLocalized("Clear App Caches"), systemImage: "trash")
                             .labelStyle(.iconOnly)
                     }
                     .buttonStyle(.bordered)
@@ -334,7 +334,7 @@ struct ADBTVDeviceToolsPanel: View {
 
             switch state.cacheCleanupStatus {
             case .finished:
-                Label("App caches cleaned.", systemImage: "checkmark.circle.fill")
+                Label(adbTVLocalized("App caches cleaned."), systemImage: "checkmark.circle.fill")
                     .font(.subheadline)
                     .foregroundStyle(Color.accentColor)
             case .failed(let userMessage, let diagnosticDetail):
@@ -352,7 +352,7 @@ struct ADBTVDeviceToolsPanel: View {
                     isInformationExpanded.toggle()
                 } label: {
                     HStack {
-                        Label("Device Information", systemImage: "info.circle")
+                        Label(adbTVLocalized("Device Information"), systemImage: "info.circle")
                             .font(.headline)
                         Spacer()
                         Image(systemName: "chevron.right")
@@ -364,30 +364,30 @@ struct ADBTVDeviceToolsPanel: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(state.informationStatus == .loading)
-                .accessibilityValue(isInformationExpanded ? "Expanded" : "Collapsed")
+                .accessibilityValue(isInformationExpanded ? adbTVLocalized("Expanded") : adbTVLocalized("Collapsed"))
 
                 if isInformationExpanded {
                     Button(action: loadInformation) {
-                        Label("Refresh Device Information", systemImage: "arrow.clockwise")
+                        Label(adbTVLocalized("Refresh Device Information"), systemImage: "arrow.clockwise")
                             .labelStyle(.iconOnly)
                     }
                     .buttonStyle(.bordered)
                     .disabled(deviceOperationInProgress)
-                    .help("Refresh Device Information")
+                    .help(adbTVLocalized("Refresh Device Information"))
                 }
             }
 
             if isInformationExpanded {
                 switch state.informationStatus {
                 case .loading:
-                    progressRow("Loading device information")
+                    progressRow(adbTVLocalized("Loading device information"))
                 case .failed(let userMessage, let diagnosticDetail):
                     failureView(userMessage, diagnosticDetail: diagnosticDetail)
                 case .idle, .ready:
                     if let information = state.information {
                         informationContent(information)
                     } else {
-                        ContentUnavailableView("No Device Information", systemImage: "info.circle")
+                        ContentUnavailableView(adbTVLocalized("No Device Information"), systemImage: "info.circle")
                     }
                 }
             }
@@ -396,24 +396,24 @@ struct ADBTVDeviceToolsPanel: View {
 
     private func informationContent(_ information: ADBTVDeviceInformation) -> some View {
         VStack(spacing: 0) {
-            informationRow("Manufacturer", value: information.device.manufacturer)
-            informationRow("Model", value: information.device.model)
+            informationRow(adbTVLocalized("Manufacturer"), value: information.device.manufacturer)
+            informationRow(adbTVLocalized("Model"), value: information.device.model)
             informationRow("Android", value: androidVersion(information))
-            informationRow("Product", value: information.device.productName)
-            informationRow("Device", value: information.device.deviceName)
+            informationRow(adbTVLocalized("Product"), value: information.device.productName)
+            informationRow(adbTVLocalized("Device"), value: information.device.deviceName)
 
             if let size = information.displaySize {
-                informationRow("Resolution", value: "\(size.width) x \(size.height)")
+                informationRow(adbTVLocalized("Resolution"), value: "\(size.width) x \(size.height)")
             }
             if let uptime = information.uptime {
-                informationRow("Uptime", value: formattedUptime(uptime.seconds))
+                informationRow(adbTVLocalized("Uptime"), value: formattedUptime(uptime.seconds))
             }
             if let storage = information.storage {
                 storageRow(storage)
             }
 
             informationRow(
-                "Build",
+                adbTVLocalized("Build"),
                 value: information.device.buildFingerprint,
                 monospaced: true
             )
@@ -442,11 +442,10 @@ struct ADBTVDeviceToolsPanel: View {
     private func storageRow(_ storage: ADBTVStorageInfo) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Storage")
+                Text(adbTVLocalized("Storage"))
                 Spacer()
                 Text(
-                    "\(formattedBytes(storage.usedByteCount)) of "
-                        + "\(formattedBytes(storage.totalByteCount)) used"
+                    adbTVLocalized("%@ of %@ used", String(describing: formattedBytes(storage.usedByteCount)), String(describing: formattedBytes(storage.totalByteCount)))
                 )
                 .foregroundStyle(.secondary)
             }
@@ -454,7 +453,7 @@ struct ADBTVDeviceToolsPanel: View {
                 value: Double(storage.usedByteCount),
                 total: max(Double(storage.totalByteCount), 1)
             )
-            Text("\(formattedBytes(storage.availableByteCount)) available")
+            Text(adbTVLocalized("%@ available", String(describing: formattedBytes(storage.availableByteCount))))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -466,7 +465,7 @@ struct ADBTVDeviceToolsPanel: View {
     private var screenshotSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
-                Label("Screenshot", systemImage: "photo")
+                Label(adbTVLocalized("Screenshot"), systemImage: "photo")
                     .font(.headline)
                 Spacer()
 
@@ -474,23 +473,23 @@ struct ADBTVDeviceToolsPanel: View {
                    let image = platformImage(from: screenshot.pngData) {
                     ShareLink(
                         item: ADBTVScreenshotShareItem(pngData: screenshot.pngData),
-                        preview: SharePreview("Android TV Screenshot", image: image)
+                        preview: SharePreview(adbTVLocalized("Android TV Screenshot"), image: image)
                     ) {
-                        Label("Share Screenshot", systemImage: "square.and.arrow.up")
+                        Label(adbTVLocalized("Share Screenshot"), systemImage: "square.and.arrow.up")
                             .labelStyle(.iconOnly)
                     }
                     .buttonStyle(.bordered)
                     .disabled(deviceOperationInProgress)
-                    .help("Share Screenshot")
+                    .help(adbTVLocalized("Share Screenshot"))
                 }
 
                 Button(action: captureScreenshot) {
-                    Label("Capture Screenshot", systemImage: "camera.viewfinder")
+                    Label(adbTVLocalized("Capture Screenshot"), systemImage: "camera.viewfinder")
                         .labelStyle(.iconOnly)
                 }
                 .adbTVProminentButton()
                 .disabled(deviceOperationInProgress)
-                .help("Capture Screenshot")
+                .help(adbTVLocalized("Capture Screenshot"))
             }
 
             if state.screenshot != nil {
@@ -499,7 +498,7 @@ struct ADBTVDeviceToolsPanel: View {
 
             switch state.screenshotStatus {
             case .capturing:
-                progressRow("Capturing TV screen")
+                progressRow(adbTVLocalized("Capturing TV screen"))
             case .failed(let userMessage, let diagnosticDetail):
                 failureView(userMessage, diagnosticDetail: diagnosticDetail)
             case .idle, .ready:
@@ -517,7 +516,7 @@ struct ADBTVDeviceToolsPanel: View {
                 image
                     .resizable()
                     .scaledToFit()
-                    .accessibilityLabel("Captured Android TV screen")
+                    .accessibilityLabel(adbTVLocalized("Captured Android TV screen"))
             } else {
                 Image(systemName: "tv")
                     .font(.system(size: 36))
@@ -553,7 +552,7 @@ struct ADBTVDeviceToolsPanel: View {
                     shellCommandField
 
                     Button(action: runShell) {
-                        Label("Run Command", systemImage: "play.fill")
+                        Label(adbTVLocalized("Run Command"), systemImage: "play.fill")
                             .labelStyle(.iconOnly)
                     }
                     .adbTVProminentButton()
@@ -561,7 +560,7 @@ struct ADBTVDeviceToolsPanel: View {
                         deviceOperationInProgress
                             || shellCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                     )
-                    .help("Run Command")
+                    .help(adbTVLocalized("Run Command"))
                 }
 
                 if state.submittedShellCommand != nil {
@@ -570,7 +569,7 @@ struct ADBTVDeviceToolsPanel: View {
 
                 switch state.shellStatus {
                 case .running:
-                    progressRow("Running shell command")
+                    progressRow(adbTVLocalized("Running shell command"))
                 case .failed(let userMessage, let diagnosticDetail):
                     failureView(userMessage, diagnosticDetail: diagnosticDetail)
                 case .idle, .finished:
@@ -585,7 +584,7 @@ struct ADBTVDeviceToolsPanel: View {
             isShellExpanded.toggle()
         } label: {
             HStack {
-                Label("ADB Shell", systemImage: "terminal")
+                Label(adbTVLocalized("ADB Shell"), systemImage: "terminal")
                     .font(.headline)
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -597,7 +596,7 @@ struct ADBTVDeviceToolsPanel: View {
         }
         .buttonStyle(.plain)
         .disabled(state.shellStatus == .running)
-        .accessibilityValue(isShellExpanded ? "Expanded" : "Collapsed")
+        .accessibilityValue(isShellExpanded ? adbTVLocalized("Expanded") : adbTVLocalized("Collapsed"))
     }
 
     private var commandsMenu: some View {
@@ -611,7 +610,7 @@ struct ADBTVDeviceToolsPanel: View {
                 }
             }
         } label: {
-            Label("Commands", systemImage: "list.bullet.rectangle")
+            Label(adbTVLocalized("Commands"), systemImage: "list.bullet.rectangle")
                 .frame(
                     maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil,
                     alignment: .leading
@@ -619,7 +618,7 @@ struct ADBTVDeviceToolsPanel: View {
         }
         .buttonStyle(.bordered)
         .disabled(deviceOperationInProgress)
-        .help("Built-in Commands")
+        .help(adbTVLocalized("Built-in Commands"))
     }
 
     private var shellTranscript: some View {
@@ -632,18 +631,18 @@ struct ADBTVDeviceToolsPanel: View {
                         .textSelection(.enabled)
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Submitted command")
+                .accessibilityLabel(adbTVLocalized("Submitted command"))
                 .accessibilityValue(command)
             }
 
             if let result = state.shellResult {
                 Divider()
                 HStack {
-                    Text("Output")
+                    Text(adbTVLocalized("Output"))
                         .font(.subheadline.weight(.semibold))
                     Spacer()
                     Label(
-                        "Exit \(result.exitCode)",
+                        adbTVLocalized("Exit %@", String(describing: result.exitCode)),
                         systemImage: result.exitCode == 0
                             ? "checkmark.circle.fill"
                             : "exclamationmark.circle.fill"
@@ -673,14 +672,14 @@ struct ADBTVDeviceToolsPanel: View {
     @ViewBuilder
     private var shellCommandField: some View {
 #if os(iOS)
-        TextField("Command", text: $shellCommand)
+        TextField(adbTVLocalized("Command"), text: $shellCommand)
             .font(.body.monospaced())
             .autocorrectionDisabled()
             .textInputAutocapitalization(.never)
             .submitLabel(.send)
             .onSubmit(runShell)
 #else
-        TextField("Command", text: $shellCommand, axis: .vertical)
+        TextField(adbTVLocalized("Command"), text: $shellCommand, axis: .vertical)
             .font(.body.monospaced())
             .lineLimit(1 ... 4)
             .autocorrectionDisabled()
@@ -695,7 +694,7 @@ struct ADBTVDeviceToolsPanel: View {
                 .foregroundStyle(.secondary)
             Spacer(minLength: 8)
             Button(action: cancel) {
-                Label("Cancel", systemImage: "xmark")
+                Label(adbTVLocalized("Cancel"), systemImage: "xmark")
             }
             .buttonStyle(.bordered)
         }
@@ -725,7 +724,7 @@ struct ADBTVDeviceToolsPanel: View {
         guard !information.device.sdkVersion.isEmpty else {
             return information.device.androidVersion
         }
-        return "\(information.device.androidVersion) (API \(information.device.sdkVersion))"
+        return adbTVLocalized("%@ (API %@)", String(describing: information.device.androidVersion), String(describing: information.device.sdkVersion))
     }
 
     private func formattedBytes(_ byteCount: Int64) -> String {
@@ -738,12 +737,12 @@ struct ADBTVDeviceToolsPanel: View {
         let hours = totalMinutes % (24 * 60) / 60
         let minutes = totalMinutes % 60
         if days > 0 {
-            return "\(days)d \(hours)h"
+            return adbTVLocalized("%@d %@h", days.formatted(), hours.formatted())
         }
         if hours > 0 {
-            return "\(hours)h \(minutes)m"
+            return adbTVLocalized("%@h %@m", hours.formatted(), minutes.formatted())
         }
-        return "\(minutes)m"
+        return adbTVLocalized("%@m", minutes.formatted())
     }
 
     private var screenshotAspectRatio: CGFloat {
@@ -755,10 +754,10 @@ struct ADBTVDeviceToolsPanel: View {
 
     private var shellOutputText: String {
         guard let result = state.shellResult else {
-            return "No output"
+            return adbTVLocalized("No output")
         }
         return result.output.utf8String.isEmpty
-            ? "(command produced no output)"
+            ? adbTVLocalized("(command produced no output)")
             : result.output.utf8String
     }
 

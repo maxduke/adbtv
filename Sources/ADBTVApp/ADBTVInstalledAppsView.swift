@@ -10,11 +10,11 @@ private extension ADBTVAppsMode {
     var emptyTitle: String {
         switch self {
         case .user:
-            return "No User Apps"
+            return adbTVLocalized("No User Apps")
         case .system:
-            return "No System Apps"
+            return adbTVLocalized("No System Apps")
         case .active:
-            return "No Active Apps"
+            return adbTVLocalized("No Active Apps")
         }
     }
 }
@@ -57,33 +57,33 @@ struct InstalledAppsPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Apps")
+                Text(adbTVLocalized("Apps"))
                     .font(.title2.bold())
                 Spacer()
                 Menu {
                     Button(action: showInstaller) {
-                        Label("Install Package", systemImage: "square.and.arrow.down")
+                        Label(adbTVLocalized("Install Package"), systemImage: "square.and.arrow.down")
                     }
                     Button(action: installHelper) {
-                        Label("Install Android Helper", systemImage: "arrow.down.app")
+                        Label(adbTVLocalized("Install Android Helper"), systemImage: "arrow.down.app")
                     }
                 } label: {
-                    Label("Add App", systemImage: "plus")
+                    Label(adbTVLocalized("Add App"), systemImage: "plus")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
                 .disabled(deviceOperationInProgress || state.status.isBusy)
-                .help("Add App")
+                .help(adbTVLocalized("Add App"))
                 Button { selectMode(state.mode) } label: {
-                    Label("Refresh Apps", systemImage: "arrow.clockwise")
+                    Label(adbTVLocalized("Refresh Apps"), systemImage: "arrow.clockwise")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
                 .disabled(deviceOperationInProgress || state.status.isBusy)
-                .help("Refresh Apps")
+                .help(adbTVLocalized("Refresh Apps"))
             }
 
-            Picker("App View", selection: Binding(
+            Picker(adbTVLocalized("App View"), selection: Binding(
                 get: { state.mode },
                 set: selectMode
             )) {
@@ -99,7 +99,7 @@ struct InstalledAppsPanel: View {
                     && !state.status.isActivityRefresh
             )
 
-            TextField("Search apps or packages", text: $searchText)
+            TextField(adbTVLocalized("Search apps or packages"), text: $searchText)
                 .autocorrectionDisabled()
 #if os(iOS)
                 .textInputAutocapitalization(.never)
@@ -122,11 +122,11 @@ struct InstalledAppsPanel: View {
                 }
             } else if let emptyState = state.emptyState(matching: searchText) {
                 ContentUnavailableView(
-                    emptyState == .noApps ? state.mode.emptyTitle : "No Matching Apps",
+                    emptyState == .noApps ? state.mode.emptyTitle : adbTVLocalized("No Matching Apps"),
                     systemImage: emptyState == .noApps ? "square.grid.2x2" : "magnifyingglass"
                 )
             } else if !state.hasSnapshot, case .ready = state.status {
-                Button("Load Apps") { selectMode(state.mode) }
+                Button(adbTVLocalized("Load Apps")) { selectMode(state.mode) }
                     .buttonStyle(.bordered)
                     .disabled(deviceOperationInProgress)
             }
@@ -139,11 +139,11 @@ struct InstalledAppsPanel: View {
         .task(id: "\(state.deviceID?.uuidString ?? "none")/\(state.userID.map(String.init) ?? "none")") {
             loadPinnedApps()
         }
-        .alert("Quick Launch", isPresented: Binding(
+        .alert(adbTVLocalized("Quick Launch"), isPresented: Binding(
             get: { pinFailure != nil },
             set: { if !$0 { pinFailure = nil } }
         ), presenting: pinFailure) { _ in
-            Button("OK", role: .cancel) {}
+            Button(adbTVLocalized("OK"), role: .cancel) {}
         } message: { failure in
             Text(failure.summary)
         }
@@ -154,45 +154,43 @@ struct InstalledAppsPanel: View {
             selectedPackage = nil
         }
         .confirmationDialog(
-            "Force Stop App?",
+            adbTVLocalized("Force Stop App?"),
             isPresented: Binding(
                 get: { pendingForceStop != nil },
                 set: { if !$0 { pendingForceStop = nil } }
             ),
             presenting: pendingForceStop
         ) { package in
-            Button("Force Stop \(appTitle(for: package))", role: .destructive) {
+            Button(adbTVLocalized("Force Stop %@", String(describing: appTitle(for: package))), role: .destructive) {
                 forceStop(package)
                 pendingForceStop = nil
             }
         } message: { package in
             if appKind(for: package) == .system {
                 Text(
-                    "This is a system app. Stopping it may temporarily affect TV features, "
-                        + "and Android may restart it."
+                    adbTVLocalized("This is a system app. Stopping it may temporarily affect TV features, and Android may restart it.")
                 )
             } else {
                 Text(
-                    "This stops the app, background activity, and playback without "
-                        + "removing its data."
+                    adbTVLocalized("This stops the app, background activity, and playback without removing its data.")
                 )
             }
         }
         .alert(
-            pendingUninstall.map { "Uninstall \(appTitle(for: $0))?" } ?? "Uninstall App?",
+            pendingUninstall.map { adbTVLocalized("Uninstall %@?", String(describing: appTitle(for: $0))) } ?? adbTVLocalized("Uninstall App?"),
             isPresented: Binding(
                 get: { pendingUninstall != nil },
                 set: { if !$0 { pendingUninstall = nil } }
             ),
             presenting: pendingUninstall
         ) { package in
-            Button("Uninstall", role: .destructive) {
+            Button(adbTVLocalized("Uninstall"), role: .destructive) {
                 uninstall(package)
                 pendingUninstall = nil
             }
-            Button("Cancel", role: .cancel) { pendingUninstall = nil }
+            Button(adbTVLocalized("Cancel"), role: .cancel) { pendingUninstall = nil }
         } message: { package in
-            Text("This removes \(appTitle(for: package)) and its app data for the current TV user.\n\n\(package.packageName)")
+            Text(adbTVLocalized("This removes %@ and its app data for the current TV user.\n\n%@", String(describing: appTitle(for: package)), String(describing: package.packageName)))
         }
         .sheet(item: $selectedPackage) { package in
             InstalledAppDetailsView(
@@ -221,20 +219,20 @@ struct InstalledAppsPanel: View {
         case .loading:
             HStack(spacing: 8) {
                 ProgressView()
-                Text("Loading app names and icons")
+                Text(adbTVLocalized("Loading app names and icons"))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         case .helperUnavailable:
-            Text("Install the Android Helper to show app names and icons.")
+            Text(adbTVLocalized("Install the Android Helper to show app names and icons."))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         case .failed(let failure):
             if state.userID != nil {
                 VStack(alignment: .leading, spacing: 8) {
-                    Label("Some app names and icons could not be loaded.", systemImage: "exclamationmark.triangle")
+                    Label(adbTVLocalized("Some app names and icons could not be loaded."), systemImage: "exclamationmark.triangle")
                         .font(.footnote)
-                    Button("Retry App Details", action: retryDetails)
+                    Button(adbTVLocalized("Retry App Details"), action: retryDetails)
                         .disabled(deviceOperationInProgress || state.status.isBusy)
                     DiagnosticDisclosure(diagnosticDetail: DiagnosticDetail(
                         summary: failure,
@@ -244,7 +242,7 @@ struct InstalledAppsPanel: View {
             }
         case .idle:
             if !state.pendingDetailsPackages.isEmpty {
-                Button("Load App Names and Icons", action: retryDetails)
+                Button(adbTVLocalized("Load App Names and Icons"), action: retryDetails)
                     .disabled(deviceOperationInProgress || state.status.isBusy || state.userID == nil)
             }
         case .ready:
@@ -258,29 +256,29 @@ struct InstalledAppsPanel: View {
         case .idle:
             EmptyView()
         case .loading:
-            progressLabel("Loading installed apps", cancel: cancel)
+            progressLabel(adbTVLocalized("Loading installed apps"), cancel: cancel)
         case .loadingActivity:
-            progressLabel("Refreshing active apps", cancel: cancel)
+            progressLabel(adbTVLocalized("Refreshing active apps"), cancel: cancel)
         case .loadingSystemControl:
-            progressLabel("Loading system controls", cancel: cancel)
+            progressLabel(adbTVLocalized("Loading system controls"), cancel: cancel)
         case .launching(let package):
-            progressLabel("Launching \(appTitle(for: package))", cancel: cancel)
+            progressLabel(adbTVLocalized("Launching %@", String(describing: appTitle(for: package))), cancel: cancel)
         case .stopping(let package):
-            progressLabel("Stopping \(appTitle(for: package))", cancel: cancel)
+            progressLabel(adbTVLocalized("Stopping %@", String(describing: appTitle(for: package))), cancel: cancel)
         case .uninstalling(let package):
-            progressLabel("Uninstalling \(appTitle(for: package))", cancel: cancel)
+            progressLabel(adbTVLocalized("Uninstalling %@", String(describing: appTitle(for: package))), cancel: cancel)
         case .openingSettings(let package):
             progressLabel(
-                "Opening App Settings for \(appTitle(for: package))",
+                adbTVLocalized("Opening App Settings for %@", String(describing: appTitle(for: package))),
                 cancel: cancel
             )
         case .clearingData(let package):
-            progressLabel("Clearing data for \(appTitle(for: package))", cancel: cancel)
+            progressLabel(adbTVLocalized("Clearing data for %@", String(describing: appTitle(for: package))), cancel: cancel)
         case .disabling(let package):
-            progressLabel("Disabling \(appTitle(for: package))", cancel: cancel)
+            progressLabel(adbTVLocalized("Disabling %@", String(describing: appTitle(for: package))), cancel: cancel)
         case .restoringDefault(let package):
             progressLabel(
-                "Restoring \(appTitle(for: package)) to Android default",
+                adbTVLocalized("Restoring %@ to Android default", String(describing: appTitle(for: package))),
                 cancel: cancel
             )
         case .ready(let message):
@@ -293,7 +291,7 @@ struct InstalledAppsPanel: View {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                 Button { selectMode(state.mode) } label: {
-                    Label("Reload Apps", systemImage: "arrow.clockwise")
+                    Label(adbTVLocalized("Reload Apps"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
                 .disabled(deviceOperationInProgress)
@@ -308,7 +306,7 @@ struct InstalledAppsPanel: View {
             HStack(spacing: 6) {
                 Image(systemName: "clock")
                     .foregroundStyle(.secondary)
-                Text("Updated")
+                Text(adbTVLocalized("Updated"))
                     .foregroundStyle(.secondary)
                 Text(snapshot.capturedAt, style: .relative)
                     .foregroundStyle(.secondary)
@@ -319,7 +317,7 @@ struct InstalledAppsPanel: View {
             if snapshot.diagnostics.isPartial {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(
-                        "Some activity details are unavailable.",
+                        adbTVLocalized("Some activity details are unavailable."),
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(.orange)
@@ -356,7 +354,7 @@ struct InstalledAppsPanel: View {
                 .lineLimit(2)
             Spacer(minLength: 8)
             Button(action: cancel) {
-                Label("Cancel", systemImage: "xmark")
+                Label(adbTVLocalized("Cancel"), systemImage: "xmark")
             }
             .buttonStyle(.bordered)
         }
@@ -407,15 +405,15 @@ struct InstalledAppsPanel: View {
                 Button {
                     selectPackage(package)
                 } label: {
-                    Label("Details", systemImage: "info.circle")
+                    Label(adbTVLocalized("Details"), systemImage: "info.circle")
                 }
 
                 let isPinned = pinnedApps.contains { $0.packageName == package.packageName }
                 Button { togglePin(package) } label: {
                     Label(
-                        isPinned ? "Remove from Quick Launch"
+                        isPinned ? adbTVLocalized("Remove from Quick Launch")
                             : pinnedApps.count >= ADBTVQuickLaunchStore.maximumAppCount
-                                ? "Quick Launch Full (6)" : "Pin to Remote",
+                                ? adbTVLocalized("Quick Launch Full (6)") : adbTVLocalized("Pin to Remote"),
                         systemImage: isPinned ? "pin.slash" : "pin"
                     )
                 }
@@ -427,7 +425,7 @@ struct InstalledAppsPanel: View {
                 Button {
                     launch(package)
                 } label: {
-                    Label("Launch", systemImage: "play.fill")
+                    Label(adbTVLocalized("Launch"), systemImage: "play.fill")
                 }
                 .disabled(
                     deviceOperationInProgress
@@ -443,7 +441,7 @@ struct InstalledAppsPanel: View {
                     } label: {
                         Label(
                             activity == nil && details?.isStopped == true
-                                ? "Stopped" : "Force Stop",
+                                ? adbTVLocalized("Stopped") : adbTVLocalized("Force Stop"),
                             systemImage: activity == nil && details?.isStopped == true
                                 ? "stop.circle.fill" : "stop.circle"
                         )
@@ -463,16 +461,16 @@ struct InstalledAppsPanel: View {
                     Button(role: .destructive) {
                         pendingUninstall = package
                     } label: {
-                        Label("Uninstall", systemImage: "trash")
+                        Label(adbTVLocalized("Uninstall"), systemImage: "trash")
                     }
                     .disabled(deviceOperationInProgress || state.status.isBusy || state.userID == nil)
                 }
             } label: {
-                Label("Actions for \(package.packageName)", systemImage: "ellipsis")
+                Label(adbTVLocalized("Actions for %@", String(describing: package.packageName)), systemImage: "ellipsis")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.bordered)
-            .help("App Actions")
+            .help(adbTVLocalized("App Actions"))
         }
         .padding(.vertical, 8)
     }
@@ -503,7 +501,7 @@ struct InstalledAppsPanel: View {
                         .foregroundStyle(activity.isForeground ? .primary : .secondary)
                         .lineLimit(2)
                 } else if systemState(for: package) == .disabled {
-                    Label("Disabled", systemImage: "pause.circle.fill")
+                    Label(adbTVLocalized("Disabled"), systemImage: "pause.circle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -514,7 +512,7 @@ struct InstalledAppsPanel: View {
     }
 
     private func activityMemory(_ activity: ADBTVActiveApp) -> some View {
-        Text(activity.memoryByteCount.map(Self.formattedBytes) ?? "Unavailable")
+        Text(activity.memoryByteCount.map(Self.formattedBytes) ?? adbTVLocalized("Unavailable"))
             .font(.subheadline.monospacedDigit())
             .foregroundStyle(activity.memoryByteCount == nil ? .secondary : .primary)
             .frame(
@@ -556,7 +554,7 @@ struct InstalledAppsPanel: View {
             }
         } catch {
             pinFailure = DiagnosticDetail(summary: (error as? ADBTVQuickLaunchError)?.userMessage
-                ?? "Could not save Quick Launch apps.")
+                ?? adbTVLocalized("Could not save Quick Launch apps."))
         }
     }
 
@@ -601,10 +599,10 @@ struct InstalledAppsPanel: View {
     }
 
     private func activityStatus(_ activity: ADBTVActiveApp) -> String {
-        let state = activity.isForeground ? "Foreground" : "Background"
-        let kind = activity.kind == .user ? "User" : "System"
+        let state = activity.isForeground ? adbTVLocalized("Foreground") : adbTVLocalized("Background")
+        let kind = activity.kind == .user ? adbTVLocalized("User") : adbTVLocalized("System")
         let processes = activity.processCount == 1
-            ? "1 process" : "\(activity.processCount) processes"
+            ? adbTVLocalized("1 process") : adbTVLocalized("%@ processes", activity.processCount.formatted())
         return "\(state) | \(kind) | \(processes)"
     }
 
@@ -613,14 +611,14 @@ struct InstalledAppsPanel: View {
         details: ADBTVInstalledAppDetails?,
         activity: ADBTVActiveApp?
     ) -> String {
-        var values = ["Show details for \(details?.displayName ?? package.packageName)"]
+        var values = [adbTVLocalized("Show details for %@", String(describing: details?.displayName ?? package.packageName))]
         if let activity {
             values.append(activityStatus(activity))
             values.append(
-                activity.memoryByteCount.map(Self.formattedBytes) ?? "Memory unavailable"
+                activity.memoryByteCount.map(Self.formattedBytes) ?? adbTVLocalized("Memory unavailable")
             )
         } else if systemState(for: package) == .disabled {
-            values.append("Disabled")
+            values.append(adbTVLocalized("Disabled"))
         }
         return values.joined(separator: ", ")
     }
@@ -660,14 +658,14 @@ private struct InstalledAppDetailsView: View {
 
     @State private var confirmsForceStop = false
     @State private var confirmsUninstall = ProcessInfo.processInfo.arguments.contains("--ui-uninstall-confirm")
-    @State private var confirmsClearData = false
-    @State private var confirmsDisable = false
-    @State private var confirmsRestoreDefault = false
+    @State private var confirmsClearData = ProcessInfo.processInfo.arguments.contains("--ui-clear-data-confirm")
+    @State private var confirmsDisable = ProcessInfo.processInfo.arguments.contains("--ui-disable-confirm")
+    @State private var confirmsRestoreDefault = ProcessInfo.processInfo.arguments.contains("--ui-restore-confirm")
 
     var body: some View {
         NavigationStack {
             List {
-                Section("Package Identifier") {
+                Section(adbTVLocalized("Package Identifier")) {
                     VStack(alignment: .leading, spacing: 12) {
                         if dynamicTypeSize.isAccessibilitySize {
                             HStack {
@@ -701,26 +699,26 @@ private struct InstalledAppDetailsView: View {
                 }
 
                 if let activity {
-                    Section("Activity") {
+                    Section(adbTVLocalized("Activity")) {
                         LabeledContent(
-                            "Status",
-                            value: activity.isForeground ? "Foreground" : "Background"
+                            adbTVLocalized("Status"),
+                            value: activity.isForeground ? adbTVLocalized("Foreground") : adbTVLocalized("Background")
                         )
                         LabeledContent(
-                            "Memory",
+                            adbTVLocalized("Memory"),
                             value: activity.memoryByteCount.map {
                                 ByteCountFormatter.string(
                                     fromByteCount: $0,
                                     countStyle: .memory
                                 )
-                            } ?? "Unavailable"
+                            } ?? adbTVLocalized("Unavailable")
                         )
                         LabeledContent(
-                            "Processes",
+                            adbTVLocalized("Processes"),
                             value: String(activity.processCount)
                         )
                         if let activityCapturedAt {
-                            LabeledContent("Updated") {
+                            LabeledContent(adbTVLocalized("Updated")) {
                                 Text(activityCapturedAt, style: .relative)
                             }
                         }
@@ -728,16 +726,16 @@ private struct InstalledAppDetailsView: View {
                 }
 
                 if hasMetadata {
-                    Section("Information") {
+                    Section(adbTVLocalized("Information")) {
                         if let versionName = details?.versionName {
-                            LabeledContent("Version", value: versionName)
+                            LabeledContent(adbTVLocalized("Version"), value: versionName)
                         }
                         if let versionCode = details?.versionCode {
-                            LabeledContent("Version Code", value: String(versionCode))
+                            LabeledContent(adbTVLocalized("Version Code"), value: String(versionCode))
                         }
                         if let apkByteCount = details?.apkByteCount {
                             LabeledContent(
-                                "APK Size",
+                                adbTVLocalized("APK Size"),
                                 value: ByteCountFormatter.string(
                                     fromByteCount: apkByteCount,
                                     countStyle: .file
@@ -745,12 +743,12 @@ private struct InstalledAppDetailsView: View {
                             )
                         }
                         if let firstInstallDate = details?.firstInstallDate {
-                            LabeledContent("Installed") {
+                            LabeledContent(adbTVLocalized("Installed")) {
                                 Text(firstInstallDate, style: .date)
                             }
                         }
                         if let lastUpdateDate = details?.lastUpdateDate {
-                            LabeledContent("Updated") {
+                            LabeledContent(adbTVLocalized("Updated")) {
                                 Text(lastUpdateDate, style: .date)
                             }
                         }
@@ -763,12 +761,12 @@ private struct InstalledAppDetailsView: View {
                     unavailableSystemControlSection
                 }
 
-                Section("App Maintenance") {
+                Section(adbTVLocalized("App Maintenance")) {
                     Button {
                         dismiss()
                         openSettings(package)
                     } label: {
-                        Label("Open App Settings on TV", systemImage: "gearshape")
+                        Label(adbTVLocalized("Open App Settings on TV"), systemImage: "gearshape")
                     }
                     .disabled(actionsDisabled)
 
@@ -776,7 +774,7 @@ private struct InstalledAppDetailsView: View {
                         Button(role: .destructive) {
                             confirmsClearData = true
                         } label: {
-                            Label("Clear App Data", systemImage: "eraser")
+                            Label(adbTVLocalized("Clear App Data"), systemImage: "eraser")
                                 .foregroundStyle(.red)
                         }
                         .disabled(actionsDisabled)
@@ -788,7 +786,7 @@ private struct InstalledAppDetailsView: View {
                         dismiss()
                         launch(package)
                     } label: {
-                        Label("Launch App", systemImage: "play.fill")
+                        Label(adbTVLocalized("Launch App"), systemImage: "play.fill")
                     }
                     .disabled(
                         actionsDisabled
@@ -800,7 +798,7 @@ private struct InstalledAppDetailsView: View {
                         confirmsForceStop = true
                     } label: {
                         Label(
-                            isStopped ? "Stopped" : "Force Stop",
+                            isStopped ? adbTVLocalized("Stopped") : adbTVLocalized("Force Stop"),
                             systemImage: isStopped
                                 ? "stop.circle.fill" : "stop.circle"
                         )
@@ -817,7 +815,7 @@ private struct InstalledAppDetailsView: View {
                         Button(role: .destructive) {
                             confirmsUninstall = true
                         } label: {
-                            Label("Uninstall App", systemImage: "trash")
+                            Label(adbTVLocalized("Uninstall App"), systemImage: "trash")
                                 .foregroundStyle(.red)
                         }
                         .disabled(actionsDisabled)
@@ -825,104 +823,103 @@ private struct InstalledAppDetailsView: View {
                 }
             }
             .labeledContentStyle(ADBTVAdaptiveLabeledContentStyle())
-            .navigationTitle(details?.displayName ?? "App Details")
+            .navigationTitle(details?.displayName ?? adbTVLocalized("App Details"))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
+                    Button(adbTVLocalized("Done")) {
                         dismiss()
                     }
                 }
             }
-            .confirmationDialog(
-                "Clear App Data?",
+            .alert(
+                adbTVLocalized("Clear Data for %@?", appTitle),
                 isPresented: $confirmsClearData
             ) {
-                Button("Clear Data for \(appTitle)", role: .destructive) {
+                Button(adbTVLocalized("Clear Data"), role: .destructive) {
                     dismiss()
                     clearData(package)
                 }
+                Button(adbTVLocalized("Cancel"), role: .cancel) {}
             } message: {
                 Text(
-                    "\(package.packageName)\n\nThis permanently removes accounts, "
-                        + "settings, downloads, and other data stored by this app. "
-                        + "The app remains installed."
+                    adbTVLocalized("%@\n\nThis permanently removes accounts, settings, downloads, and other data stored by this app. The app remains installed.", String(describing: package.packageName))
                 )
             }
-            .confirmationDialog(
-                "Disable System App?",
+            .alert(
+                adbTVLocalized("Disable %@?", appTitle),
                 isPresented: $confirmsDisable
             ) {
-                Button("Disable \(appTitle)", role: .destructive) {
+                Button(adbTVLocalized("Disable"), role: .destructive) {
                     guard let userID = systemSnapshot?.userID else {
                         return
                     }
                     dismiss()
                     disableSystemApp(package, userID)
                 }
+                Button(adbTVLocalized("Cancel"), role: .cancel) {}
             } message: {
                 Text(
-                    "\(package.packageName)\n\nTV features or other apps may stop working. "
-                        + "The app and its data will remain installed."
+                    adbTVLocalized("%@\n\nTV features or other apps may stop working. The app and its data will remain installed.", String(describing: package.packageName))
                 )
             }
-            .confirmationDialog(
-                "Restore Android Default?",
+            .alert(
+                adbTVLocalized("Restore Android Default?"),
                 isPresented: $confirmsRestoreDefault
             ) {
-                Button("Restore Android Default") {
+                Button(adbTVLocalized("Restore")) {
                     guard let userID = systemSnapshot?.userID else {
                         return
                     }
                     dismiss()
                     restoreSystemAppDefault(package, userID)
                 }
+                Button(adbTVLocalized("Cancel"), role: .cancel) {}
             } message: {
                 Text(
-                    "This removes the per-user override for \(package.packageName). "
-                        + "Android may enable an app disabled by the manufacturer or another tool."
+                    adbTVLocalized("This removes the per-user override for %@. Android may enable an app disabled by the manufacturer or another tool.", String(describing: package.packageName))
                 )
             }
             .confirmationDialog(
-                "Force Stop App?",
+                adbTVLocalized("Force Stop App?"),
                 isPresented: $confirmsForceStop
             ) {
-                Button("Force Stop", role: .destructive) {
+                Button(adbTVLocalized("Force Stop"), role: .destructive) {
                     dismiss()
                     forceStop(package)
                 }
             } message: {
                 if appKind == .user {
-                    Text("This stops the app, background activity, and playback without removing its data.")
+                    Text(adbTVLocalized("This stops the app, background activity, and playback without removing its data."))
                 } else {
-                    Text("This is a system app. Stopping it may temporarily affect TV features, and Android may restart it.")
+                    Text(adbTVLocalized("This is a system app. Stopping it may temporarily affect TV features, and Android may restart it."))
                 }
             }
             .alert(
-                "Uninstall \(appTitle)?",
+                adbTVLocalized("Uninstall %@?", String(describing: appTitle)),
                 isPresented: $confirmsUninstall
             ) {
-                Button("Uninstall", role: .destructive) {
+                Button(adbTVLocalized("Uninstall"), role: .destructive) {
                     dismiss()
                     uninstall(package)
                 }
-                Button("Cancel", role: .cancel) {}
+                Button(adbTVLocalized("Cancel"), role: .cancel) {}
             } message: {
-                Text("This removes \(appTitle) and its app data for the current TV user.\n\n\(package.packageName)")
+                Text(adbTVLocalized("This removes %@ and its app data for the current TV user.\n\n%@", String(describing: appTitle), String(describing: package.packageName)))
             }
         }
     }
 
     @ViewBuilder
     private var unavailableSystemControlSection: some View {
-        Section("System Control") {
+        Section(adbTVLocalized("System Control")) {
             switch systemControlStatus {
             case .loadingSystemControl:
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Loading system controls")
+                    Text(adbTVLocalized("Loading system controls"))
                         .foregroundStyle(.secondary)
                 }
             case .failed(let userMessage, let diagnosticDetail):
@@ -933,7 +930,7 @@ private struct InstalledAppDetailsView: View {
                 }
             default:
                 Label(
-                    "System controls are unavailable for this snapshot.",
+                    adbTVLocalized("System controls are unavailable for this snapshot."),
                     systemImage: "shield.slash"
                 )
                 .foregroundStyle(.secondary)
@@ -943,32 +940,32 @@ private struct InstalledAppDetailsView: View {
 
     private var copyPackageButton: some View {
         Button(action: copyPackageName) {
-            Label("Copy Package Identifier", systemImage: "doc.on.doc")
+            Label(adbTVLocalized("Copy Package Identifier"), systemImage: "doc.on.doc")
                 .labelStyle(.iconOnly)
         }
         .buttonStyle(.borderless)
-        .help("Copy Package Identifier")
+        .help(adbTVLocalized("Copy Package Identifier"))
     }
 
     @ViewBuilder
     private var systemControlSection: some View {
-        Section("System Control") {
+        Section(adbTVLocalized("System Control")) {
             VStack(alignment: .leading, spacing: 10) {
                 Label(
-                    systemState == .disabled ? "Disabled" : "Enabled",
+                    systemState == .disabled ? adbTVLocalized("Disabled") : adbTVLocalized("Enabled"),
                     systemImage: systemState == .disabled
                         ? "pause.circle.fill" : "checkmark.circle.fill"
                 )
                 .foregroundStyle(systemState == .disabled ? Color.orange : Color.accentColor)
 
                 if systemState == .disabled {
-                    Text("Restore Android's package default without removing app data.")
+                    Text(adbTVLocalized("Restore Android's package default without removing app data."))
                         .foregroundStyle(.secondary)
                     Button {
                         confirmsRestoreDefault = true
                     } label: {
                         Label(
-                            "Restore Android Default",
+                            adbTVLocalized("Restore Android Default"),
                             systemImage: "arrow.uturn.backward.circle"
                         )
                     }
@@ -978,7 +975,7 @@ private struct InstalledAppDetailsView: View {
                         .foregroundStyle(.secondary)
                 } else if let failure = systemSnapshot?.safetyCheckFailureDescription {
                     Label(
-                        "Disable is unavailable because safety checks failed.",
+                        adbTVLocalized("Disable is unavailable because safety checks failed."),
                         systemImage: "shield.slash"
                     )
                         .foregroundStyle(.orange)
@@ -992,7 +989,7 @@ private struct InstalledAppDetailsView: View {
                     Button(role: .destructive) {
                         confirmsDisable = true
                     } label: {
-                        Label("Disable System App", systemImage: "pause.circle")
+                        Label(adbTVLocalized("Disable System App"), systemImage: "pause.circle")
                             .foregroundStyle(.red)
                     }
                     .disabled(actionsDisabled)
@@ -1040,15 +1037,15 @@ private extension ADBTVInstalledAppProtectionReason {
     var explanation: String {
         switch self {
         case .androidCore:
-            return "Protected because Android requires this package."
+            return adbTVLocalized("Protected because Android requires this package.")
         case .ecosystemInfrastructure:
-            return "Protected because core Google services require this package."
+            return adbTVLocalized("Protected because core Google services require this package.")
         case .activeLauncher:
-            return "Protected because this is the active TV launcher."
+            return adbTVLocalized("Protected because this is the active TV launcher.")
         case .settings:
-            return "Protected because this provides Android Settings."
+            return adbTVLocalized("Protected because this provides Android Settings.")
         case .activeInputMethod:
-            return "Protected because this is the active input method."
+            return adbTVLocalized("Protected because this is the active input method.")
         }
     }
 }

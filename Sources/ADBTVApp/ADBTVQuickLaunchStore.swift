@@ -25,15 +25,15 @@ enum ADBTVQuickLaunchError: Error, Equatable {
     var userMessage: String {
         switch self {
         case .invalidArchive:
-            return "Saved Quick Launch apps could not be read. Existing preferences were preserved."
+            return adbTVLocalized("Saved Quick Launch apps could not be read. Existing preferences were preserved.")
         case .invalidUser:
-            return "The TV user could not be verified. Refresh Quick Launch and try again."
+            return adbTVLocalized("The TV user could not be verified. Refresh Quick Launch and try again.")
         case .limitReached:
-            return "You can pin up to six apps for each TV user. Remove an app before adding another."
+            return adbTVLocalized("You can pin up to six apps for each TV user. Remove an app before adding another.")
         case .changedOrder:
-            return "Pinned apps changed. Reopen Manage to reorder the current list."
+            return adbTVLocalized("Pinned apps changed. Reopen Manage to reorder the current list.")
         case .deviceBusy:
-            return "Another TV operation is in progress. Try again when it finishes."
+            return adbTVLocalized("Another TV operation is in progress. Try again when it finishes.")
         }
     }
 }

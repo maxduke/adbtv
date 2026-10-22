@@ -85,6 +85,13 @@ if ! /usr/bin/grep -q 'ADB TV Noncommercial Source License 1.0' "$OPEN_SOURCE_NO
   echo "Built app has incomplete legal notices" >&2
   exit 1
 fi
+for language in en zh-Hans; do
+  LOCALIZED_STRINGS="$(/usr/bin/find "$APP_PATH" -type f -ipath "*/$language.lproj/Localizable.strings" -print -quit)"
+  if [[ ! -s "$APP_PATH/$language.lproj/InfoPlist.strings" || -z "$LOCALIZED_STRINGS" ]]; then
+    echo "Built app is missing $language localization resources" >&2
+    exit 1
+  fi
+done
 if [[ -n "$EXPECTED_MARKETING_VERSION" \
     && "$MARKETING_VERSION" != "$EXPECTED_MARKETING_VERSION" ]]; then
   echo "Built app version $MARKETING_VERSION does not match expected version $EXPECTED_MARKETING_VERSION" >&2

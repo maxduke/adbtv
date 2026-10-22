@@ -49,6 +49,7 @@ Implemented so far:
 - verified connection repair for unreachable saved devices, with atomic endpoint replacement and duplicate protection;
 - direct first-device pairing/connection actions, persistent address/port labels, and guidance distinguishing pairing and connection ports;
 - adaptive remote controls and connection summaries for accessibility text sizes, with readable light/dark accents and prominent action fills;
+- English and Simplified Chinese UI, status messages, accessibility labels, and permission descriptions that follow the system language, with English fallback;
 - visible remote connection recovery and distinct app loading, failure, empty, and search states that retain cached lists after failed refreshes;
 - resilient Device Library loading that preserves legacy records, recovers valid entries from partial corruption, and reports rejected data without rewriting it;
 - APK or APKM source selection from the iOS Files picker;
@@ -66,6 +67,7 @@ Implemented so far:
 - file-backed single-APK transfer with at most one ADB sync frame and one 1 MiB transport batch in memory;
 - owned local package staging with cleanup after validation, success, failure, cancellation, or timeout;
 - staged shared-storage uploads that preserve an existing destination until transfer completes;
+- local search within the current TV folder and Name, Newest First, or Largest First ordering, with folders kept first;
 - TV-side upload conflict checks with explicit replacement, bounded independent staging cleanup after interruption, and visible cleanup failures;
 - cancellable folder reads and file operations, with 30-second folder/mutation and transfer-inactivity limits and a 15-minute transfer limit;
 - explicit APK-install cancellation that retains operation ownership through bounded fresh-connection staging cleanup, with cleanup failures exposed before same-source retry;
@@ -166,6 +168,19 @@ The unsigned IPA supports manual IP and port entry without special Apple capabil
 The ADB identity is a synchronizable, When Unlocked Keychain item. To reuse it across iOS devices, sign each build with the same team and bundle identifier, enable iCloud Keychain for the same Apple Account, and allow time for Keychain synchronization. Changing the team or bundle identifier creates a different Keychain access namespace and therefore a different ADB identity. Pairing still works without Keychain sync, but each isolated identity must be authorized separately by the Android TV.
 
 ## Troubleshooting
+
+The interface follows the system's preferred app language: English or Simplified
+Chinese, with English as the default fallback. Device/app names, file names,
+package identifiers, technical diagnostics, and legal notices remain unchanged.
+System permission prompts are localized when the app is installed with its
+language resources intact.
+
+In **Tools → Files**, search names in the current folder using the search field.
+Search ignores case, accents, and character width. **Sort Files** offers **Name**,
+**Newest First**, and **Largest First**; folders remain before files. Search and
+sorting use the loaded listing without additional TV requests. Refresh reloads
+the listing while retaining the current search and sort choice. A failed refresh
+preserves cached rows and reports the connection error.
 
 `PolicyDenied` means Local Network access is disabled; enable it in iOS Settings and retry. `NoAuth` is a distinct Bonjour capability denial and can indicate inconsistent entitlement signing. The default self-signed IPA hides Discovery and QR Pairing and keeps **Pair with Code** and **Add Manually** available because granting Local Network access does not add the restricted entitlement. The packaged app still declares both Android Wireless Debugging Bonjour service types, and the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
 

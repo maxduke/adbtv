@@ -11,22 +11,22 @@ enum ADBTVAppsMode: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .user:
-            return "User"
+            return adbTVLocalized("User")
         case .system:
-            return "System"
+            return adbTVLocalized("System")
         case .active:
-            return "Active"
+            return adbTVLocalized("Active")
         }
     }
 
     var accessibilityTitle: String {
         switch self {
         case .user:
-            return "User Apps"
+            return adbTVLocalized("User Apps")
         case .system:
-            return "System Apps"
+            return adbTVLocalized("System Apps")
         case .active:
-            return "Active Apps"
+            return adbTVLocalized("Active Apps")
         }
     }
 
@@ -234,7 +234,7 @@ struct ADBTVInstalledAppsViewState: Equatable {
             return Self(
                 deviceID: deviceID,
                 status: .failed(
-                    userMessage: "Could not load installed apps. Check the TV connection and try again.",
+                    userMessage: adbTVLocalized("Could not load installed apps. Check the TV connection and try again."),
                     diagnosticDetail: DiagnosticDetail(summary: "Preview request timed out.")
                 )
             )
@@ -325,7 +325,7 @@ struct ADBTVInstalledAppsViewState: Equatable {
 #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--ui-apps-refresh-failed") {
             state.status = .failed(
-                userMessage: "Could not refresh apps. Showing the previous list.",
+                userMessage: adbTVLocalized("Could not refresh apps. Showing the previous list."),
                 diagnosticDetail: DiagnosticDetail(summary: "Preview refresh timed out.")
             )
         }

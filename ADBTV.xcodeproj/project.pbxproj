@@ -11,6 +11,7 @@
 		010000000000000000000003 /* ADBTVApp in Frameworks */ = {isa = PBXBuildFile; productRef = 010000000000000000000004 /* ADBTVApp */; };
 		010000000000000000000017 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 010000000000000000000018 /* Assets.xcassets */; };
 		010000000000000000000019 /* ADBTVInput.apk in Resources */ = {isa = PBXBuildFile; fileRef = 01000000000000000000001A /* ADBTVInput.apk */; };
+		01000000000000000000001B /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 01000000000000000000001C /* InfoPlist.strings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -19,6 +20,8 @@
 		010000000000000000000006 /* ADBTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ADBTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		010000000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		01000000000000000000001A /* ADBTVInput.apk */ = {isa = PBXFileReference; lastKnownFileType = file; path = Resources/ADBTVInput.apk; sourceTree = "<group>"; };
+		01000000000000000000001D /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		01000000000000000000001E /* zh-Hans */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -64,6 +67,7 @@
 				010000000000000000000018 /* Assets.xcassets */,
 				01000000000000000000001A /* ADBTVInput.apk */,
 				010000000000000000000005 /* Info.plist */,
+				01000000000000000000001C /* InfoPlist.strings */,
 			);
 			path = ADBTViOS;
 			sourceTree = "<group>";
@@ -113,6 +117,7 @@
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				"zh-Hans",
 				Base,
 			);
 			mainGroup = 010000000000000000000008;
@@ -137,6 +142,7 @@
 			files = (
 				010000000000000000000017 /* Assets.xcassets in Resources */,
 				010000000000000000000019 /* ADBTVInput.apk in Resources */,
+				01000000000000000000001B /* InfoPlist.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -152,6 +158,18 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		01000000000000000000001C /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				01000000000000000000001D /* en */,
+				01000000000000000000001E /* zh-Hans */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		010000000000000000000013 /* Debug */ = {

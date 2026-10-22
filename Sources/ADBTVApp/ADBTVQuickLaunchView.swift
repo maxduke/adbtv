@@ -29,11 +29,11 @@ struct ADBTVQuickLaunchView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("Quick Launch")
+                Text(adbTVLocalized("Quick Launch"))
                     .font(.headline)
                 Spacer(minLength: 8)
                 Button(action: apps.isEmpty ? chooseApps : { isManagePresented = true }) {
-                    Label(apps.isEmpty ? "Choose Apps" : "Manage", systemImage: apps.isEmpty ? "plus" : "slider.horizontal.3")
+                    Label(apps.isEmpty ? adbTVLocalized("Choose Apps") : adbTVLocalized("Manage"), systemImage: apps.isEmpty ? "plus" : "slider.horizontal.3")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
@@ -43,7 +43,7 @@ struct ADBTVQuickLaunchView: View {
             if isLoading {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Checking TV user")
+                    Text(adbTVLocalized("Checking TV user"))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -65,7 +65,7 @@ struct ADBTVQuickLaunchView: View {
                             }
                             .buttonStyle(.bordered)
                             .disabled(deviceOperationInProgress || launchID != nil || userID == nil || scenePhase != .active)
-                            .accessibilityLabel("Launch \(app.title)")
+                            .accessibilityLabel(adbTVLocalized("Launch %@", String(describing: app.title)))
                         }
                     }
                 }
@@ -74,10 +74,10 @@ struct ADBTVQuickLaunchView: View {
             if let launchingPackage {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Launching \(launchingPackage)")
+                    Text(adbTVLocalized("Launching %@", String(describing: launchingPackage)))
                         .font(.footnote)
                 }
-                Button("Cancel") { launchTask?.cancel() }
+                Button(adbTVLocalized("Cancel")) { launchTask?.cancel() }
                     .buttonStyle(.bordered)
             }
             if let message {
@@ -87,7 +87,7 @@ struct ADBTVQuickLaunchView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let failure {
-                Button("Refresh Quick Launch") { refreshID = UUID() }
+                Button(adbTVLocalized("Refresh Quick Launch")) { refreshID = UUID() }
                     .disabled(deviceOperationInProgress || launchID != nil)
                 DiagnosticDisclosure(diagnosticDetail: failure)
             }
@@ -111,7 +111,7 @@ struct ADBTVQuickLaunchView: View {
                 failure = nil
                 message = nil
             } catch {
-                present(error, fallback: "Could not load pinned apps.")
+                present(error, fallback: adbTVLocalized("Could not load pinned apps."))
             }
         }
         .sheet(isPresented: $isManagePresented) {
@@ -143,11 +143,11 @@ struct ADBTVQuickLaunchView: View {
                 apps = Self.previewApps
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-quick-failed") {
-                message = "This app is no longer installed for this TV user. Remove it from Quick Launch or reinstall it."
+                message = adbTVLocalized("This app is no longer installed for this TV user. Remove it from Quick Launch or reinstall it.")
                 failure = DiagnosticDetail(summary: "Preview package is not installed.")
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-quick-sent") {
-                message = "Opened Netflix on the TV."
+                message = adbTVLocalized("Opened Netflix on the TV.")
             }
             return
         }
@@ -162,7 +162,7 @@ struct ADBTVQuickLaunchView: View {
             userID = currentUser
         } catch {
             guard !Task.isCancelled, request == refreshID else { return }
-            present(error, fallback: "Could not load Quick Launch. Check the TV connection and refresh.")
+            present(error, fallback: adbTVLocalized("Could not load Quick Launch. Check the TV connection and refresh."))
         }
     }
 
@@ -170,7 +170,7 @@ struct ADBTVQuickLaunchView: View {
         guard let userID, launchID == nil, !deviceOperationInProgress,
               let package = try? ADBTVInstalledPackage(packageName: app.packageName) else { return }
         if usesPreviewData {
-            message = "Opened \(app.title) on the TV."
+            message = adbTVLocalized("Opened %@ on the TV.", String(describing: app.title))
             return
         }
         let token = UUID()
@@ -190,10 +190,10 @@ struct ADBTVQuickLaunchView: View {
                 try await launch(package, userID)
                 try Task.checkCancellation()
                 guard launchID == token else { return }
-                message = "Opened \(app.title) on the TV."
+                message = adbTVLocalized("Opened %@ on the TV.", String(describing: app.title))
             } catch {
                 guard !Task.isCancelled, launchID == token else { return }
-                present(error, fallback: "Could not launch \(app.title).")
+                present(error, fallback: adbTVLocalized("Could not launch %@.", String(describing: app.title)))
                 if let error = error as? ADBTVInstalledAppError, case .activeUserChanged = error {
                     self.userID = nil
                     apps = []
@@ -221,7 +221,7 @@ struct ADBTVQuickLaunchView: View {
             message = nil
             failure = nil
         } catch {
-            present(error, fallback: "Could not update Quick Launch.")
+            present(error, fallback: adbTVLocalized("Could not update Quick Launch."))
         }
     }
 
@@ -238,7 +238,7 @@ struct ADBTVQuickLaunchView: View {
             message = nil
             failure = nil
         } catch {
-            present(error, fallback: "Could not update Quick Launch.")
+            present(error, fallback: adbTVLocalized("Could not update Quick Launch."))
         }
     }
 
@@ -248,11 +248,11 @@ struct ADBTVQuickLaunchView: View {
         } else if let error = error as? ADBTVInstalledAppError {
             switch error {
             case .activeUserChanged:
-                message = "The TV user changed. Refresh Quick Launch before trying again."
+                message = adbTVLocalized("The TV user changed. Refresh Quick Launch before trying again.")
             case .packageNotInstalled:
-                message = "This app is no longer installed for this TV user. Remove it from Quick Launch or reinstall it."
+                message = adbTVLocalized("This app is no longer installed for this TV user. Remove it from Quick Launch or reinstall it.")
             case .launcherUnavailable:
-                message = "No available launcher was found for this app. Check whether it is disabled on the TV."
+                message = adbTVLocalized("No available launcher was found for this app. Check whether it is disabled on the TV.")
             default:
                 message = fallback
             }
@@ -315,19 +315,19 @@ private struct ADBTVQuickLaunchManagementView: View {
                     .onDelete(perform: remove)
                     .onMove(perform: move)
                 } footer: {
-                    Text("Keep up to six apps for this TV user. Reorder or remove them here; add apps from Apps → app actions → Pin to Remote.")
+                    Text(adbTVLocalized("Keep up to six apps for this TV user. Reorder or remove them here; add apps from Apps → app actions → Pin to Remote."))
                 }
-                Button("Choose Apps", action: chooseApps)
+                Button(adbTVLocalized("Choose Apps"), action: chooseApps)
             }
             .disabled(isBusy)
 #if os(iOS)
             .environment(\.editMode, .constant(.active))
             .navigationBarTitleDisplayMode(.inline)
 #endif
-            .navigationTitle("Quick Launch")
+            .navigationTitle(adbTVLocalized("Quick Launch"))
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button(adbTVLocalized("Done")) { dismiss() }
                 }
             }
         }
