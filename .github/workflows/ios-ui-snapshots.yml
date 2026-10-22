@@ -2,6 +2,14 @@ name: iOS UI Snapshots
 
 on:
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Screens to capture
+        type: choice
+        options:
+          - full
+          - library
+        default: full
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -14,7 +22,7 @@ jobs:
   snapshots:
     name: Capture Portrait Layouts
     runs-on: macos-15
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -42,6 +50,8 @@ jobs:
             build
 
       - name: Capture portrait layouts
+        env:
+          SNAPSHOT_SCOPE: ${{ inputs.scope }}
         run: |
           app="build/ui-snapshots/DerivedData/Build/Products/Debug-iphonesimulator/ADBTV.app"
           output="build/ui-snapshots/screenshots"
@@ -75,6 +85,11 @@ jobs:
                 fi
 
                 capture "$udid" "$prefix-library-self-signed" --ui-library
+                if [ "$SNAPSHOT_SCOPE" = library ]; then
+                  continue
+                fi
+                capture "$udid" "$prefix-add-device" --ui-add-device
+                capture "$udid" "$prefix-pair-device" --ui-pair-device
                 capture "$udid" "$prefix-about" --ui-about
                 capture "$udid" "$prefix-connection-repair" --ui-repair
                 capture "$udid" "$prefix-device-rename" --ui-rename
@@ -89,6 +104,14 @@ jobs:
                   --ui-apps --ui-user-app-details
                 capture "$udid" "$prefix-tools" --ui-tools
                 capture "$udid" "$prefix-files" --ui-files
+
+                if [ "$device_name" = iphone ]; then
+                  capture "$udid" "$prefix-remote-failed" --ui-preview --ui-remote-failed
+                  capture "$udid" "$prefix-apps-failed" --ui-apps --ui-apps-failed
+                  capture "$udid" "$prefix-apps-empty" --ui-apps --ui-apps-empty
+                  capture "$udid" "$prefix-apps-no-matches" --ui-apps --ui-apps-no-matches
+                  capture "$udid" "$prefix-apps-refresh-failed" --ui-apps --ui-apps-refresh-failed
+                fi
               done
             done
 

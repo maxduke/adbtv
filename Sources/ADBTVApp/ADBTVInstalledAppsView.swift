@@ -38,7 +38,8 @@ struct InstalledAppsPanel: View {
     var loadActiveSystemSnapshot: (Int) -> Void
     var cancel: () -> Void
 
-    @State private var searchText = ""
+    @State private var searchText = ProcessInfo.processInfo.arguments.contains("--ui-apps-no-matches")
+        ? "unmatched app" : ""
     @State private var pendingForceStop: ADBTVInstalledPackage?
     @State private var pendingUninstall: ADBTVInstalledPackage?
     @State private var selectedPackage: ADBTVInstalledPackage? =
@@ -98,6 +99,9 @@ struct InstalledAppsPanel: View {
 
             TextField("Search apps or packages", text: $searchText)
                 .autocorrectionDisabled()
+#if os(iOS)
+                .textInputAutocapitalization(.never)
+#endif
 
             statusContent
             activitySnapshotStatus
@@ -114,11 +118,15 @@ struct InstalledAppsPanel: View {
                         Divider()
                     }
                 }
-            } else if !state.status.isBusy {
+            } else if let emptyState = state.emptyState(matching: searchText) {
                 ContentUnavailableView(
-                    searchText.isEmpty ? state.mode.emptyTitle : "No Matching Apps",
-                    systemImage: searchText.isEmpty ? "square.grid.2x2" : "magnifyingglass"
+                    emptyState == .noApps ? state.mode.emptyTitle : "No Matching Apps",
+                    systemImage: emptyState == .noApps ? "square.grid.2x2" : "magnifyingglass"
                 )
+            } else if !state.hasSnapshot, case .ready = state.status {
+                Button("Load Apps") { selectMode(state.mode) }
+                    .buttonStyle(.bordered)
+                    .disabled(deviceOperationInProgress)
             }
         }
         .onAppear {
@@ -264,12 +272,17 @@ struct InstalledAppsPanel: View {
         case .ready(let message):
             if let message {
                 Label(message, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.accentColor)
             }
         case .failed(let userMessage, let diagnosticDetail):
             VStack(alignment: .leading, spacing: 8) {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
+                Button { selectMode(state.mode) } label: {
+                    Label("Reload Apps", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.bordered)
+                .disabled(deviceOperationInProgress)
                 DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
             }
         }
@@ -483,14 +496,8 @@ struct InstalledAppsPanel: View {
             .fixedSize(horizontal: !dynamicTypeSize.isAccessibilitySize, vertical: false)
     }
 
-    private var displayedPackages: [ADBTVInstalledPackage] {
-        state.mode == .active
-            ? state.activitySnapshot?.apps.map(\.package) ?? []
-            : state.packages
-    }
-
     private var displayedDetails: [String: ADBTVInstalledAppDetails] {
-        state.mode == .active ? state.activityDetails : state.details
+        state.displayedDetails
     }
 
     private func activeApp(for package: ADBTVInstalledPackage) -> ADBTVActiveApp? {
@@ -563,14 +570,7 @@ struct InstalledAppsPanel: View {
     }
 
     private var filteredPackages: [ADBTVInstalledPackage] {
-        guard !searchText.isEmpty else {
-            return displayedPackages
-        }
-        return displayedPackages.filter {
-            $0.packageName.localizedCaseInsensitiveContains(searchText)
-                || displayedDetails[$0.packageName]?.displayName?
-                    .localizedCaseInsensitiveContains(searchText) == true
-        }
+        state.filteredPackages(matching: searchText)
     }
 
     private func appTitle(for package: ADBTVInstalledPackage) -> String {
@@ -884,7 +884,7 @@ private struct InstalledAppDetailsView: View {
                     systemImage: systemState == .disabled
                         ? "pause.circle.fill" : "checkmark.circle.fill"
                 )
-                .foregroundStyle(systemState == .disabled ? Color.orange : Color.green)
+                .foregroundStyle(systemState == .disabled ? Color.orange : Color.accentColor)
 
                 if systemState == .disabled {
                     Text("Restore Android's package default without removing app data.")

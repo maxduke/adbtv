@@ -19,6 +19,20 @@ struct ADBTViOSApp: App {
                 bonjourDiscoveryAvailable: false,
                 initiallyPresentsAbout: true
             )
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-add-device") {
+            ADBTVRootView(
+                model: ADBTVAppModel(),
+                automaticallyStartsDiscovery: false,
+                bonjourDiscoveryAvailable: false,
+                initiallyPresentsAddDevice: true
+            )
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-pair-device") {
+            ADBTVRootView(
+                model: ADBTVAppModel(),
+                automaticallyStartsDiscovery: false,
+                bonjourDiscoveryAvailable: false,
+                initiallyPresentsPairDevice: true
+            )
         } else if ProcessInfo.processInfo.arguments.contains("--ui-library") {
             ADBTVRootView(
                 model: ADBTVAppModel(),
@@ -62,7 +76,7 @@ struct ADBTViOSApp: App {
             )
         } else if ProcessInfo.processInfo.arguments.contains("--ui-preview") {
             ADBTVRootView(
-                model: .preview,
+                model: remotePreviewModel,
                 automaticallyStartsDiscovery: false
             )
         } else {
@@ -72,4 +86,17 @@ struct ADBTViOSApp: App {
         ADBTVRootView()
 #endif
     }
+
+#if DEBUG
+    private var remotePreviewModel: ADBTVAppModel {
+        var model = ADBTVAppModel.preview
+        if ProcessInfo.processInfo.arguments.contains("--ui-remote-failed") {
+            model.remoteStatus = .connectionFailed(
+                userMessage: "The TV did not respond in time.",
+                diagnosticDetail: .init(summary: "Preview connection timed out.")
+            )
+        }
+        return model
+    }
+#endif
 }

@@ -47,6 +47,9 @@ Implemented so far:
 - saved-device renaming with trimmed nonempty names and atomic Device Library persistence;
 - checked saved-device reconnect before Remote or Install tools are shown, with a bounded retry surface for unreachable TVs;
 - verified connection repair for unreachable saved devices, with atomic endpoint replacement and duplicate protection;
+- direct first-device pairing/connection actions, persistent address/port labels, and guidance distinguishing pairing and connection ports;
+- adaptive remote controls and connection summaries for accessibility text sizes, with readable light/dark accents and prominent action fills;
+- visible remote connection recovery and distinct app loading, failure, empty, and search states that retain cached lists after failed refreshes;
 - resilient Device Library loading that preserves legacy records, recovers valid entries from partial corruption, and reports rejected data without rewriting it;
 - APK or APKM source selection from the iOS Files picker;
 - APK or APKM source entry from a direct HTTP or HTTPS URL;

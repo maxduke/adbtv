@@ -90,6 +90,60 @@ struct ADBTVInstalledAppsViewState: Equatable {
         self.deviceID == deviceID ? self : Self(deviceID: deviceID)
     }
 
+    var displayedPackages: [ADBTVInstalledPackage] {
+        mode == .active ? activitySnapshot?.apps.map(\.package) ?? [] : packages
+    }
+
+    var displayedDetails: [String: ADBTVInstalledAppDetails] {
+        mode == .active ? activityDetails : details
+    }
+
+    var hasSnapshot: Bool {
+        mode == .active ? activitySnapshot != nil : userID != nil
+    }
+
+    func filteredPackages(matching search: String) -> [ADBTVInstalledPackage] {
+        let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return displayedPackages }
+        return displayedPackages.filter {
+            $0.packageName.localizedCaseInsensitiveContains(query)
+                || displayedDetails[$0.packageName]?.displayName?
+                    .localizedCaseInsensitiveContains(query) == true
+        }
+    }
+
+    func emptyState(matching search: String) -> ADBTVAppsEmptyState? {
+        guard case .ready = status, hasSnapshot,
+              filteredPackages(matching: search).isEmpty else {
+            return nil
+        }
+        return displayedPackages.isEmpty ? .noApps : .noMatches
+    }
+
+    mutating func prepareListRefresh(mode: ADBTVAppsMode) {
+        if self.mode != mode {
+            packages = []
+            userID = nil
+            details = [:]
+            systemSnapshot = nil
+        }
+        self.mode = mode
+        pendingDetailsPackages = []
+        detailsStatus = .idle
+    }
+
+    mutating func recordListSnapshot(
+        _ packages: [ADBTVInstalledPackage],
+        userID: Int,
+        systemSnapshot: ADBTVSystemAppSnapshot? = nil
+    ) {
+        self.userID = userID
+        self.packages = packages
+        self.systemSnapshot = systemSnapshot
+        details = [:]
+        status = .ready(message: nil)
+    }
+
     mutating func prepareActivityRefresh() {
         mode = .active
         // The previous Active snapshot stays visible during refresh/cancel.
@@ -172,6 +226,20 @@ struct ADBTVInstalledAppsViewState: Equatable {
     }
 
     static func preview(deviceID: ADBTVDeviceSummary.ID) -> Self {
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-apps-empty") {
+            return Self(deviceID: deviceID, userID: 0, status: .ready(message: nil))
+        }
+        if ProcessInfo.processInfo.arguments.contains("--ui-apps-failed") {
+            return Self(
+                deviceID: deviceID,
+                status: .failed(
+                    userMessage: "Could not load installed apps. Check the TV connection and try again.",
+                    diagnosticDetail: DiagnosticDetail(summary: "Preview request timed out.")
+                )
+            )
+        }
+#endif
         let packageNames = [
             "com.disney.disneyplus",
             "com.google.android.youtube.tv",
@@ -231,7 +299,7 @@ struct ADBTVInstalledAppsViewState: Equatable {
                 processCount: 3
             )
         ]
-        return Self(
+        var state = Self(
             deviceID: deviceID,
             userID: 0,
             mode: showsActivity ? .active : showsSystemControl ? .system : .user,
@@ -254,7 +322,21 @@ struct ADBTVInstalledAppsViewState: Equatable {
                 ? previewSystemSnapshot : nil,
             status: .ready(message: nil)
         )
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-apps-refresh-failed") {
+            state.status = .failed(
+                userMessage: "Could not refresh apps. Showing the previous list.",
+                diagnosticDetail: DiagnosticDetail(summary: "Preview refresh timed out.")
+            )
+        }
+#endif
+        return state
     }
+}
+
+enum ADBTVAppsEmptyState: Equatable {
+    case noApps
+    case noMatches
 }
 
 enum ADBTVInstalledAppDetailsStatus: Equatable {
