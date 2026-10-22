@@ -226,6 +226,9 @@ public struct ADBTVRootView: View {
                         canInstall: model.canInstallSelectedPackage,
                         canSendRemoteText: model.canSendRemoteText,
                         deviceOperationInProgress: model.activeDeviceOperation != nil,
+                        installedAppReadOnlyRefreshInProgress:
+                            installedAppsState.deviceID == device.id
+                                && installedAppsState.status.isActivityRefresh,
                         installedAppsState: installedAppsState.forDevice(device.id),
                         deviceToolsState: deviceToolsState.forDevice(device.id),
                         repair: { repairingDevice = device },
@@ -258,8 +261,14 @@ public struct ADBTVRootView: View {
                         installUnicodeInputHelper: {
                             installUnicodeInputHelper(on: device)
                         },
-                        loadInstalledApps: { scope in
-                            runInstalledAppCommand(.list(scope), on: device)
+                        selectAppsMode: { mode in
+                            selectInstalledAppsMode(mode, on: device)
+                        },
+                        loadActiveSystemSnapshot: { expectedUserID in
+                            runInstalledAppCommand(
+                                .activeSystemSnapshot(expectedUserID: expectedUserID),
+                                on: device
+                            )
                         },
                         launchInstalledApp: { package in
                             runInstalledAppCommand(.launch(package), on: device)
@@ -270,7 +279,28 @@ public struct ADBTVRootView: View {
                         uninstallInstalledApp: { package in
                             runInstalledAppCommand(.uninstall(package), on: device)
                         },
-                        cancelInstalledAppOperation: cancelInstalledAppOperation,
+                        openInstalledAppSettings: { package in
+                            runInstalledAppCommand(.openSettings(package), on: device)
+                        },
+                        clearInstalledAppData: { package in
+                            runInstalledAppCommand(.clearData(package), on: device)
+                        },
+                        disableSystemApp: { package, userID in
+                            runInstalledAppCommand(
+                                .disable(package, userID: userID),
+                                on: device
+                            )
+                        },
+                        restoreSystemAppDefault: { package, userID in
+                            runInstalledAppCommand(
+                                .restoreDefault(package, userID: userID),
+                                on: device
+                            )
+                        },
+                        cancelInstalledAppOperation: {
+                            cancelInstalledAppOperation()
+                        },
+                        cancelActivityRefresh: cancelActivityRefreshIfNeeded,
                         loadDeviceInformation: {
                             runDeviceTool(.information, on: device)
                         },
@@ -484,12 +514,14 @@ public struct ADBTVRootView: View {
                 startDiscovery()
             }
         case .background:
+            cancelActivityRefreshIfNeeded()
             stopRemoteSession()
             automaticDiscoveryPolicy.recordSceneLeftActiveState()
             if automaticDiscoveryPolicy.shouldSuspendDiscovery(status: model.discoveryStatus) {
                 stopDiscovery()
             }
         case .inactive:
+            cancelActivityRefreshIfNeeded()
             automaticDiscoveryPolicy.recordSceneLeftActiveState()
         @unknown default:
             break
@@ -554,6 +586,7 @@ public struct ADBTVRootView: View {
     }
 
     private func selectSavedDevice(id: ADBTVDeviceSummary.ID?) {
+        cancelActivityRefreshIfNeeded()
         guard model.activeDeviceOperation == nil else {
             return
         }
@@ -1631,13 +1664,24 @@ public struct ADBTVRootView: View {
         if installedAppsState.deviceID != device.id {
             installedAppsState = ADBTVInstalledAppsViewState(deviceID: device.id)
         }
-        if case .list(let scope) = command {
+        switch command {
+        case .list(let scope):
             cancelInstalledAppDetailsLoad()
-            if installedAppsState.scope != scope {
+            let mode: ADBTVAppsMode = scope == .user ? .user : .system
+            if installedAppsState.mode != mode {
                 installedAppsState.packages = []
             }
-            installedAppsState.scope = scope
+            installedAppsState.mode = mode
             installedAppsState.details = [:]
+            installedAppsState.systemSnapshot = nil
+        case .activitySnapshot:
+            cancelInstalledAppDetailsLoad()
+            installedAppsState.mode = .active
+        case .activeSystemSnapshot:
+            break
+        case .launch, .forceStop, .uninstall, .openSettings, .clearData,
+             .disable, .restoreDefault:
+            break
         }
         installedAppsState.status = command.inProgressStatus
         let operationID = UUID()
@@ -1680,18 +1724,43 @@ public struct ADBTVRootView: View {
         }
     }
 
-    private func cancelInstalledAppOperation() {
-        guard case .installedApps(let deviceID) = model.activeDeviceOperation else {
+    private func selectInstalledAppsMode(
+        _ mode: ADBTVAppsMode,
+        on device: ADBTVDeviceSummary
+    ) {
+        cancelActivityRefreshIfNeeded()
+        installedAppsState.pendingForceStopPackage = nil
+        installedAppsState.pendingClearDataPackage = nil
+        if let scope = mode.scope {
+            runInstalledAppCommand(.list(scope), on: device)
+        } else {
+            runInstalledAppCommand(.activitySnapshot, on: device)
+        }
+    }
+
+    private func cancelActivityRefreshIfNeeded() {
+        guard installedAppsState.status.isActivityRefresh else {
             return
+        }
+        cancelInstalledAppOperation(message: nil)
+    }
+
+    @discardableResult
+    private func cancelInstalledAppOperation(message: String? = "Cancelled.") -> Bool {
+        guard case .installedApps(let deviceID) = model.activeDeviceOperation else {
+            return false
         }
         installedAppsTask?.cancel()
         installedAppsTask = nil
         installedAppsOperationID = nil
         guard model.cancelInstalledAppOperation(on: deviceID),
               installedAppsState.deviceID == deviceID else {
-            return
+            return false
         }
-        installedAppsState.status = .ready(message: "Cancelled.")
+        installedAppsState.pendingForceStopPackage = nil
+        installedAppsState.pendingClearDataPackage = nil
+        installedAppsState.status = .ready(message: message)
+        return true
     }
 
     private func completeInstalledAppCommand(
@@ -1707,12 +1776,67 @@ public struct ADBTVRootView: View {
         installedAppsTask = nil
         installedAppsOperationID = nil
 
+        var refreshesActivity = false
         switch completion {
-        case .success(.listed(let packages)):
+        case .success(.listedUserApps(let packages)):
             installedAppsState.packages = packages
             installedAppsState.status = .ready(message: nil)
             startInstalledAppDetailsLoad(packages, on: device)
+        case .success(.listedSystemApps(let snapshot)):
+            installedAppsState.packages = snapshot.packages
+            installedAppsState.systemSnapshot = snapshot
+            installedAppsState.status = .ready(message: nil)
+            startInstalledAppDetailsLoad(snapshot.packages, on: device)
+        case .success(.loadedActivity(let snapshot)):
+            let forceStoppedPackage = installedAppsState.pendingForceStopPackage
+            let forceStoppedName = forceStoppedPackage.flatMap {
+                installedAppsState.activityDetails[$0.packageName]?.displayName
+            } ?? forceStoppedPackage?.packageName
+            let clearedDataPackage = installedAppsState.pendingClearDataPackage
+            let clearedDataName = clearedDataPackage.flatMap {
+                installedAppsState.activityDetails[$0.packageName]?.displayName
+            } ?? clearedDataPackage?.packageName
+            installedAppsState.activitySnapshot = snapshot
+            installedAppsState.activityDetails = [:]
+            installedAppsState.activeSystemSnapshot = nil
+            installedAppsState.pendingForceStopPackage = nil
+            installedAppsState.pendingClearDataPackage = nil
+            if let forceStoppedPackage, let forceStoppedName {
+                let remainsActive = snapshot.apps.contains {
+                    $0.package == forceStoppedPackage
+                }
+                installedAppsState.status = .ready(
+                    message: remainsActive
+                        ? "Android kept or restarted \(forceStoppedName); it remains active."
+                        : "Stopped \(forceStoppedName)."
+                )
+            } else if let clearedDataPackage, let clearedDataName {
+                let remainsActive = snapshot.apps.contains {
+                    $0.package == clearedDataPackage
+                }
+                installedAppsState.status = .ready(
+                    message: remainsActive
+                        ? "Cleared data for \(clearedDataName), but Android reports it active."
+                        : "Cleared data for \(clearedDataName)."
+                )
+            } else {
+                installedAppsState.status = .ready(message: nil)
+            }
+            startInstalledAppDetailsLoad(
+                snapshot.apps.map(\.package),
+                on: device,
+                forActivity: true
+            )
+        case .success(.loadedActiveSystemSnapshot(let snapshot)):
+            installedAppsState.activeSystemSnapshot = snapshot
+            installedAppsState.status = .ready(message: nil)
         case .success(.launched(let package)):
+            if installedAppsState.mode == .active {
+                installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = nil
+                refreshesActivity = true
+                break
+            }
             installedAppsState.details[package.packageName]?.isStopped = false
             let name = installedAppsState.details[package.packageName]?.displayName
                 ?? package.packageName
@@ -1720,6 +1844,12 @@ public struct ADBTVRootView: View {
                 message: "Launched \(name)."
             )
         case .success(.stopped(let package)):
+            if installedAppsState.mode == .active {
+                installedAppsState.pendingForceStopPackage = package
+                installedAppsState.pendingClearDataPackage = nil
+                refreshesActivity = true
+                break
+            }
             if installedAppsState.details[package.packageName] == nil {
                 installedAppsState.details[package.packageName] = ADBTVInstalledAppDetails(
                     isStopped: true
@@ -1731,6 +1861,12 @@ public struct ADBTVRootView: View {
                 ?? package.packageName
             installedAppsState.status = .ready(message: "Stopped \(name).")
         case .success(.uninstalled(let package)):
+            if installedAppsState.mode == .active {
+                installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = nil
+                refreshesActivity = true
+                break
+            }
             let name = installedAppsState.details[package.packageName]?.displayName
                 ?? package.packageName
             installedAppsState.packages.removeAll { $0 == package }
@@ -1738,11 +1874,66 @@ public struct ADBTVRootView: View {
             installedAppsState.status = .ready(
                 message: "Uninstalled \(name)."
             )
+        case .success(.openedSettings(let package)):
+            let name = installedAppsState.details[package.packageName]?.displayName
+                ?? installedAppsState.activityDetails[package.packageName]?.displayName
+                ?? package.packageName
+            installedAppsState.status = .ready(
+                message: "Opened App Settings for \(name) on the TV."
+            )
+        case .success(.clearedData(let package)):
+            if installedAppsState.mode == .active {
+                installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = package
+                refreshesActivity = true
+                break
+            }
+            if installedAppsState.details[package.packageName] == nil {
+                installedAppsState.details[package.packageName] = ADBTVInstalledAppDetails(
+                    isStopped: true
+                )
+            } else {
+                installedAppsState.details[package.packageName]?.isStopped = true
+            }
+            let name = installedAppsState.details[package.packageName]?.displayName
+                ?? package.packageName
+            installedAppsState.status = .ready(message: "Cleared data for \(name).")
+        case .success(.disabled(let package)):
+            if installedAppsState.mode == .active {
+                installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = nil
+                refreshesActivity = true
+                break
+            }
+            installedAppsState.setSystemState(.disabled, for: package)
+            let name = installedAppsState.details[package.packageName]?.displayName
+                ?? package.packageName
+            installedAppsState.status = .ready(message: "Disabled \(name).")
+        case .success(.restoredDefault(let package, let state)):
+            if installedAppsState.mode == .active {
+                installedAppsState.pendingForceStopPackage = nil
+                installedAppsState.pendingClearDataPackage = nil
+                refreshesActivity = true
+                break
+            }
+            installedAppsState.setSystemState(state, for: package)
+            let name = installedAppsState.details[package.packageName]?.displayName
+                ?? package.packageName
+            let message = state == .enabled
+                ? "Restored \(name) to Android default."
+                : "Android default keeps \(name) disabled."
+            installedAppsState.status = .ready(message: message)
         case .failure(let userMessage, let diagnosticDetail):
+            installedAppsState.pendingForceStopPackage = nil
+            installedAppsState.pendingClearDataPackage = nil
             installedAppsState.status = .failed(
                 userMessage: userMessage,
                 diagnosticDetail: diagnosticDetail
             )
+        }
+        if refreshesActivity {
+            installedAppsState.status = .ready(message: nil)
+            runInstalledAppCommand(.activitySnapshot, on: device)
         }
     }
 
@@ -1841,7 +2032,8 @@ public struct ADBTVRootView: View {
 
     private func startInstalledAppDetailsLoad(
         _ packages: [ADBTVInstalledPackage],
-        on device: ADBTVDeviceSummary
+        on device: ADBTVDeviceSummary,
+        forActivity: Bool = false
     ) {
         cancelInstalledAppDetailsLoad()
         guard !packages.isEmpty else {
@@ -1850,23 +2042,37 @@ public struct ADBTVRootView: View {
 
         let operationID = UUID()
         installedAppDetailsOperationID = operationID
-        installedAppDetailsTask = Task {
-            let details = await Self.loadInstalledAppDetails(packages, on: device)
-            guard !Task.isCancelled else {
-                return
-            }
-            await MainActor.run {
-                guard installedAppDetailsOperationID == operationID,
+        installedAppDetailsTask = Task { @MainActor in
+            // Bound each connection to a page and publish it before fetching
+            // the next one, so large inventories keep making visible progress.
+            let pageSize = 128
+            for start in stride(from: 0, to: packages.count, by: pageSize) {
+                guard !Task.isCancelled else { return }
+                let page = Array(packages[start ..< min(start + pageSize, packages.count)])
+                let details = await Self.loadInstalledAppDetails(page, on: device)
+                guard !Task.isCancelled,
+                      installedAppDetailsOperationID == operationID,
                       installedAppsState.deviceID == device.id else {
                     return
                 }
-                let currentPackages = Set(installedAppsState.packages.map(\.packageName))
-                installedAppsState.details = details.filter {
+                guard !details.isEmpty else { break }
+                let currentPackages = Set(
+                    forActivity
+                        ? installedAppsState.activitySnapshot?.apps.map(\.package.packageName) ?? []
+                        : installedAppsState.packages.map(\.packageName)
+                )
+                let filteredDetails = details.filter {
                     currentPackages.contains($0.key)
                 }
-                installedAppDetailsTask = nil
-                installedAppDetailsOperationID = nil
+                if forActivity {
+                    installedAppsState.activityDetails.merge(filteredDetails) { _, latest in latest }
+                } else {
+                    installedAppsState.details.merge(filteredDetails) { _, latest in latest }
+                }
             }
+            guard installedAppDetailsOperationID == operationID else { return }
+            installedAppDetailsTask = nil
+            installedAppDetailsOperationID = nil
         }
     }
 
@@ -1914,7 +2120,27 @@ public struct ADBTVRootView: View {
 
             switch command {
             case .list(let scope):
-                return .listed(try await manager.list(scope: scope, using: &connection))
+                if scope == .system {
+                    return .listedSystemApps(
+                        try await manager.systemSnapshot(using: &connection)
+                    )
+                }
+                return .listedUserApps(
+                    try await manager.list(scope: .user, using: &connection)
+                )
+            case .activitySnapshot:
+                return .loadedActivity(
+                    try await manager.activitySnapshot(using: &connection)
+                )
+            case .activeSystemSnapshot(let expectedUserID):
+                let snapshot = try await manager.systemSnapshot(using: &connection)
+                guard snapshot.userID == expectedUserID else {
+                    throw ADBTVInstalledAppError.activeUserChanged(
+                        expected: expectedUserID,
+                        actual: snapshot.userID
+                    )
+                }
+                return .loadedActiveSystemSnapshot(snapshot)
             case .launch(let package):
                 try await manager.launch(package, using: &connection)
                 return .launched(package)
@@ -1924,6 +2150,22 @@ public struct ADBTVRootView: View {
             case .uninstall(let package):
                 try await manager.uninstall(package, using: &connection)
                 return .uninstalled(package)
+            case .openSettings(let package):
+                try await manager.openAppSettings(package, using: &connection)
+                return .openedSettings(package)
+            case .clearData(let package):
+                try await manager.clearData(package, using: &connection)
+                return .clearedData(package)
+            case .disable(let package, let userID):
+                try await manager.disable(package, userID: userID, using: &connection)
+                return .disabled(package)
+            case .restoreDefault(let package, let userID):
+                let state = try await manager.restoreDefault(
+                    package,
+                    userID: userID,
+                    using: &connection
+                )
+                return .restoredDefault(package, state: state)
             }
         }
 #else
@@ -2292,20 +2534,38 @@ private enum RemoteCompletion: Sendable {
 
 private enum ADBTVInstalledAppCommand: Sendable {
     case list(ADBTVInstalledAppScope)
+    case activitySnapshot
+    case activeSystemSnapshot(expectedUserID: Int)
     case launch(ADBTVInstalledPackage)
     case forceStop(ADBTVInstalledPackage)
     case uninstall(ADBTVInstalledPackage)
+    case openSettings(ADBTVInstalledPackage)
+    case clearData(ADBTVInstalledPackage)
+    case disable(ADBTVInstalledPackage, userID: Int)
+    case restoreDefault(ADBTVInstalledPackage, userID: Int)
 
     var inProgressStatus: ADBTVInstalledAppsStatus {
         switch self {
         case .list:
             return .loading
+        case .activitySnapshot:
+            return .loadingActivity
+        case .activeSystemSnapshot:
+            return .loadingSystemControl
         case .launch(let package):
             return .launching(package)
         case .forceStop(let package):
             return .stopping(package)
         case .uninstall(let package):
             return .uninstalling(package)
+        case .openSettings(let package):
+            return .openingSettings(package)
+        case .clearData(let package):
+            return .clearingData(package)
+        case .disable(let package, _):
+            return .disabling(package)
+        case .restoreDefault(let package, _):
+            return .restoringDefault(package)
         }
     }
 
@@ -2313,20 +2573,38 @@ private enum ADBTVInstalledAppCommand: Sendable {
         switch self {
         case .list(let scope):
             return scope == .user ? "listUserApps" : "listSystemApps"
+        case .activitySnapshot:
+            return "loadAppActivity"
+        case .activeSystemSnapshot:
+            return "loadActiveSystemAppProtection"
         case .launch:
             return "launchInstalledApp"
         case .forceStop:
             return "forceStopInstalledApp"
         case .uninstall:
             return "uninstallInstalledApp"
+        case .openSettings:
+            return "openInstalledAppSettings"
+        case .clearData:
+            return "clearInstalledAppData"
+        case .disable:
+            return "disableSystemApp"
+        case .restoreDefault:
+            return "restoreSystemAppDefault"
         }
     }
 
     var packageName: String? {
         switch self {
-        case .list:
+        case .list, .activitySnapshot, .activeSystemSnapshot:
             return nil
-        case .launch(let package), .forceStop(let package), .uninstall(let package):
+        case .launch(let package),
+             .forceStop(let package),
+             .uninstall(let package),
+             .openSettings(let package),
+             .clearData(let package),
+             .disable(let package, _),
+             .restoreDefault(let package, _):
             return package.packageName
         }
     }
@@ -2335,21 +2613,40 @@ private enum ADBTVInstalledAppCommand: Sendable {
         switch self {
         case .list:
             return "Could not load installed apps."
+        case .activitySnapshot:
+            return "Could not load active apps."
+        case .activeSystemSnapshot:
+            return "Could not load system controls."
         case .launch:
             return "Could not launch this app."
         case .forceStop:
             return "Could not stop this app."
         case .uninstall:
             return "Could not uninstall this app."
+        case .openSettings:
+            return "Could not open App Settings on the TV."
+        case .clearData:
+            return "Could not clear this app's data."
+        case .disable:
+            return "Could not disable this system app."
+        case .restoreDefault:
+            return "Could not restore this system app."
         }
     }
 }
 
 private enum ADBTVInstalledAppResult: Sendable {
-    case listed([ADBTVInstalledPackage])
+    case listedUserApps([ADBTVInstalledPackage])
+    case listedSystemApps(ADBTVSystemAppSnapshot)
+    case loadedActivity(ADBTVAppActivitySnapshot)
+    case loadedActiveSystemSnapshot(ADBTVSystemAppSnapshot)
     case launched(ADBTVInstalledPackage)
     case stopped(ADBTVInstalledPackage)
     case uninstalled(ADBTVInstalledPackage)
+    case openedSettings(ADBTVInstalledPackage)
+    case clearedData(ADBTVInstalledPackage)
+    case disabled(ADBTVInstalledPackage)
+    case restoredDefault(ADBTVInstalledPackage, state: ADBTVInstalledAppState)
 }
 
 private enum ADBTVInstalledAppCompletion: Sendable {
@@ -2368,80 +2665,6 @@ private enum ADBTVDeviceToolCompletion: Sendable {
 
 private enum ADBTVDeviceToolOperationError: Error {
     case unsupportedPlatform
-}
-
-private struct ADBTVInstalledAppsViewState: Equatable {
-    var deviceID: ADBTVDeviceSummary.ID?
-    var scope: ADBTVInstalledAppScope
-    var packages: [ADBTVInstalledPackage]
-    var details: [String: ADBTVInstalledAppDetails]
-    var status: ADBTVInstalledAppsStatus
-
-    init(
-        deviceID: ADBTVDeviceSummary.ID? = nil,
-        scope: ADBTVInstalledAppScope = .user,
-        packages: [ADBTVInstalledPackage] = [],
-        details: [String: ADBTVInstalledAppDetails] = [:],
-        status: ADBTVInstalledAppsStatus = .idle
-    ) {
-        self.deviceID = deviceID
-        self.scope = scope
-        self.packages = packages
-        self.details = details
-        self.status = status
-    }
-
-    func forDevice(_ deviceID: ADBTVDeviceSummary.ID) -> Self {
-        self.deviceID == deviceID ? self : Self(deviceID: deviceID)
-    }
-
-    static func preview(deviceID: ADBTVDeviceSummary.ID) -> Self {
-        let packageNames = [
-            "com.disney.disneyplus",
-            "com.google.android.youtube.tv",
-            "com.netflix.ninja",
-            "com.example.very.long.android.television.streaming.application"
-        ]
-        return Self(
-            deviceID: deviceID,
-            packages: packageNames.compactMap { try? ADBTVInstalledPackage(packageName: $0) },
-            details: [
-                packageNames[0]: ADBTVInstalledAppDetails(
-                    displayName: "Disney+",
-                    versionName: "4.18.0",
-                    versionCode: 418_000,
-                    firstInstallTimeMilliseconds: 1_704_067_200_000,
-                    lastUpdateTimeMilliseconds: 1_719_792_000_000,
-                    apkByteCount: 38_797_312
-                ),
-                packageNames[1]: ADBTVInstalledAppDetails(displayName: "YouTube"),
-                packageNames[2]: ADBTVInstalledAppDetails(displayName: "Netflix"),
-                packageNames[3]: ADBTVInstalledAppDetails(
-                    displayName: "A Streaming App With a Longer Name"
-                )
-            ],
-            status: .ready(message: nil)
-        )
-    }
-}
-
-private enum ADBTVInstalledAppsStatus: Equatable {
-    case idle
-    case loading
-    case ready(message: String?)
-    case launching(ADBTVInstalledPackage)
-    case stopping(ADBTVInstalledPackage)
-    case uninstalling(ADBTVInstalledPackage)
-    case failed(userMessage: String, diagnosticDetail: DiagnosticDetail)
-
-    var isBusy: Bool {
-        switch self {
-        case .loading, .launching, .stopping, .uninstalling:
-            return true
-        case .idle, .ready, .failed:
-            return false
-        }
-    }
 }
 
 private enum ADBTVInstalledAppOperationError: Error {
@@ -3424,6 +3647,7 @@ private struct DeviceDetailView: View {
     var canInstall: Bool
     var canSendRemoteText: Bool
     var deviceOperationInProgress: Bool
+    var installedAppReadOnlyRefreshInProgress: Bool
     var installedAppsState: ADBTVInstalledAppsViewState
     var deviceToolsState: ADBTVDeviceToolsViewState
     var repair: () -> Void
@@ -3440,11 +3664,17 @@ private struct DeviceDetailView: View {
     var sendRemoteText: () -> Void
     var cancelRemoteOperation: () -> Void
     var installUnicodeInputHelper: () -> Void
-    var loadInstalledApps: (ADBTVInstalledAppScope) -> Void
+    var selectAppsMode: (ADBTVAppsMode) -> Void
+    var loadActiveSystemSnapshot: (Int) -> Void
     var launchInstalledApp: (ADBTVInstalledPackage) -> Void
     var forceStopInstalledApp: (ADBTVInstalledPackage) -> Void
     var uninstallInstalledApp: (ADBTVInstalledPackage) -> Void
+    var openInstalledAppSettings: (ADBTVInstalledPackage) -> Void
+    var clearInstalledAppData: (ADBTVInstalledPackage) -> Void
+    var disableSystemApp: (ADBTVInstalledPackage, Int) -> Void
+    var restoreSystemAppDefault: (ADBTVInstalledPackage, Int) -> Void
     var cancelInstalledAppOperation: () -> Void
+    var cancelActivityRefresh: () -> Void
     var loadDeviceInformation: () -> Void
     var captureScreenshot: () -> Void
     var runShellCommand: (String) -> Void
@@ -3476,7 +3706,10 @@ private struct DeviceDetailView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .disabled(deviceOperationInProgress)
+                .disabled(
+                    deviceOperationInProgress
+                        && !installedAppReadOnlyRefreshInProgress
+                )
 
                 switch selectedTool {
                 case .remote:
@@ -3498,10 +3731,19 @@ private struct DeviceDetailView: View {
             installerView
         }
 #if os(iOS)
-        .navigationBarBackButtonHidden(deviceOperationInProgress)
+        .navigationBarBackButtonHidden(
+            deviceOperationInProgress
+                && !installedAppReadOnlyRefreshInProgress
+        )
         .navigationBarTitleDisplayMode(.inline)
         .toolbarRole(.editor)
 #endif
+        .onChange(of: selectedTool) { oldValue, newValue in
+            if oldValue == .apps, newValue != .apps {
+                cancelActivityRefresh()
+            }
+        }
+        .onDisappear(perform: cancelActivityRefresh)
     }
 
     private var remotePanel: some View {
@@ -3528,7 +3770,7 @@ private struct DeviceDetailView: View {
             state: installedAppsState,
             deviceOperationInProgress: deviceOperationInProgress,
             showInstaller: { isInstallerPresented = true },
-            load: loadInstalledApps,
+            selectMode: selectAppsMode,
             installHelper: {
                 isInstallerPresented = true
                 installUnicodeInputHelper()
@@ -3536,11 +3778,16 @@ private struct DeviceDetailView: View {
             launch: launchInstalledApp,
             forceStop: forceStopInstalledApp,
             uninstall: uninstallInstalledApp,
+            openSettings: openInstalledAppSettings,
+            clearData: clearInstalledAppData,
+            disableSystemApp: disableSystemApp,
+            restoreSystemAppDefault: restoreSystemAppDefault,
+            loadActiveSystemSnapshot: loadActiveSystemSnapshot,
             cancel: cancelInstalledAppOperation
         )
         .onChange(of: installDraft.status) { _, status in
             if status == .succeeded {
-                loadInstalledApps(.user)
+                selectAppsMode(.user)
             }
         }
     }
@@ -3605,495 +3852,6 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
         }
     }
 
-}
-
-private extension ADBTVInstalledAppScope {
-    var displayTitle: String {
-        self == .user ? "User Apps" : "System Apps"
-    }
-
-    var emptyTitle: String {
-        self == .user ? "No User Apps" : "No System Apps"
-    }
-}
-
-private struct InstalledAppsPanel: View {
-    var state: ADBTVInstalledAppsViewState
-    var deviceOperationInProgress: Bool
-    var showInstaller: () -> Void
-    var load: (ADBTVInstalledAppScope) -> Void
-    var installHelper: () -> Void
-    var launch: (ADBTVInstalledPackage) -> Void
-    var forceStop: (ADBTVInstalledPackage) -> Void
-    var uninstall: (ADBTVInstalledPackage) -> Void
-    var cancel: () -> Void
-
-    @State private var searchText = ""
-    @State private var pendingForceStop: ADBTVInstalledPackage?
-    @State private var pendingUninstall: ADBTVInstalledPackage?
-    @State private var selectedPackage: ADBTVInstalledPackage? =
-        ProcessInfo.processInfo.arguments.contains("--ui-app-details")
-            ? (try? ADBTVInstalledPackage(packageName: "com.netflix.ninja"))
-            : nil
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("Installed Apps")
-                    .font(.title2.bold())
-                Spacer()
-                Menu {
-                    Button(action: showInstaller) {
-                        Label("Install Package", systemImage: "square.and.arrow.down")
-                    }
-                    Button(action: installHelper) {
-                        Label("Install Android Helper", systemImage: "arrow.down.app")
-                    }
-                } label: {
-                    Label("Add App", systemImage: "plus")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.bordered)
-                .disabled(deviceOperationInProgress || state.status.isBusy)
-                .help("Add App")
-                Button { load(state.scope) } label: {
-                    Label("Refresh Apps", systemImage: "arrow.clockwise")
-                        .labelStyle(.iconOnly)
-                }
-                .buttonStyle(.bordered)
-                .disabled(deviceOperationInProgress || state.status.isBusy)
-                .help("Refresh Apps")
-            }
-
-            Picker("App Type", selection: Binding(
-                get: { state.scope },
-                set: load
-            )) {
-                ForEach(ADBTVInstalledAppScope.allCases, id: \.self) { scope in
-                    Text(scope.displayTitle).tag(scope)
-                }
-            }
-            .pickerStyle(.segmented)
-            .disabled(deviceOperationInProgress || state.status.isBusy)
-
-            TextField("Search apps or packages", text: $searchText)
-                .autocorrectionDisabled()
-
-            statusContent
-
-            if !filteredPackages.isEmpty {
-                LazyVStack(spacing: 0) {
-                    ForEach(filteredPackages) { package in
-                        installedAppRow(
-                            package,
-                            details: state.details[package.packageName]
-                        )
-                        Divider()
-                    }
-                }
-            } else if !state.status.isBusy {
-                ContentUnavailableView(
-                    searchText.isEmpty ? state.scope.emptyTitle : "No Matching Apps",
-                    systemImage: searchText.isEmpty ? "square.grid.2x2" : "magnifyingglass"
-                )
-            }
-        }
-        .onAppear {
-            if state.status == .idle {
-                load(state.scope)
-            }
-        }
-        .onChange(of: state.scope) { _, _ in
-            searchText = ""
-            pendingForceStop = nil
-            pendingUninstall = nil
-            selectedPackage = nil
-        }
-        .confirmationDialog(
-            "Force Stop App?",
-            isPresented: Binding(
-                get: { pendingForceStop != nil },
-                set: { if !$0 { pendingForceStop = nil } }
-            ),
-            presenting: pendingForceStop
-        ) { package in
-            Button("Force Stop \(appTitle(for: package))", role: .destructive) {
-                forceStop(package)
-                pendingForceStop = nil
-            }
-        } message: { _ in
-            Text("This stops the app, background activity, and playback without removing its data.")
-        }
-        .confirmationDialog(
-            "Uninstall app?",
-            isPresented: Binding(
-                get: { pendingUninstall != nil },
-                set: { if !$0 { pendingUninstall = nil } }
-            ),
-            presenting: pendingUninstall
-        ) { package in
-            Button("Uninstall \(package.packageName)", role: .destructive) {
-                uninstall(package)
-                pendingUninstall = nil
-            }
-        } message: { package in
-            Text("This removes \(package.packageName) and its app data from the TV.")
-        }
-        .sheet(item: $selectedPackage) { package in
-            InstalledAppDetailsView(
-                package: package,
-                details: state.details[package.packageName],
-                actionsDisabled: deviceOperationInProgress || state.status.isBusy,
-                allowsUninstall: state.scope == .user,
-                launch: launch,
-                forceStop: forceStop,
-                uninstall: uninstall
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var statusContent: some View {
-        switch state.status {
-        case .idle:
-            EmptyView()
-        case .loading:
-            progressLabel("Loading installed apps", cancel: cancel)
-        case .launching(let package):
-            progressLabel("Launching \(appTitle(for: package))", cancel: cancel)
-        case .stopping(let package):
-            progressLabel("Stopping \(appTitle(for: package))", cancel: cancel)
-        case .uninstalling(let package):
-            progressLabel("Uninstalling \(appTitle(for: package))", cancel: cancel)
-        case .ready(let message):
-            if let message {
-                Label(message, systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            }
-        case .failed(let userMessage, let diagnosticDetail):
-            VStack(alignment: .leading, spacing: 8) {
-                Label(userMessage, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
-                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
-            }
-        }
-    }
-
-    private func progressLabel(_ title: String, cancel: @escaping () -> Void) -> some View {
-        HStack(spacing: 10) {
-            ProgressView()
-            Text(title)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-            Spacer(minLength: 8)
-            Button(action: cancel) {
-                Label("Cancel", systemImage: "xmark")
-            }
-            .buttonStyle(.bordered)
-        }
-    }
-
-    private func installedAppRow(
-        _ package: ADBTVInstalledPackage,
-        details: ADBTVInstalledAppDetails?
-    ) -> some View {
-        HStack(spacing: 12) {
-            Button {
-                selectedPackage = package
-            } label: {
-                HStack(spacing: 12) {
-                    InstalledAppIconView(icon: details?.icon)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        if let displayName = details?.displayName {
-                            Text(displayName)
-                                .font(.headline)
-                                .lineLimit(2)
-                            Text(package.packageName)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
-                        } else {
-                            Text(package.packageName)
-                                .font(.subheadline.monospaced())
-                        }
-                    }
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Show details for \(package.packageName)")
-
-            Menu {
-                Button {
-                    selectedPackage = package
-                } label: {
-                    Label("Details", systemImage: "info.circle")
-                }
-
-                Button {
-                    launch(package)
-                } label: {
-                    Label("Launch", systemImage: "play.fill")
-                }
-                .disabled(deviceOperationInProgress || state.status.isBusy)
-
-                if state.scope == .user {
-                    Button(role: .destructive) {
-                        pendingForceStop = package
-                    } label: {
-                        Label(
-                            details?.isStopped == true ? "Stopped" : "Force Stop",
-                            systemImage: details?.isStopped == true
-                                ? "stop.circle.fill" : "stop.circle"
-                        )
-                    }
-                    .disabled(
-                        deviceOperationInProgress
-                            || state.status.isBusy
-                            || details?.isStopped == true
-                    )
-
-                    Divider()
-
-                    Button(role: .destructive) {
-                        pendingUninstall = package
-                    } label: {
-                        Label("Uninstall", systemImage: "trash")
-                    }
-                    .disabled(deviceOperationInProgress || state.status.isBusy)
-                }
-            } label: {
-                Label("Actions for \(package.packageName)", systemImage: "ellipsis")
-                    .labelStyle(.iconOnly)
-            }
-            .buttonStyle(.bordered)
-            .help("App Actions")
-        }
-        .padding(.vertical, 8)
-    }
-
-    private var filteredPackages: [ADBTVInstalledPackage] {
-        guard !searchText.isEmpty else {
-            return state.packages
-        }
-        return state.packages.filter {
-            $0.packageName.localizedCaseInsensitiveContains(searchText)
-                || state.details[$0.packageName]?.displayName?
-                    .localizedCaseInsensitiveContains(searchText) == true
-        }
-    }
-
-    private func appTitle(for package: ADBTVInstalledPackage) -> String {
-        state.details[package.packageName]?.displayName ?? package.packageName
-    }
-}
-
-private struct InstalledAppDetailsView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var package: ADBTVInstalledPackage
-    var details: ADBTVInstalledAppDetails?
-    var actionsDisabled: Bool
-    var allowsUninstall: Bool
-    var launch: (ADBTVInstalledPackage) -> Void
-    var forceStop: (ADBTVInstalledPackage) -> Void
-    var uninstall: (ADBTVInstalledPackage) -> Void
-
-    @State private var confirmsForceStop = false
-    @State private var confirmsUninstall = false
-
-    var body: some View {
-        NavigationStack {
-            List {
-                Section("Package Identifier") {
-                    HStack(alignment: .top, spacing: 12) {
-                        InstalledAppIconView(icon: details?.icon)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            if let displayName = details?.displayName {
-                                Text(displayName)
-                                    .font(.headline)
-                            }
-                            Text(package.packageName)
-                                .font(.body.monospaced())
-                                .textSelection(.enabled)
-                        }
-
-                        Spacer(minLength: 0)
-
-                        Button(action: copyPackageName) {
-                            Label("Copy Package Identifier", systemImage: "doc.on.doc")
-                                .labelStyle(.iconOnly)
-                        }
-                        .buttonStyle(.borderless)
-                        .help("Copy Package Identifier")
-                    }
-                }
-
-                if hasMetadata {
-                    Section("Information") {
-                        if let versionName = details?.versionName {
-                            LabeledContent("Version", value: versionName)
-                        }
-                        if let versionCode = details?.versionCode {
-                            LabeledContent("Version Code", value: String(versionCode))
-                        }
-                        if let apkByteCount = details?.apkByteCount {
-                            LabeledContent(
-                                "APK Size",
-                                value: ByteCountFormatter.string(
-                                    fromByteCount: apkByteCount,
-                                    countStyle: .file
-                                )
-                            )
-                        }
-                        if let firstInstallDate = details?.firstInstallDate {
-                            LabeledContent("Installed") {
-                                Text(firstInstallDate, style: .date)
-                            }
-                        }
-                        if let lastUpdateDate = details?.lastUpdateDate {
-                            LabeledContent("Updated") {
-                                Text(lastUpdateDate, style: .date)
-                            }
-                        }
-                    }
-                }
-
-                Section {
-                    Button {
-                        dismiss()
-                        launch(package)
-                    } label: {
-                        Label("Launch App", systemImage: "play.fill")
-                    }
-                    .disabled(actionsDisabled)
-
-                    Button(role: .destructive) {
-                        confirmsForceStop = true
-                    } label: {
-                        Label(
-                            details?.isStopped == true ? "Stopped" : "Force Stop",
-                            systemImage: details?.isStopped == true
-                                ? "stop.circle.fill" : "stop.circle"
-                        )
-                            .foregroundStyle(.red)
-                    }
-                    .disabled(actionsDisabled || details?.isStopped == true)
-
-                    if allowsUninstall {
-                        Button(role: .destructive) {
-                            confirmsUninstall = true
-                        } label: {
-                            Label("Uninstall App", systemImage: "trash")
-                                .foregroundStyle(.red)
-                        }
-                        .disabled(actionsDisabled)
-                    }
-                }
-            }
-            .navigationTitle(details?.displayName ?? "App Details")
-#if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-#endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .confirmationDialog(
-                "Force Stop App?",
-                isPresented: $confirmsForceStop
-            ) {
-                Button("Force Stop", role: .destructive) {
-                    dismiss()
-                    forceStop(package)
-                }
-            } message: {
-                if allowsUninstall {
-                    Text("This stops the app, background activity, and playback without removing its data.")
-                } else {
-                    Text("This is a system app. Stopping it may temporarily affect TV features, and Android may restart it.")
-                }
-            }
-            .confirmationDialog(
-                "Uninstall app?",
-                isPresented: $confirmsUninstall
-            ) {
-                Button("Uninstall \(package.packageName)", role: .destructive) {
-                    dismiss()
-                    uninstall(package)
-                }
-            } message: {
-                Text("This removes \(package.packageName) and its app data from the TV.")
-            }
-        }
-    }
-
-    private var hasMetadata: Bool {
-        details?.versionName != nil
-            || details?.versionCode != nil
-            || details?.apkByteCount != nil
-            || details?.firstInstallDate != nil
-            || details?.lastUpdateDate != nil
-    }
-
-    private func copyPackageName() {
-#if os(iOS)
-        UIPasteboard.general.string = package.packageName
-#elseif os(macOS)
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(package.packageName, forType: .string)
-#endif
-    }
-}
-
-private struct InstalledAppIconView: View {
-    var icon: ADBTVInstalledAppIcon?
-
-    @ViewBuilder
-    var body: some View {
-#if os(iOS)
-        if let icon, let image = UIImage(data: icon.pngData) {
-            Image(uiImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .accessibilityHidden(true)
-        } else {
-            placeholder
-        }
-#elseif os(macOS)
-        if let icon, let image = NSImage(data: icon.pngData) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 44, height: 44)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .accessibilityHidden(true)
-        } else {
-            placeholder
-        }
-#else
-        placeholder
-#endif
-    }
-
-    private var placeholder: some View {
-        Image(systemName: "app.fill")
-            .resizable()
-            .scaledToFit()
-            .padding(10)
-            .frame(width: 44, height: 44)
-            .foregroundStyle(.secondary)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-            .accessibilityHidden(true)
-    }
 }
 
 private struct DeviceHeader: View {

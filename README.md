@@ -4,7 +4,8 @@ ADB TV is a native SwiftUI iOS app for managing Android TV devices over Wireless
 
 ## Status
 
-Version [0.8.2](https://github.com/maxduke/adbtv/releases/tag/v0.8.2) is the current release with the following Swift package and native SwiftUI iOS app features:
+Version 0.11.0 is the current release with the following Swift package and
+native SwiftUI iOS app features:
 
 - `ADBClientCore`: native ADB packet, stream, shell, sync, remote-control, and APK install foundations.
 - `ADBTVApp`: SwiftUI app shell for saved devices, APK install sources, install state, and Android TV remote actions.
@@ -61,6 +62,9 @@ Implemented so far:
 - live URL download and acknowledged APK transfer progress with byte counts in the install UI;
 - file-backed single-APK transfer with at most one ADB sync frame and one 1 MiB transport batch in memory;
 - owned local package staging with cleanup after validation, success, failure, cancellation, or timeout;
+- staged shared-storage uploads that preserve an existing destination until transfer completes;
+- TV-side upload conflict checks with explicit replacement, bounded independent staging cleanup after interruption, and visible cleanup failures;
+- cancellable folder reads and file operations, with 30-second folder/mutation and transfer-inactivity limits and a 15-minute transfer limit;
 - explicit APK-install cancellation that retains operation ownership through bounded fresh-connection staging cleanup, with cleanup failures exposed before same-source retry;
 - operation-unique remote staging with checked removal and cleanup failures preserved in technical diagnostics;
 - single active long-running device operation, bound to its originating device until completion or cancellation;
@@ -85,10 +89,14 @@ Implemented so far:
 - press-and-hold D-pad and volume repeat, external-keyboard navigation, native haptics, and bounded connection diagnostics;
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
-- searchable user and system app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, launch, force stop, user-app uninstall, and checked command diagnostics;
+- searchable user and system app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, launch, native TV App Settings, force stop, confirmed user-app data clearing and uninstall, and checked command diagnostics;
+- incremental installed-app metadata pages that continue beyond the first 128 packages;
+- helper-free Active Apps snapshots with foreground state, grouped process count, bounded proportional memory, manual refresh, and no activity history;
+- guarded active-user system app state, with confirmed Disable and Restore Android Default actions that preserve package data and protect critical Android roles;
 - structured device information for Android version, display resolution, storage, uptime, and build identity;
 - bounded binary-safe Android TV screenshots with PNG validation, preview, native sharing, and clear protected-content/device-blocked failures;
 - bounded one-shot ADB shell commands with read-only diagnostic presets, cancellation, timeout, copyable output, and preserved exit status;
+- isolated checked shell execution that preserves explicit exit codes, trailing comments, and background command syntax;
 - unsigned IPA packaging in GitHub Actions;
 - packaged ADB TV and BoringSSL license notices with an in-app About surface;
 - repository-owned app icon and accent-color assets with packaged-product validation;
@@ -110,7 +118,7 @@ Implemented so far:
 
 The current implementation is a Swift package plus an Xcode iOS app project.
 
-On a machine with Swift 5.9+ installed:
+On macOS 14+ with Swift 5.9+ installed (the full package includes SwiftUI):
 
 ```sh
 swift test
@@ -162,6 +170,25 @@ The repository contains `ADBClientCore`, `ADBTVApp`, and the source for the opti
 ASCII remote text uses Android's built-in `input text` command with checked exit status. Chinese and other non-ASCII text uses the optional bundled ADB TV Input helper because Android's built-in command cannot generate characters absent from the TV's virtual key map. Enter Unicode text, install the helper from the Remote panel once, focus a TV text field, and send again. The app temporarily selects the helper for each send and restores the previous TV keyboard afterward.
 
 The same helper returns installed-app names, versions, install/update dates, summed APK size, icons, and Android's stopped state through a shell-only provider. APK size covers the base and split APK files, not app data or cache. When the helper is missing, the Apps list remains fully functional and falls back to package identifiers, generic icons, and an available Force Stop action. Install the versioned v3 helper from the Apps toolbar or Remote panel; if Android rejects an update signed by a different CI key, ADB TV offers to replace only the helper and retry. Unicode input continues to support v2 during migration.
+
+App Details can open Android's native App Info screen for any installed app.
+User Apps also expose a confirmed **Clear App Data** action. Clearing data
+permanently removes the app's accounts, settings, downloads, and other stored
+data while leaving the app installed. System Apps do not expose this action.
+
+Active Apps is a point-in-time, helper-free view of Installed Apps with a live
+process. It groups child processes by package, shows foreground state, process
+count, and proportional memory, and refreshes only on request or after an app
+action. Missing memory is shown as unavailable; ADB TV does not persist activity
+or recommend which apps to stop.
+
+System Apps shows Android's effective state for the active user. Open app details
+to disable an eligible package or restore Android's package default. Disable
+keeps the app and its data installed, but TV features or other apps may stop
+working. Restore removes the per-user override; an app may remain disabled when
+that is Android's default. ADB TV protects a small set of critical packages and
+the active launcher, Settings app, and input method. It does not recommend
+packages or certify that other OEM packages are safe to disable.
 
 ## License
 

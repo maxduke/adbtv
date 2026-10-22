@@ -82,8 +82,11 @@ jobs:
                 capture "$udid" "$prefix-remote-media-expanded" \
                   --ui-preview --ui-media-expanded
                 capture "$udid" "$prefix-install" --ui-preview --ui-install
-                capture "$udid" "$prefix-apps" --ui-apps
-                capture "$udid" "$prefix-app-details" --ui-apps --ui-app-details
+                capture "$udid" "$prefix-apps" --ui-apps --ui-active
+                capture "$udid" "$prefix-app-details" \
+                  --ui-apps --ui-active --ui-app-details
+                capture "$udid" "$prefix-user-app-details" \
+                  --ui-apps --ui-user-app-details
                 capture "$udid" "$prefix-tools" --ui-tools
                 capture "$udid" "$prefix-files" --ui-files
               done
@@ -102,7 +105,7 @@ jobs:
           done
 
       - name: Upload layout snapshots
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: ADBTV-ui-snapshots
           path: build/ui-snapshots/screenshots/*.png

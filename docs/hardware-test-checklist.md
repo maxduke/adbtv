@@ -120,6 +120,15 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 - [ ] Open **Apps** and confirm user-installed package identifiers load in sorted order without system packages.
 - [ ] Switch to **System Apps**, confirm system package identifiers replace the user list, and switch back without stale rows or metadata.
+- [ ] On Android 8.0 and Android 10.0 without the helper, open **Active**, confirm only Installed Apps with live processes appear, and verify User/System classification.
+- [ ] Compare foreground labels, grouped process counts, and PSS memory with the same TV's ADB output; record refresh time and byte counts for package, process, memory, and activity output.
+- [ ] Confirm Active refresh normally completes within 10 seconds on both compatibility targets and every measured output remains below its configured cap with headroom.
+- [ ] Confirm multiple foreground apps are represented when Android reports them, and missing memory remains listed as **Unavailable** with partial-data Technical Details.
+- [ ] Refresh Active and confirm the previous snapshot and update time remain visible until the new snapshot completes; make refresh fail and confirm the previous rows remain visible with the error.
+- [ ] During a delayed or unreachable Active refresh, exercise Cancel, User/System changes, tool changes, back navigation, device selection, backgrounding, and immediate retry; confirm late results never replace the current state.
+- [ ] Force stop a user app from Active and confirm the refreshed result either removes it or explains that Android kept or restarted it.
+- [ ] Open an Active system app, confirm Activity appears immediately, then confirm System Control loads with the existing protection and stronger Force Stop warning.
+- [ ] Install the helper after loading Active and confirm optional names and icons appear without changing process, foreground, memory, or Force Stop state.
 - [ ] Open a system app and confirm Details and Launch remain available while Uninstall is absent from both the row menu and details screen.
 - [ ] Search by a partial package identifier and confirm the list filters without another device request.
 - [ ] Install the bundled Android helper from the **Apps** toolbar, confirm the Install panel exposes progress and cancellation, refresh **Apps**, and confirm names and real icons appear for Android TV and sideloaded apps.
@@ -137,6 +146,10 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] With the current helper installed, refresh Apps and confirm Force Stop shows as **Stopped** and is disabled only for packages Android reports as stopped; launch one and confirm the action becomes available again.
 - [ ] Open a system app's details, confirm Force Stop requires the stronger system warning, and cancel without affecting the TV.
 - [ ] Force stop a disposable system app from details, confirm the operation is bounded, and confirm Android can launch or restart it afterward.
+- [ ] On Android 8.0 and Android 10.0, open App Settings for one user app and one system app; confirm the TV opens the matching native App Info screen.
+- [ ] Cancel Clear App Data for a disposable user app and confirm its data remains unchanged.
+- [ ] Clear data for a disposable user app, confirm it remains installed, becomes stopped, and opens in first-run state when launched again.
+- [ ] Confirm Clear App Data is absent from system-app details and both recovery actions work without the Android helper installed.
 - [ ] Cancel the uninstall confirmation and confirm the package remains installed.
 - [ ] Confirm uninstall for a disposable package, verify its app data is removed, and confirm the row disappears.
 - [ ] Refresh after installing an app outside ADB TV and confirm the new package appears.
@@ -145,6 +158,16 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] After cancelling an unreachable Apps refresh, return to the device list and reconnect after restoring the TV.
 - [ ] After an operation fails because the TV is offline, return to the device list and confirm the same saved device can be opened again.
 - [ ] Start an Apps operation and confirm back navigation, device switching, Remote, Install, rename, and connection updates stay unavailable until it completes.
+- [ ] On Android 8.0 and Android 10.0, open **System Apps** and confirm enabled and disabled state loads without the Android helper installed.
+- [ ] Confirm Android core, Network Stack, Settings Provider, Google infrastructure, the active launcher, Settings app, and active input method show a protection reason without a Disable action.
+- [ ] Disable a known non-critical preinstalled app, confirm the warning names the app and package, and confirm Android reports it disabled afterward.
+- [ ] Confirm the disabled app remains installed with its data, cannot launch, and shows **Disabled** in the list with Launch and Force Stop unavailable.
+- [ ] Reboot the TV and confirm the disabled state remains.
+- [ ] Choose **Restore Android Default**, confirm its warning, and verify the refreshed effective state matches Android.
+- [ ] Restore a package that Android keeps disabled by default and confirm ADB TV reports that result without claiming the package was enabled.
+- [ ] Make one protected-role query fail or return malformed output, refresh System Apps, and confirm browsing and Restore remain available while every Disable action is unavailable with Technical Details.
+- [ ] Disconnect or cancel during Disable or Restore, reconnect, refresh, and confirm the UI follows the TV's actual state.
+- [ ] Switch Android users when supported, refresh, and confirm state and actions are scoped to the newly active user.
 
 ## App Installation
 
@@ -176,6 +199,17 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Device Tools
 
+- [ ] On Android 8.0 and Android 10.0, load a folder on a connected TV that stops answering; confirm the operation times out within 30 seconds and Refresh becomes available.
+- [ ] Cancel both an initial folder load and a manual Refresh, immediately retry, and confirm no late result replaces the new directory contents.
+- [ ] During upload and download, stop transfer progress while keeping the connection open; confirm the transfer is cancelled after 30 seconds without progress.
+- [ ] Cancel a partial upload and confirm cleanup finishes before another operation starts; confirm its exact `.adbtv-upload-...` path is removed.
+- [ ] Make the TV unreachable during upload cleanup and confirm Technical Details identify the remaining staging path and cleanup failure.
+- [ ] After browsing a folder, create a same-named target file on the TV before an upload finishes; confirm an unconfirmed upload preserves that file.
+- [ ] Replace the upload target with a folder or symlink before transfer completes; confirm the operation fails without treating the folder as an upload destination.
+- [ ] Confirm explicitly replacing an ordinary file succeeds on Android 8.0 and Android 10.0 without requiring newer `mv` options.
+- [ ] Share a downloaded file, dismiss the share sheet by swiping, and confirm its local temporary directory is removed.
+- [ ] With more than 128 installed packages and the helper installed, confirm later packages receive names/icons after earlier pages, and switching modes or devices cancels pending metadata work.
+- [ ] Run `printf 'before exit'; exit 7`, a command with a trailing comment, and `true &`; confirm output and exit status are preserved without a missing-status error.
 - [ ] Open **Files**, create and rename a folder, and confirm blank, unchanged, relative, and path-separator names cannot be submitted.
 - [ ] Open **Move** for a file or folder and confirm **Move Here** is disabled in its current folder while valid destinations remain selectable.
 - [ ] Start a file upload, download, or mutation; cancel while the automatic folder refresh is running; confirm the loading state clears and Refresh remains available.

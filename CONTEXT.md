@@ -8,6 +8,17 @@ ADB TV is an iOS app for managing Android TV devices over the local network usin
 An iOS app build installed outside the App Store using a user's own sideloading workflow.
 _Avoid_: Self-signed app, public IPA
 
+**Stabilization Release**:
+A bounded maintenance release that fixes confirmed defects and quality gaps
+without adding product features or redesigning established workflows.
+_Avoid_: Cleanup release, refactor release
+
+**App Store Submission Candidate**:
+A version whose app behavior, signed build, privacy and export declarations,
+store metadata, and review materials are ready to submit for Apple's review.
+It does not imply that Apple has approved the app.
+_Avoid_: App Store compliant build, approved build
+
 **Android TV Device**:
 An Android-powered television, streaming box, or TV dongle that is the primary management target for this app.
 _Avoid_: Android device when specifically referring to the TV-first target
@@ -87,6 +98,34 @@ _Avoid_: Multiple apps
 **Installed App**:
 An application currently installed for the user on a Managed Device.
 _Avoid_: Install Package
+
+**Active App**:
+An Installed App with at least one live Android process associated with its
+package at the moment activity is refreshed. Multiple processes belonging to
+the same package still represent one Active App.
+_Avoid_: Running App, Raw Process
+
+**App Activity Snapshot**:
+A point-in-time list of Active Apps on one Managed Device, grouped by package
+and identifying any foreground apps. It is not continuous monitoring or
+historical activity.
+_Avoid_: Process List, Activity History
+
+**Preinstalled App**:
+An Installed App supplied with the Android TV system rather than installed by
+the user.
+_Avoid_: System Service, Built-in Service
+
+**Disabled Preinstalled App**:
+A Preinstalled App made unavailable to the current Android TV user while
+remaining installed and recoverable.
+_Avoid_: Startup-disabled App, Disabled Service
+
+**Protected Preinstalled App**:
+A Preinstalled App that ADB TV prevents the user from disabling because it
+fulfills an identifiable core role or is known to be required for ADB TV
+management.
+_Avoid_: Safe App, Trusted App
 
 **Operation Progress**:
 User-visible status for a running ADB Operation, ideally including progress when the underlying operation can report it.

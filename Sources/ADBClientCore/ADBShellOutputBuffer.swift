@@ -1,4 +1,6 @@
 public struct ADBShellOutputBuffer: Sendable {
+    static let maximumByteCount = 16 * 1024 * 1024
+
     public let localID: UInt32
     public private(set) var bytes: [UInt8]
     public private(set) var isClosed: Bool
@@ -27,6 +29,11 @@ public struct ADBShellOutputBuffer: Sendable {
                 )
             }
 
+            guard payload.count <= Self.maximumByteCount - bytes.count else {
+                throw ADBShellOutputBufferError.outputTooLarge(
+                    maximumByteCount: Self.maximumByteCount
+                )
+            }
             bytes.append(contentsOf: payload)
             return nil
 
@@ -62,4 +69,5 @@ public struct ADBShellOutput: Equatable, Sendable {
 public enum ADBShellOutputBufferError: Error, Equatable, Sendable {
     case mismatchedStream(expectedLocalID: UInt32, actualLocalID: UInt32)
     case alreadyClosed(localID: UInt32)
+    case outputTooLarge(maximumByteCount: Int)
 }

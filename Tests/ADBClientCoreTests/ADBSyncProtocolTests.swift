@@ -111,6 +111,20 @@ final class ADBSyncProtocolTests: XCTestCase {
         }
     }
 
+    func testResponseDecoderRejectsOversizedFailureMessage() {
+        var bytes: [UInt8] = []
+        bytes.appendLittleEndian(ADBSyncID.fail.rawValue)
+        bytes.appendLittleEndian(UInt32(64 * 1024 + 1))
+        var decoder = ADBSyncResponseDecoder()
+
+        XCTAssertThrowsError(try decoder.append(bytes)) { error in
+            XCTAssertEqual(
+                error as? ADBSyncFramingError,
+                .failureMessageTooLarge(64 * 1024 + 1)
+            )
+        }
+    }
+
     func testDirectoryDecoderHandlesFragmentedEntriesAndDone() throws {
         let name = Array("Movies".utf8)
         var bytes: [UInt8] = []

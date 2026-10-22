@@ -48,4 +48,19 @@ final class ADBShellOutputBufferTests: XCTestCase {
             XCTAssertEqual(error as? ADBShellOutputBufferError, .alreadyClosed(localID: 1))
         }
     }
+
+    func testRejectsUnboundedOutput() {
+        var buffer = ADBShellOutputBuffer(localID: 1)
+        let payload = [UInt8](repeating: 0, count: ADBShellOutputBuffer.maximumByteCount + 1)
+
+        XCTAssertThrowsError(
+            try buffer.receive(.streamData(localID: 1, remoteID: 42, payload: payload))
+        ) { error in
+            XCTAssertEqual(
+                error as? ADBShellOutputBufferError,
+                .outputTooLarge(maximumByteCount: ADBShellOutputBuffer.maximumByteCount)
+            )
+        }
+        XCTAssertTrue(buffer.bytes.isEmpty)
+    }
 }
