@@ -178,20 +178,21 @@ struct InstalledAppsPanel: View {
                 )
             }
         }
-        .confirmationDialog(
-            "Uninstall app?",
+        .alert(
+            pendingUninstall.map { "Uninstall \(appTitle(for: $0))?" } ?? "Uninstall App?",
             isPresented: Binding(
                 get: { pendingUninstall != nil },
                 set: { if !$0 { pendingUninstall = nil } }
             ),
             presenting: pendingUninstall
         ) { package in
-            Button("Uninstall \(appTitle(for: package))", role: .destructive) {
+            Button("Uninstall", role: .destructive) {
                 uninstall(package)
                 pendingUninstall = nil
             }
+            Button("Cancel", role: .cancel) { pendingUninstall = nil }
         } message: { package in
-            Text("\(package.packageName)\n\nThis removes \(appTitle(for: package)) and its app data for the current TV user.")
+            Text("This removes \(appTitle(for: package)) and its app data for the current TV user.\n\n\(package.packageName)")
         }
         .sheet(item: $selectedPackage) { package in
             InstalledAppDetailsView(
@@ -899,16 +900,17 @@ private struct InstalledAppDetailsView: View {
                     Text("This is a system app. Stopping it may temporarily affect TV features, and Android may restart it.")
                 }
             }
-            .confirmationDialog(
-                "Uninstall app?",
+            .alert(
+                "Uninstall \(appTitle)?",
                 isPresented: $confirmsUninstall
             ) {
-                Button("Uninstall \(appTitle)", role: .destructive) {
+                Button("Uninstall", role: .destructive) {
                     dismiss()
                     uninstall(package)
                 }
+                Button("Cancel", role: .cancel) {}
             } message: {
-                Text("\(package.packageName)\n\nThis removes \(appTitle) and its app data for the current TV user.")
+                Text("This removes \(appTitle) and its app data for the current TV user.\n\n\(package.packageName)")
             }
         }
     }

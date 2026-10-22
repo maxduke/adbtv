@@ -20,6 +20,8 @@ launcher. Keep iOS App Intents and system shortcuts for a later feature.
   controls at accessibility sizes, preserving first-screen access to the D-pad.
 - Finish the previously observed large-text issues in Files, App Details, and
   Rename, and use app names plus package identifiers in uninstall confirmation.
+  Use an alert so the data-removal warning remains visible on iPad at large
+  accessibility sizes, with short Uninstall/Cancel actions.
 
 ## Validation
 
