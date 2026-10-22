@@ -1087,6 +1087,16 @@ public enum ADBTVRemoteStatus: Equatable, Sendable {
         }
     }
 
+    var showsPriorityFeedback: Bool {
+        switch self {
+        case .connecting, .reconnecting, .catchingUp, .connectionFailed,
+             .sendingText, .failed, .failedText:
+            return true
+        case .idle, .sending, .sent, .sentText:
+            return false
+        }
+    }
+
     public var remoteActionsUnavailable: Bool {
         switch self {
         case .connecting, .reconnecting, .connectionFailed:

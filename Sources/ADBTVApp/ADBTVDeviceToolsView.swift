@@ -336,7 +336,7 @@ struct ADBTVDeviceToolsPanel: View {
             case .finished:
                 Label("App caches cleaned.", systemImage: "checkmark.circle.fill")
                     .font(.subheadline)
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.accentColor)
             case .failed(let userMessage, let diagnosticDetail):
                 failureView(userMessage, diagnosticDetail: diagnosticDetail)
             case .idle, .running:
@@ -488,7 +488,7 @@ struct ADBTVDeviceToolsPanel: View {
                     Label("Capture Screenshot", systemImage: "camera.viewfinder")
                         .labelStyle(.iconOnly)
                 }
-                .buttonStyle(.borderedProminent)
+                .adbTVProminentButton()
                 .disabled(deviceOperationInProgress)
                 .help("Capture Screenshot")
             }
@@ -556,7 +556,7 @@ struct ADBTVDeviceToolsPanel: View {
                         Label("Run Command", systemImage: "play.fill")
                             .labelStyle(.iconOnly)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .adbTVProminentButton()
                     .disabled(
                         deviceOperationInProgress
                             || shellCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -649,7 +649,7 @@ struct ADBTVDeviceToolsPanel: View {
                             : "exclamationmark.circle.fill"
                     )
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(result.exitCode == 0 ? .green : .orange)
+                    .foregroundStyle(result.exitCode == 0 ? Color.accentColor : Color.orange)
                 }
 
                 ScrollView([.horizontal, .vertical]) {

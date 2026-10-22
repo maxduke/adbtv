@@ -39,6 +39,23 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
   values, focus follows visual order, and presented sheets receive focus.
 - [ ] In light and dark appearance, confirm text and enabled, disabled, success,
   warning, and failure states remain distinguishable without color alone.
+- [ ] At the largest text size, confirm Remote's **OK** label remains readable,
+  symbols stay inside their buttons, and Update Connection uses stacked labels
+  and values without breaking labels into short fragments.
+- [ ] Fail a remote connection and confirm **Retry Connection** appears above
+  the controls. Send several successful keys and confirm the controls stay put.
+- [ ] Fail an initial Apps load and confirm an error with **Reload Apps** appears
+  without an empty-list claim. Fail a later refresh and confirm app names and
+  previous rows remain visible; verify genuinely empty lists and unmatched searches separately.
+
+## First Connection and Forms
+
+- [ ] With no saved TVs on portrait iPhone/iPad, open pairing and manual
+  connection directly from the empty library, including when the sidebar is hidden.
+- [ ] Confirm address/URL fields do not capitalize or autocorrect input, and
+  ports/codes use a numeric keyboard with a working **Done** button.
+- [ ] Use an external keyboard to advance between connection fields and submit
+  valid input; confirm invalid, active, and completed requests cannot be resubmitted.
 
 ## Pairing Code
 

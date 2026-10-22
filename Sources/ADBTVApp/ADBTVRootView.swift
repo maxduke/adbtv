@@ -84,6 +84,8 @@ public struct ADBTVRootView: View {
         automaticallyStartsDiscovery: Bool? = nil,
         bonjourDiscoveryAvailable: Bool? = nil,
         initiallyPresentsAbout: Bool = false,
+        initiallyPresentsAddDevice: Bool = false,
+        initiallyPresentsPairDevice: Bool = false,
         initiallyPresentsConnectionRepair: Bool = false,
         initiallyPresentsDeviceRename: Bool = false,
         initiallyPresentsInstalledApps: Bool = false,
@@ -100,6 +102,8 @@ public struct ADBTVRootView: View {
         } ?? .current(automaticallyStartsDiscovery: automaticallyStartsDiscovery)
         self._model = State(initialValue: model)
         self._isAboutPresented = State(initialValue: initiallyPresentsAbout)
+        self._isAddDevicePresented = State(initialValue: initiallyPresentsAddDevice)
+        self._isPairDevicePresented = State(initialValue: initiallyPresentsPairDevice)
         self._repairingDevice = State(
             initialValue: initiallyPresentsConnectionRepair ? model.devices.first : nil
         )
@@ -126,7 +130,7 @@ public struct ADBTVRootView: View {
             )) {
                 Section("Devices") {
                     if model.devices.isEmpty {
-                        ContentUnavailableView("No Devices", systemImage: "tv")
+                        emptyLibraryContent
                     } else {
                         ForEach(model.devices) { device in
                             DeviceRow(device: device)
@@ -328,6 +332,13 @@ public struct ADBTVRootView: View {
                         cancelDeviceToolOperation: cancelDeviceToolOperation
                     )
                     .id(device.id)
+                } else if model.devices.isEmpty {
+                    ScrollView {
+                        emptyLibraryContent
+                            .frame(maxWidth: 520)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .navigationTitle("ADB TV")
                 } else {
                     ContentUnavailableView("Select a Device", systemImage: "tv.and.hifispeaker.fill")
                 }
@@ -506,6 +517,39 @@ public struct ADBTVRootView: View {
             model.cancelActiveDeviceOperation()
             cancelPairing()
             stopDiscovery()
+        }
+    }
+
+    private var emptyLibraryContent: some View {
+        ContentUnavailableView {
+            Label("Connect Your TV", systemImage: "tv")
+        } description: {
+            Text("Connect to the same Wi-Fi as your TV and enable ADB debugging in its developer options.")
+        } actions: {
+            VStack(spacing: 12) {
+                Button {
+                    model.prepareManualPairing()
+                    isPairDevicePresented = true
+                } label: {
+                    Text("Pair with Code")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .adbTVProminentButton()
+
+                Button {
+                    isAddDevicePresented = true
+                } label: {
+                    Text("Connect by IP Address")
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .buttonStyle(.bordered)
+
+                Text("Use a pairing code for Wireless debugging, or connect by IP when network ADB is already enabled.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .multilineTextAlignment(.center)
+            .disabled(model.activeDeviceOperation != nil || deviceConnectionState.isConnecting)
         }
     }
 
@@ -1508,9 +1552,11 @@ public struct ADBTVRootView: View {
     }
 
     private func startRemoteSession(for device: ADBTVDeviceSummary) {
-        guard !ProcessInfo.processInfo.arguments.contains("--ui-preview") else {
+#if DEBUG
+        guard !ProcessInfo.processInfo.arguments.contains(where: { $0.hasPrefix("--ui-") }) else {
             return
         }
+#endif
         guard scenePhase == .active,
               remoteSessionDeviceID != device.id || remoteSession == nil else {
             return
@@ -1678,15 +1724,7 @@ public struct ADBTVRootView: View {
         switch command {
         case .list(let scope):
             let mode: ADBTVAppsMode = scope == .user ? .user : .system
-            if installedAppsState.mode != mode {
-                installedAppsState.packages = []
-                installedAppsState.userID = nil
-            }
-            installedAppsState.mode = mode
-            installedAppsState.details = [:]
-            installedAppsState.systemSnapshot = nil
-            installedAppsState.pendingDetailsPackages = []
-            installedAppsState.detailsStatus = .idle
+            installedAppsState.prepareListRefresh(mode: mode)
         case .activitySnapshot:
             installedAppsState.prepareActivityRefresh()
         case .activeSystemSnapshot:
@@ -1794,15 +1832,12 @@ public struct ADBTVRootView: View {
         var refreshesActivity = false
         switch completion {
         case .success(.listedUserApps(let snapshot)):
-            installedAppsState.userID = snapshot.userID
-            installedAppsState.packages = snapshot.packages
-            installedAppsState.status = .ready(message: nil)
+            installedAppsState.recordListSnapshot(snapshot.packages, userID: snapshot.userID)
             startInstalledAppDetailsLoad(snapshot.packages, on: device)
         case .success(.listedSystemApps(let snapshot)):
-            installedAppsState.userID = snapshot.userID
-            installedAppsState.packages = snapshot.packages
-            installedAppsState.systemSnapshot = snapshot
-            installedAppsState.status = .ready(message: nil)
+            installedAppsState.recordListSnapshot(
+                snapshot.packages, userID: snapshot.userID, systemSnapshot: snapshot
+            )
             startInstalledAppDetailsLoad(snapshot.packages, on: device)
         case .success(.loadedActivity(let snapshot)):
             installedAppsState.userID = snapshot.userID
@@ -2807,6 +2842,11 @@ private struct ADBTVOpenSourceNoticesView: View {
 
 private struct PairDeviceView: View {
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case name, host, connectionPort, pairingPort, code
+    }
 
     @Binding var draft: ADBTVPairingDraft
     var status: ADBTVPairingStatus
@@ -2816,33 +2856,92 @@ private struct PairDeviceView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Device") {
-                    TextField("Name", text: $draft.displayName)
+                Section {
+                    ADBTVFormField("Name (Optional)") {
+                        TextField("Device Name", text: $draft.displayName)
+                            .focused($focusedField, equals: .name)
+                            .submitLabel(.next)
+                            .onSubmit {
+                                focusedField = draft.pairingQRCode != nil
+                                    ? nil : draft.discoveredService == nil ? .host : .code
+                            }
+                    }
                     if let qrCode = draft.pairingQRCode {
-                        LabeledContent("Service", value: qrCode.serviceName)
+                        ADBTVLabeledValue("Service", value: qrCode.serviceName)
                     } else if let service = draft.discoveredService {
-                        LabeledContent("Service", value: service.displayName)
+                        ADBTVLabeledValue("Service", value: service.displayName)
                     } else {
-                        TextField("Host or IP Address", text: $draft.host)
-                            .autocorrectionDisabled()
-                        TextField("Connection Port", text: $draft.connectionPortString)
+                        ADBTVFormField("Host or IP Address") {
+                            TextField("192.168.1.50 or tv.local", text: $draft.host)
+                                .adbTVAddressInput()
+                                .focused($focusedField, equals: .host)
+                                .submitLabel(.next)
+                                .onSubmit { focusedField = .connectionPort }
+                        }
+                        ADBTVFormField("Connection Port") {
+                            TextField("Port on the Wireless debugging screen", text: $draft.connectionPortString)
+                                .adbTVNumericInput()
+                                .focused($focusedField, equals: .connectionPort)
+                                .submitLabel(.next)
+                                .onSubmit { focusedField = .pairingPort }
+                        }
+                    }
+                } header: {
+                    Text("Device")
+                } footer: {
+                    if draft.discoveredService == nil && draft.pairingQRCode == nil {
+                        Text("On your TV, open Developer options → Wireless debugging. Use the IP address and connection port on that main screen.")
                     }
                 }
 
                 if draft.pairingQRCode == nil {
-                    Section("Pairing") {
+                    Section {
                         if draft.discoveredService == nil {
-                            TextField("Pairing Port", text: $draft.pairingPortString)
+                            ADBTVFormField("Pairing Port") {
+                                TextField("Port in the pairing dialog", text: $draft.pairingPortString)
+                                    .adbTVNumericInput()
+                                    .focused($focusedField, equals: .pairingPort)
+                                    .submitLabel(.next)
+                                    .onSubmit { focusedField = .code }
+                            }
                         }
-                        TextField("6-Digit Code", text: $draft.codeString)
+                        ADBTVFormField("Pairing Code") {
+                            TextField("6-Digit Code", text: $draft.codeString)
+                                .adbTVNumericInput()
+                                .focused($focusedField, equals: .code)
+                                .submitLabel(.done)
+                                .onSubmit {
+                                    if draft.canStartPairing && !status.isPairing && !hasPaired {
+                                        focusedField = nil
+                                        startPairing()
+                                    }
+                                }
+                        }
+                    } header: {
+                        Text("Pairing")
+                    } footer: {
+                        if draft.discoveredService == nil {
+                            Text("Choose Pair device with pairing code on your TV. Enter the code and pairing port from that dialog; its port differs from the connection port.")
+                        } else {
+                            Text("Keep the pairing dialog open on your TV and enter its 6-digit code.")
+                        }
                     }
                 }
 
                 PairingStatusView(status: status)
             }
-            .disabled(status.isPairing)
+            .disabled(status.isPairing || hasPaired)
             .navigationTitle("Pair Device")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
             .toolbar {
+#if os(iOS)
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                }
+#endif
                 ToolbarItem(placement: .cancellationAction) {
                     Button(hasPaired ? "Done" : "Cancel") {
                         cancelPairing()
@@ -2853,6 +2952,7 @@ private struct PairDeviceView: View {
                 if !hasPaired && draft.pairingQRCode == nil {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Pair") {
+                            focusedField = nil
                             startPairing()
                         }
                         .disabled(!draft.canStartPairing || status.isPairing)
@@ -2929,7 +3029,7 @@ private struct PairingStatusView: View {
         case .paired(let device):
             Section {
                 Label("Paired with \(device.displayName)", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.accentColor)
                 Text("Saved as \(device.connectionDescription)")
                     .foregroundStyle(.secondary)
             }
@@ -2963,6 +3063,11 @@ private func connectionDiagnosticContext(
 
 private struct AddDeviceView: View {
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case name, host, port
+    }
 
     @State private var displayName = ""
     @State private var host = ""
@@ -2976,18 +3081,47 @@ private struct AddDeviceView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Device") {
-                    TextField("Name", text: $displayName)
-                    TextField("Host", text: $host)
-                        .autocorrectionDisabled()
-                    TextField("Port", text: $port)
+                Section {
+                    ADBTVFormField("Name (Optional)") {
+                        TextField("Device Name", text: $displayName)
+                            .focused($focusedField, equals: .name)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .host }
+                    }
+                    ADBTVFormField("Host or IP Address") {
+                        TextField("192.168.1.50 or tv.local", text: $host)
+                            .adbTVAddressInput()
+                            .focused($focusedField, equals: .host)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .port }
+                    }
+                    ADBTVFormField("Connection Port") {
+                        TextField("5555", text: $port)
+                            .adbTVNumericInput()
+                            .focused($focusedField, equals: .port)
+                            .submitLabel(.done)
+                            .onSubmit { connectAndSave() }
+                    }
+                } header: {
+                    Text("Device")
+                } footer: {
+                    Text("Use the address and port shown by your TV's network ADB settings. Verified connections are saved. For Wireless debugging, use Pair with Code first.")
                 }
                 .disabled(status.isConnecting || status.isConnected)
 
                 ManualDeviceConnectionStatusView(status: status)
             }
             .navigationTitle("Add Device")
+#if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+#endif
             .toolbar {
+#if os(iOS)
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                }
+#endif
                 ToolbarItem(placement: .cancellationAction) {
                     Button(status.isConnected ? "Close" : "Cancel") {
                         connectionTask?.cancel()
@@ -2997,7 +3131,7 @@ private struct AddDeviceView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     if !status.isConnected {
-                        Button("Connect & Save") {
+                        Button("Connect") {
                             connectAndSave()
                         }
                         .disabled(validatedDevice == nil || status.isConnecting)
@@ -3015,7 +3149,7 @@ private struct AddDeviceView: View {
         let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedHost.isEmpty,
               let portValue = Int(port.trimmingCharacters(in: .whitespacesAndNewlines)),
-              UInt16(exactly: portValue) != nil else {
+              UInt16(exactly: portValue) != nil, portValue > 0 else {
             return nil
         }
 
@@ -3028,10 +3162,11 @@ private struct AddDeviceView: View {
     }
 
     private func connectAndSave() {
-        guard let device = validatedDevice else {
+        guard !status.isConnecting, !status.isConnected, let device = validatedDevice else {
             return
         }
 
+        focusedField = nil
         connectionTask?.cancel()
         status = .connecting
         connectionTask = Task {
@@ -3109,7 +3244,7 @@ private struct ManualDeviceConnectionStatusView: View {
         case .connected(let device):
             Section {
                 Label("Connected and saved", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.accentColor)
                 LabeledContent("Device", value: device.model ?? device.displayName)
             }
         case .failed(let userMessage, let diagnosticDetail):
@@ -3335,7 +3470,7 @@ private struct SavedDeviceConnectionView: View {
                         Button(action: retry) {
                             Label("Retry Connection", systemImage: "arrow.clockwise")
                         }
-                        .buttonStyle(.borderedProminent)
+                        .adbTVProminentButton()
 
                         Button(action: repair) {
                             Label("Update Connection", systemImage: "network")
@@ -3428,6 +3563,11 @@ private struct RenameDeviceView: View {
 
 private struct RepairDeviceConnectionView: View {
     @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedField: Field?
+
+    private enum Field: Hashable {
+        case host, port
+    }
 
     let device: ADBTVDeviceSummary
     @State private var host: String
@@ -3461,17 +3601,28 @@ private struct RepairDeviceConnectionView: View {
         NavigationStack {
             Form {
                 Section("Saved Device") {
-                    LabeledContent("Name", value: device.displayName)
-                    LabeledContent("Current Connection", value: device.connectionDescription)
+                    ADBTVLabeledValue("Name", value: device.displayName)
+                    ADBTVLabeledValue("Current Connection", value: device.connectionDescription)
                     if let model = device.model {
-                        LabeledContent("Expected Model", value: model)
+                        ADBTVLabeledValue("Expected Model", value: model)
                     }
                 }
 
                 Section("New Connection") {
-                    TextField("Host or IP Address", text: $host)
-                        .autocorrectionDisabled()
-                    TextField("Connection Port", text: $port)
+                    ADBTVFormField("Host or IP Address") {
+                        TextField("192.168.1.50 or tv.local", text: $host)
+                            .adbTVAddressInput()
+                            .focused($focusedField, equals: .host)
+                            .submitLabel(.next)
+                            .onSubmit { focusedField = .port }
+                    }
+                    ADBTVFormField("Connection Port") {
+                        TextField("Port on your TV", text: $port)
+                            .adbTVNumericInput()
+                            .focused($focusedField, equals: .port)
+                            .submitLabel(.done)
+                            .onSubmit { testConnection() }
+                    }
                 }
                 .disabled(status.isVerifying)
 
@@ -3497,6 +3648,12 @@ private struct RepairDeviceConnectionView: View {
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
+#if os(iOS)
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Done") { focusedField = nil }
+                }
+#endif
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") {
                         verificationTask?.cancel()
@@ -3557,10 +3714,11 @@ private struct RepairDeviceConnectionView: View {
     }
 
     private func testConnection() {
-        guard let candidateDevice else {
+        guard !status.isVerifying, status.verifiedDevice == nil, let candidateDevice else {
             return
         }
 
+        focusedField = nil
         verificationTask?.cancel()
         status = .verifying
         verificationTask = Task {
@@ -3680,7 +3838,7 @@ private struct RepairDeviceConnectionStatusView: View {
         case .verified(let device):
             Section("Verified Device") {
                 Label("Connection verified", systemImage: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Color.accentColor)
                 LabeledContent("Detected Model", value: device.model ?? "Unknown")
                 LabeledContent("Connection", value: device.connectionDescription)
                 if warnsAboutDifferentModel {
@@ -4021,7 +4179,7 @@ private struct APKInstallPanel: View {
             }
 
             TextField("App package URL", text: installURLString)
-                .autocorrectionDisabled()
+                .adbTVAddressInput()
                 .textFieldStyle(.roundedBorder)
                 .disabled(installDraft.status.isRunning || deviceOperationInProgress)
 
@@ -4032,20 +4190,12 @@ private struct APKInstallPanel: View {
             }
 
             if let package = installDraft.selectedPackage {
-                LabeledContent("Package") {
-                    Text(package.fileName)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
+                ADBTVLabeledValue("Package", value: package.fileName)
                 if let byteCount = package.byteCount {
-                    LabeledContent("Size", value: Self.formattedByteCount(byteCount))
+                    ADBTVLabeledValue("Size", value: Self.formattedByteCount(byteCount))
                 }
             } else if let url = installDraft.validatedURL {
-                LabeledContent("Source") {
-                    Text(url.absoluteString)
-                        .lineLimit(2)
-                        .truncationMode(.middle)
-                }
+                ADBTVLabeledValue("Source", value: url.absoluteString)
             }
 
             if installDraft.usesInsecureHTTP {
@@ -4078,8 +4228,7 @@ private struct APKInstallPanel: View {
             Label("Install", systemImage: "square.and.arrow.down")
                 .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
-        .buttonStyle(.borderedProminent)
-        .foregroundStyle(Color.white)
+        .adbTVProminentButton()
         .disabled(!canInstall || installDraft.status.isRunning || deviceOperationInProgress)
     }
 
@@ -4147,7 +4296,7 @@ private struct InstallStatusView: View {
             }
         case .succeeded:
             Label("Installed", systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
+                .foregroundStyle(Color.accentColor)
         case .cancelled:
             Label("Installation cancelled", systemImage: "xmark.circle")
                 .foregroundStyle(.secondary)
@@ -4217,6 +4366,8 @@ private struct RemoteActionsPanel: View {
         "--ui-media-expanded"
     )
     @FocusState private var focusedControl: FocusedControl?
+    @ScaledMetric(relativeTo: .title3) private var selectButtonDiameter: CGFloat = 76
+    @ScaledMetric(relativeTo: .title3) private var remoteSymbolSize: CGFloat = 20
 
     private enum FocusedControl: Hashable {
         case remote
@@ -4225,6 +4376,14 @@ private struct RemoteActionsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            if status.showsPriorityFeedback {
+                RemoteStatusView(
+                    status: status,
+                    retry: retrySession,
+                    cancel: cancelRemoteOperation
+                )
+            }
+
             VStack(spacing: 16) {
                 HStack {
                     roundButton(.power, systemImage: "power", foregroundStyle: .red)
@@ -4238,20 +4397,34 @@ private struct RemoteActionsPanel: View {
 
                 RemoteControlButton(action: { sendFromControl(.back) }) {
                     Image(systemName: "arrow.uturn.backward")
-                        .font(.title2.weight(.semibold))
-                        .frame(width: 152, height: 44)
+                        .font(.system(size: min(remoteSymbolSize, 28), weight: .semibold))
+                        .frame(width: 152, height: dynamicTypeSize.isAccessibilitySize ? 60 : 44)
                         .background(controlBackground, in: Capsule())
                 }
                 .accessibilityLabel("Back")
 
-                HStack {
-                    roundButton(.volumeDown, systemImage: "speaker.minus.fill")
-                    Spacer()
-                    roundButton(.volumeMute, systemImage: "speaker.slash.fill")
-                    Spacer()
-                    roundButton(.settings, systemImage: "gearshape.fill")
-                    Spacer()
-                    roundButton(.volumeUp, systemImage: "speaker.plus.fill")
+                ViewThatFits(in: .horizontal) {
+                    HStack {
+                        roundButton(.volumeDown, systemImage: "speaker.minus.fill")
+                        Spacer()
+                        roundButton(.volumeMute, systemImage: "speaker.slash.fill")
+                        Spacer()
+                        roundButton(.settings, systemImage: "gearshape.fill")
+                        Spacer()
+                        roundButton(.volumeUp, systemImage: "speaker.plus.fill")
+                    }
+                    VStack(spacing: 12) {
+                        HStack {
+                            roundButton(.volumeDown, systemImage: "speaker.minus.fill")
+                            Spacer()
+                            roundButton(.volumeUp, systemImage: "speaker.plus.fill")
+                        }
+                        HStack {
+                            roundButton(.volumeMute, systemImage: "speaker.slash.fill")
+                            Spacer()
+                            roundButton(.settings, systemImage: "gearshape.fill")
+                        }
+                    }
                 }
             }
             .padding(16)
@@ -4289,10 +4462,10 @@ private struct RemoteActionsPanel: View {
                     } label: {
                         Label("Send Text", systemImage: "paperplane.fill")
                             .labelStyle(.iconOnly)
-                            .frame(width: 24, height: 24)
+                            .font(.system(size: min(remoteSymbolSize, 28), weight: .semibold))
+                            .frame(width: 28, height: 28)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .foregroundStyle(Color.white)
+                    .adbTVProminentButton()
                     .disabled(!canSendText || status.remoteActionsUnavailable)
                     .accessibilityLabel("Send Text")
                 }
@@ -4317,11 +4490,13 @@ private struct RemoteActionsPanel: View {
                 }
             }
 
-            RemoteStatusView(
-                status: status,
-                retry: retrySession,
-                cancel: cancelRemoteOperation
-            )
+            if !status.showsPriorityFeedback {
+                RemoteStatusView(
+                    status: status,
+                    retry: retrySession,
+                    cancel: cancelRemoteOperation
+                )
+            }
         }
         .focusable()
         .focused($focusedControl, equals: .remote)
@@ -4356,6 +4531,7 @@ private struct RemoteActionsPanel: View {
     private var directionalPad: some View {
         GeometryReader { geometry in
             let size = geometry.size.width
+            let selectSize = min(selectButtonDiameter, min(120, size * 0.38))
             ZStack {
                 Circle()
                     .fill(Color.secondary.opacity(0.10))
@@ -4372,15 +4548,18 @@ private struct RemoteActionsPanel: View {
                 RemoteControlButton(action: { sendFromControl(.select) }) {
                     Text("OK")
                         .font(.title3.bold())
-                        .frame(width: 76, height: 76)
-                        .background(Color.accentColor, in: Circle())
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                        .padding(8)
+                        .frame(width: selectSize, height: selectSize)
+                        .background(ADBTVControlColors.actionFill, in: Circle())
                 }
                 .foregroundStyle(Color.white)
                 .accessibilityLabel("Select")
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .frame(maxWidth: 248)
+        .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? 320 : 248)
         .frame(maxWidth: .infinity)
     }
 
@@ -4492,8 +4671,11 @@ private struct RemoteActionsPanel: View {
             repeatAction: { sendRepeat(action) }
         ) {
             Image(systemName: systemImage)
-                .font(.title2.weight(.bold))
-                .frame(width: 52, height: 52)
+                .font(.system(size: min(remoteSymbolSize, 28), weight: .bold))
+                .frame(
+                    width: dynamicTypeSize.isAccessibilitySize ? 60 : 52,
+                    height: dynamicTypeSize.isAccessibilitySize ? 60 : 52
+                )
                 .contentShape(Circle())
         }
         .accessibilityLabel(action.displayTitle)
@@ -4511,9 +4693,12 @@ private struct RemoteActionsPanel: View {
                 : nil
         ) {
             Image(systemName: systemImage)
-                .font(.title3.weight(.semibold))
+                .font(.system(size: min(remoteSymbolSize, 28), weight: .semibold))
                 .foregroundStyle(foregroundStyle)
-                .frame(width: 50, height: 50)
+                .frame(
+                    width: dynamicTypeSize.isAccessibilitySize ? 60 : 50,
+                    height: dynamicTypeSize.isAccessibilitySize ? 60 : 50
+                )
                 .background(controlBackground, in: Circle())
         }
         .accessibilityLabel(action.displayTitle)
@@ -4633,6 +4818,8 @@ private struct RemoteControlButton<Label: View>: View {
 }
 
 private struct RemoteStatusView: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var status: ADBTVRemoteStatus
     var retry: () -> Void
     var cancel: () -> Void
@@ -4650,14 +4837,14 @@ private struct RemoteStatusView: View {
                 .foregroundStyle(.orange)
         case .connectionFailed(let userMessage, let diagnosticDetail):
             VStack(alignment: .leading, spacing: 10) {
-                RemoteFailureView(
-                    userMessage: userMessage,
-                    diagnosticDetail: diagnosticDetail
-                )
+                Label(userMessage, systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
                 Button(action: retry) {
                     Label("Retry Connection", systemImage: "arrow.clockwise")
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(.borderedProminent)
+                .adbTVProminentButton()
+                DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
             }
         case .sending(let action):
             sendingStatus("Sending \(action.displayTitle)")
@@ -4691,16 +4878,27 @@ private struct RemoteStatusView: View {
     }
 
     private func sendingStatus(_ title: String) -> some View {
-        HStack(spacing: 10) {
-            ProgressView()
-            Text(title)
-                .foregroundStyle(.secondary)
-            Spacer(minLength: 8)
-            Button(role: .cancel, action: cancel) {
-                Label("Cancel", systemImage: "xmark.circle")
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    connectionStatus(title)
+                    cancelButton
+                }
+            } else {
+                HStack(spacing: 10) {
+                    connectionStatus(title)
+                    Spacer(minLength: 8)
+                    cancelButton
+                }
             }
-            .buttonStyle(.bordered)
         }
+    }
+
+    private var cancelButton: some View {
+        Button(role: .cancel, action: cancel) {
+            Label("Cancel", systemImage: "xmark.circle")
+        }
+        .buttonStyle(.bordered)
     }
 }
 

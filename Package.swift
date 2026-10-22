@@ -46,7 +46,8 @@ let package = Package(
                 .product(name: "ZIPFoundation", package: "ZIPFoundation")
             ],
             resources: [
-                .copy("Resources/OpenSourceNotices.txt")
+                .copy("Resources/OpenSourceNotices.txt"),
+                .process("Resources/Colors.xcassets")
             ]
         ),
         .testTarget(
