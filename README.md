@@ -91,6 +91,8 @@ Implemented so far:
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - searchable user and system app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, launch, native TV App Settings, force stop, confirmed user-app data clearing and uninstall, and checked command diagnostics;
 - incremental installed-app metadata pages that continue beyond the first 128 packages;
+- user-scoped app snapshots and actions, with uninstall limited to the snapshot's Android user;
+- recoverable app-name/icon loading that retains completed pages and retries failed packages;
 - helper-free Active Apps snapshots with foreground state, grouped process count, bounded proportional memory, manual refresh, and no activity history;
 - guarded active-user system app state, with confirmed Disable and Restore Android Default actions that preserve package data and protect critical Android roles;
 - structured device information for Android version, display resolution, storage, uptime, and build identity;
@@ -170,6 +172,17 @@ The repository contains `ADBClientCore`, `ADBTVApp`, and the source for the opti
 ASCII remote text uses Android's built-in `input text` command with checked exit status. Chinese and other non-ASCII text uses the optional bundled ADB TV Input helper because Android's built-in command cannot generate characters absent from the TV's virtual key map. Enter Unicode text, install the helper from the Remote panel once, focus a TV text field, and send again. The app temporarily selects the helper for each send and restores the previous TV keyboard afterward.
 
 The same helper returns installed-app names, versions, install/update dates, summed APK size, icons, and Android's stopped state through a shell-only provider. APK size covers the base and split APK files, not app data or cache. When the helper is missing, the Apps list remains fully functional and falls back to package identifiers, generic icons, and an available Force Stop action. Install the versioned v3 helper from the Apps toolbar or Remote panel; if Android rejects an update signed by a different CI key, ADB TV offers to replace only the helper and retry. Unicode input continues to support v2 during migration.
+
+Apps lists and actions refer to the Android user captured when the list was
+loaded. Uninstall removes the app and its data for that user; other Android
+users retain their installation. If the active TV user changes, refresh Apps
+before acting on the new user's apps. Helper metadata is read for the same
+user. Temporary metadata failures preserve loaded names and icons, continue
+later pages, and offer **Retry App Details** for the failed packages.
+
+Replacing a helper signed by a different key can still fail if another Android
+user retains the old helper. ADB TV does not remove other users' helper data to
+work around Android's device-wide APK signing rules.
 
 App Details can open Android's native App Info screen for any installed app.
 User Apps also expose a confirmed **Clear App Data** action. Clearing data
