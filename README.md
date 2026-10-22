@@ -63,6 +63,8 @@ Implemented so far:
 - file-backed single-APK transfer with at most one ADB sync frame and one 1 MiB transport batch in memory;
 - owned local package staging with cleanup after validation, success, failure, cancellation, or timeout;
 - staged shared-storage uploads that preserve an existing destination until transfer completes;
+- TV-side upload conflict checks with explicit replacement, bounded independent staging cleanup after interruption, and visible cleanup failures;
+- cancellable folder reads and file operations, with 30-second folder/mutation and transfer-inactivity limits and a 15-minute transfer limit;
 - explicit APK-install cancellation that retains operation ownership through bounded fresh-connection staging cleanup, with cleanup failures exposed before same-source retry;
 - operation-unique remote staging with checked removal and cleanup failures preserved in technical diagnostics;
 - single active long-running device operation, bound to its originating device until completion or cancellation;
@@ -88,11 +90,13 @@ Implemented so far:
 - optional repository-owned Android IME installation, bounded UTF-8 text commit retries, and interruption-safe previous-keyboard restoration for Chinese and other Unicode input;
 - checked remote shell results so Android-side input failures cannot be reported as successful actions;
 - searchable user and system app names and package identifiers with bounded icons and metadata from the optional Android helper, local fallback, launch, native TV App Settings, force stop, confirmed user-app data clearing and uninstall, and checked command diagnostics;
+- incremental installed-app metadata pages that continue beyond the first 128 packages;
 - helper-free Active Apps snapshots with foreground state, grouped process count, bounded proportional memory, manual refresh, and no activity history;
 - guarded active-user system app state, with confirmed Disable and Restore Android Default actions that preserve package data and protect critical Android roles;
 - structured device information for Android version, display resolution, storage, uptime, and build identity;
 - bounded binary-safe Android TV screenshots with PNG validation, preview, native sharing, and clear protected-content/device-blocked failures;
 - bounded one-shot ADB shell commands with read-only diagnostic presets, cancellation, timeout, copyable output, and preserved exit status;
+- isolated checked shell execution that preserves explicit exit codes, trailing comments, and background command syntax;
 - unsigned IPA packaging in GitHub Actions;
 - packaged ADB TV and BoringSSL license notices with an in-app About surface;
 - repository-owned app icon and accent-color assets with packaged-product validation;
@@ -114,7 +118,7 @@ Implemented so far:
 
 The current implementation is a Swift package plus an Xcode iOS app project.
 
-On a machine with Swift 5.9+ installed:
+On macOS 14+ with Swift 5.9+ installed (the full package includes SwiftUI):
 
 ```sh
 swift test

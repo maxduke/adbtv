@@ -18,6 +18,7 @@ struct ADBTVFileBrowserView: View {
     @State private var items: [ADBSharedStorageItem] = []
     @State private var status = ADBTVFileListStatus.idle
     @State private var operationTask: Task<Void, Never>?
+    @State private var operationID: UUID?
     @State private var transfer: ADBTVFileTransferState?
     @State private var isImporterPresented = false
     @State private var isNewFolderPromptPresented = false
@@ -28,6 +29,7 @@ struct ADBTVFileBrowserView: View {
     @State private var deleteItem: ADBSharedStorageItem?
     @State private var pendingUploadURL: URL?
     @State private var downloadedFile: ADBTVDownloadedFile?
+    @State private var downloadContainerURL: URL?
 
     var body: some View {
         List {
@@ -72,8 +74,12 @@ struct ADBTVFileBrowserView: View {
 #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
+                if isBusy, transfer == nil {
+                    Button("Cancel", action: cancelOperation)
+                        .disabled(operationTask?.isCancelled == true)
+                }
                 Button {
-                    Task { await loadContents() }
+                    refreshContents()
                 } label: {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
@@ -104,14 +110,17 @@ struct ADBTVFileBrowserView: View {
         }
         .refreshable {
             guard !isBusy else { return }
-            await loadContents()
+            await refreshContentsAndWait()
         }
         .task(id: directory.rawValue) {
-            await loadContents()
+            await refreshContentsAndWait()
         }
         .onDisappear {
             operationTask?.cancel()
+            operationID = nil
             operationTask = nil
+            transfer = nil
+            status.finishCancelledLoad()
         }
         .filePicker(isPresented: $isImporterPresented) { result in
             switch result {
@@ -146,7 +155,7 @@ struct ADBTVFileBrowserView: View {
         .alert("Replace Existing File?", isPresented: uploadReplacementBinding) {
             Button("Replace", role: .destructive) {
                 if let url = pendingUploadURL {
-                    upload(url)
+                    upload(url, replacingExisting: true)
                 }
                 pendingUploadURL = nil
             }
@@ -180,6 +189,7 @@ struct ADBTVFileBrowserView: View {
                 } label: {
                     itemLabel(item)
                 }
+                .disabled(isBusy)
             } else {
                 itemLabel(item)
             }
@@ -237,15 +247,14 @@ struct ADBTVFileBrowserView: View {
                     Text(transfer.title)
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
-                    Text(transfer.detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if transfer.showsByteCounts {
+                        Text(transfer.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
-                Button {
-                    operationTask?.cancel()
-                    self.transfer?.title = "Cancelling"
-                } label: {
+                Button(action: cancelOperation) {
                     Label("Cancel", systemImage: "xmark")
                         .labelStyle(.iconOnly)
                 }
@@ -305,8 +314,30 @@ struct ADBTVFileBrowserView: View {
         )
     }
 
+    @discardableResult
+    private func refreshContents() -> Task<Void, Never>? {
+        startOperation { id in
+            await loadContents(operationID: id)
+        }
+    }
+
+    private func refreshContentsAndWait() async {
+        guard let task = refreshContents() else { return }
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+    }
+
+    private func cancelOperation() {
+        operationTask?.cancel()
+        transfer?.title = "Cancelling and cleaning up"
+    }
+
     @MainActor
-    private func loadContents() async {
+    private func loadContents(operationID id: UUID) async {
+        guard operationID == id, !Task.isCancelled else { return }
         status = .loading
         if ProcessInfo.processInfo.arguments.contains("--ui-files") {
             items = Self.previewItems(in: directory)
@@ -314,12 +345,16 @@ struct ADBTVFileBrowserView: View {
             return
         }
         do {
-            items = try await Self.contents(of: directory, on: device)
+            let contents = try await Self.contents(of: directory, on: device)
+            guard operationID == id, !Task.isCancelled else { return }
+            items = contents
             status = .ready
-        } catch is CancellationError {
-            status.finishCancelledLoad()
-            return
         } catch {
+            guard operationID == id else { return }
+            if Task.isCancelled || error is CancellationError {
+                status.finishCancelledLoad()
+                return
+            }
             fail("Could not load this folder.", error: error, operation: "listDirectory")
         }
     }
@@ -340,28 +375,31 @@ struct ADBTVFileBrowserView: View {
         upload(url)
     }
 
-    private func upload(_ url: URL) {
-        startOperation(title: "Uploading \(url.lastPathComponent)") {
-            try await Self.upload(url, to: directory, on: device) { current, total in
-                await updateTransfer(current: current, total: total)
+    private func upload(_ url: URL, replacingExisting: Bool = false) {
+        startOperation(title: "Uploading \(url.lastPathComponent)", showsByteCounts: true) { id in
+            try await Self.upload(
+                url, to: directory, on: device, replacingExisting: replacingExisting
+            ) { current, total in
+                await updateTransfer(current: current, total: total, operationID: id)
             }
-            await loadContents()
+            await loadContents(operationID: id)
         }
     }
 
     private func download(_ item: ADBSharedStorageItem) {
-        startOperation(title: "Downloading \(item.name)") {
+        startOperation(title: "Downloading \(item.name)", showsByteCounts: true) { id in
             let container = FileManager.default.temporaryDirectory
                 .appendingPathComponent("ADBTV-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: container, withIntermediateDirectories: false)
             let destination = container.appendingPathComponent(item.name)
             do {
                 try await Self.download(item, to: destination, on: device) { current, total in
-                    await updateTransfer(current: current, total: total)
+                    await updateTransfer(current: current, total: total, operationID: id)
                 }
-                await MainActor.run {
-                    downloadedFile = ADBTVDownloadedFile(url: destination, containerURL: container)
-                }
+                try Task.checkCancellation()
+                guard operationID == id else { throw CancellationError() }
+                downloadContainerURL = container
+                downloadedFile = ADBTVDownloadedFile(url: destination, containerURL: container)
             } catch {
                 try? FileManager.default.removeItem(at: container)
                 throw error
@@ -372,9 +410,9 @@ struct ADBTVFileBrowserView: View {
     private func createFolder() {
         guard canCreateFolder else { return }
         let name = normalizedNewFolderName
-        startOperation(title: "Creating \(name)") {
+        startOperation(title: "Creating \(name)") { id in
             try await Self.createDirectory(named: name, in: directory, on: device)
-            await loadContents()
+            await loadContents(operationID: id)
         }
     }
 
@@ -382,51 +420,68 @@ struct ADBTVFileBrowserView: View {
         guard let item = renameItem, canRenameItem else { return }
         let name = normalizedRenameName
         renameItem = nil
-        startOperation(title: "Renaming \(item.name)") {
+        startOperation(title: "Renaming \(item.name)") { id in
             try await Self.rename(item, to: name, on: device)
-            await loadContents()
+            await loadContents(operationID: id)
         }
     }
 
     private func move(_ item: ADBSharedStorageItem, to destination: ADBSharedStoragePath) {
-        startOperation(title: "Moving \(item.name)") {
+        startOperation(title: "Moving \(item.name)") { id in
             try await Self.move(item, to: destination, on: device)
-            await loadContents()
+            await loadContents(operationID: id)
         }
     }
 
     private func delete(_ item: ADBSharedStorageItem) {
         deleteItem = nil
-        startOperation(title: "Deleting \(item.name)") {
+        startOperation(title: "Deleting \(item.name)") { id in
             try await Self.delete(item, on: device)
-            await loadContents()
+            await loadContents(operationID: id)
         }
     }
 
+    @discardableResult
     private func startOperation(
-        title: String,
-        operation: @escaping @MainActor @Sendable () async throws -> Void
-    ) {
-        guard operationTask == nil else { return }
-        transfer = ADBTVFileTransferState(title: title)
-        operationTask = Task { @MainActor in
+        title: String? = nil,
+        showsByteCounts: Bool = false,
+        operation: @escaping @MainActor @Sendable (UUID) async throws -> Void
+    ) -> Task<Void, Never>? {
+        guard operationTask == nil else { return nil }
+        let id = UUID()
+        operationID = id
+        transfer = title.map { ADBTVFileTransferState(title: $0, showsByteCounts: showsByteCounts) }
+        let task = Task { @MainActor in
+            defer {
+                if operationID == id {
+                    transfer = nil
+                    operationTask = nil
+                    operationID = nil
+                    status.finishCancelledLoad()
+                }
+            }
             do {
-                try await operation()
-                transfer = nil
-                operationTask = nil
-            } catch is CancellationError {
-                transfer = nil
-                operationTask = nil
+                try await operation(id)
             } catch {
-                transfer = nil
-                operationTask = nil
-                fail("The file operation failed.", error: error, operation: title)
+                guard operationID == id else { return }
+                if error is ADBSharedStorageUploadCleanupError {
+                    fail(
+                        "Could not remove the upload's temporary file. See Technical Details.",
+                        error: error,
+                        operation: title ?? "listDirectory"
+                    )
+                } else if !Task.isCancelled, !(error is CancellationError) {
+                    fail("The file operation failed.", error: error, operation: title ?? "listDirectory")
+                }
             }
         }
+        operationTask = task
+        return task
     }
 
     @MainActor
-    private func updateTransfer(current: Int64, total: Int64?) {
+    private func updateTransfer(current: Int64, total: Int64?, operationID id: UUID) {
+        guard operationID == id, !Task.isCancelled else { return }
         transfer?.completedByteCount = current
         transfer?.totalByteCount = total
     }
@@ -447,9 +502,10 @@ struct ADBTVFileBrowserView: View {
     }
 
     private func cleanupDownload() {
-        if let downloadedFile {
-            try? FileManager.default.removeItem(at: downloadedFile.containerURL)
+        if let downloadContainerURL {
+            try? FileManager.default.removeItem(at: downloadContainerURL)
         }
+        downloadContainerURL = nil
         downloadedFile = nil
     }
 
@@ -520,9 +576,11 @@ private extension ADBTVFileBrowserView {
         of directory: ADBSharedStoragePath,
         on device: ADBTVDeviceSummary
     ) async throws -> [ADBSharedStorageItem] {
-        try await withConnection(to: device) { connection in
-            var manager = ADBSharedStorageManager(session: connection)
-            return try await manager.contents(of: directory)
+        try await ADBTVOperationTimeoutPolicy.fileListing.run(operation: .fileListing) {
+            try await withConnection(to: device) { connection in
+                var manager = ADBSharedStorageManager(session: connection)
+                return try await manager.contents(of: directory)
+            }
         }
     }
 
@@ -530,19 +588,50 @@ private extension ADBTVFileBrowserView {
         _ localURL: URL,
         to directory: ADBSharedStoragePath,
         on device: ADBTVDeviceSummary,
+        replacingExisting: Bool,
         progress: @escaping @Sendable (Int64, Int64?) async -> Void
     ) async throws {
         let didStartAccessing = localURL.startAccessingSecurityScopedResource()
         defer {
             if didStartAccessing { localURL.stopAccessingSecurityScopedResource() }
         }
-        try await withConnection(to: device) { connection in
-            var manager = ADBSharedStorageManager(session: connection)
-            _ = try await manager.upload(localURL, to: directory) { event in
-                if case .progress(let current, let total) = event {
-                    await progress(Int64(current), Int64(total))
+        let cleanupRecorder = ADBTVFileUploadCleanupRecorder()
+        do {
+            try await ADBTVFileTransferTimeout.run { activity in
+                try await withConnection(to: device) { connection in
+                    var manager = ADBSharedStorageManager(session: connection)
+                    _ = try await manager.upload(
+                        localURL,
+                        to: directory,
+                        replacingExisting: replacingExisting,
+                        cleanup: { path in
+                            let error = await ADBTVFileStagingCleanup.run {
+                                try await withConnection(to: device) { connection in
+                                    var cleaner = ADBSharedStorageManager(session: connection)
+                                    try await cleaner.cleanupUpload(at: path)
+                                }
+                            }
+                            await cleanupRecorder.record(path: path, error: error)
+                            return error
+                        }
+                    ) { event in
+                        if case .progress(let current, let total) = event {
+                            await activity.recordProgress()
+                            await progress(Int64(current), Int64(total))
+                        }
+                    }
                 }
             }
+        } catch {
+            if error is ADBSharedStorageUploadCleanupError { throw error }
+            if let failure = await cleanupRecorder.failure {
+                throw ADBSharedStorageUploadCleanupError(
+                    temporaryPath: failure.temporaryPath,
+                    underlyingError: String(describing: error),
+                    cleanupError: failure.cleanupError
+                )
+            }
+            throw error
         }
     }
 
@@ -552,11 +641,14 @@ private extension ADBTVFileBrowserView {
         on device: ADBTVDeviceSummary,
         progress: @escaping @Sendable (Int64, Int64?) async -> Void
     ) async throws {
-        try await withConnection(to: device) { connection in
-            var manager = ADBSharedStorageManager(session: connection)
-            _ = try await manager.download(item, to: localURL) { event in
-                if case .progress(let current, let total) = event {
-                    await progress(current, total)
+        try await ADBTVFileTransferTimeout.run { activity in
+            try await withConnection(to: device) { connection in
+                var manager = ADBSharedStorageManager(session: connection)
+                _ = try await manager.download(item, to: localURL) { event in
+                    if case .progress(let current, let total) = event {
+                        await activity.recordProgress()
+                        await progress(current, total)
+                    }
                 }
             }
         }
@@ -567,9 +659,11 @@ private extension ADBTVFileBrowserView {
         in directory: ADBSharedStoragePath,
         on device: ADBTVDeviceSummary
     ) async throws {
-        try await withConnection(to: device) { connection in
-            var manager = ADBSharedStorageManager(session: connection)
-            _ = try await manager.createDirectory(named: name, in: directory)
+        try await ADBTVOperationTimeoutPolicy.fileMutation.run(operation: .fileMutation) {
+            try await withConnection(to: device) { connection in
+                var manager = ADBSharedStorageManager(session: connection)
+                _ = try await manager.createDirectory(named: name, in: directory)
+            }
         }
     }
 
@@ -578,9 +672,11 @@ private extension ADBTVFileBrowserView {
         to name: String,
         on device: ADBTVDeviceSummary
     ) async throws {
-        try await withConnection(to: device) { connection in
-            var manager = ADBSharedStorageManager(session: connection)
-            _ = try await manager.rename(item, to: name)
+        try await ADBTVOperationTimeoutPolicy.fileMutation.run(operation: .fileMutation) {
+            try await withConnection(to: device) { connection in
+                var manager = ADBSharedStorageManager(session: connection)
+                _ = try await manager.rename(item, to: name)
+            }
         }
     }
 
@@ -589,9 +685,11 @@ private extension ADBTVFileBrowserView {
         to destination: ADBSharedStoragePath,
         on device: ADBTVDeviceSummary
     ) async throws {
-        try await withConnection(to: device) { connection in
-            var manager = ADBSharedStorageManager(session: connection)
-            _ = try await manager.move(item, to: destination)
+        try await ADBTVOperationTimeoutPolicy.fileMutation.run(operation: .fileMutation) {
+            try await withConnection(to: device) { connection in
+                var manager = ADBSharedStorageManager(session: connection)
+                _ = try await manager.move(item, to: destination)
+            }
         }
     }
 
@@ -599,9 +697,11 @@ private extension ADBTVFileBrowserView {
         _ item: ADBSharedStorageItem,
         on device: ADBTVDeviceSummary
     ) async throws {
-        try await withConnection(to: device) { connection in
-            var manager = ADBSharedStorageManager(session: connection)
-            try await manager.delete(item)
+        try await ADBTVOperationTimeoutPolicy.fileMutation.run(operation: .fileMutation) {
+            try await withConnection(to: device) { connection in
+                var manager = ADBSharedStorageManager(session: connection)
+                try await manager.delete(item)
+            }
         }
     }
 
@@ -734,6 +834,7 @@ private struct ADBTVFolderPickerDirectoryView: View {
 
 private struct ADBTVFileTransferState: Equatable {
     var title: String
+    var showsByteCounts = false
     var completedByteCount: Int64 = 0
     var totalByteCount: Int64?
 

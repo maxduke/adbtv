@@ -8,6 +8,7 @@ on:
       - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
       - "Sources/ADBClientCore/ADBTVInstalledAppManager.swift"
       - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
+      - "scripts/verify-bundled-input-helper.sh"
       - ".github/workflows/android-input-helper.yml"
   push:
     branches:
@@ -19,6 +20,7 @@ on:
       - "Apps/ADBTViOS/Resources/ADBTVInput.apk"
       - "Sources/ADBClientCore/ADBTVInstalledAppManager.swift"
       - "Sources/ADBClientCore/ADBTVRemoteControl.swift"
+      - "scripts/verify-bundled-input-helper.sh"
       - ".github/workflows/android-input-helper.yml"
   workflow_dispatch:
 

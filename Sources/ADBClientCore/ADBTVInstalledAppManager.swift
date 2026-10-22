@@ -246,7 +246,6 @@ public struct ADBTVAppActivitySnapshot: Equatable, Sendable {
 public struct ADBTVInstalledAppManager: Sendable {
     private static let androidUIDsPerUser = 100_000
     private static let detailsBatchSize = 16
-    private static let maximumDetailsCount = 128
     private static let maximumDetailsResponseByteCount = 1024 * 1024
     private static let maximumPackageListResponseByteCount = 256 * 1024
     private static let maximumProcessResponseByteCount = 1024 * 1024
@@ -530,16 +529,16 @@ public struct ADBTVInstalledAppManager: Sendable {
         for packages: [ADBTVInstalledPackage],
         using session: inout Session
     ) async -> [String: ADBTVInstalledAppDetails] {
-        // ponytail: cap helper work; raise only if real TV package lists need more metadata.
-        let packages = Array(packages.prefix(Self.maximumDetailsCount))
         var details: [String: ADBTVInstalledAppDetails] = [:]
 
         for startIndex in stride(from: 0, to: packages.count, by: Self.detailsBatchSize) {
+            guard !Task.isCancelled else { break }
             let endIndex = min(startIndex + Self.detailsBatchSize, packages.count)
             let batch = Array(packages[startIndex ..< endIndex])
             guard let batchDetails = try? await loadDetailsBatch(batch, using: &session) else {
                 break
             }
+            guard !Task.isCancelled else { break }
             details.merge(batchDetails) { _, latest in latest }
         }
         return details

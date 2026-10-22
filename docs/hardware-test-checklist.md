@@ -199,6 +199,17 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Device Tools
 
+- [ ] On Android 8.0 and Android 10.0, load a folder on a connected TV that stops answering; confirm the operation times out within 30 seconds and Refresh becomes available.
+- [ ] Cancel both an initial folder load and a manual Refresh, immediately retry, and confirm no late result replaces the new directory contents.
+- [ ] During upload and download, stop transfer progress while keeping the connection open; confirm the transfer is cancelled after 30 seconds without progress.
+- [ ] Cancel a partial upload and confirm cleanup finishes before another operation starts; confirm its exact `.adbtv-upload-...` path is removed.
+- [ ] Make the TV unreachable during upload cleanup and confirm Technical Details identify the remaining staging path and cleanup failure.
+- [ ] After browsing a folder, create a same-named target file on the TV before an upload finishes; confirm an unconfirmed upload preserves that file.
+- [ ] Replace the upload target with a folder or symlink before transfer completes; confirm the operation fails without treating the folder as an upload destination.
+- [ ] Confirm explicitly replacing an ordinary file succeeds on Android 8.0 and Android 10.0 without requiring newer `mv` options.
+- [ ] Share a downloaded file, dismiss the share sheet by swiping, and confirm its local temporary directory is removed.
+- [ ] With more than 128 installed packages and the helper installed, confirm later packages receive names/icons after earlier pages, and switching modes or devices cancels pending metadata work.
+- [ ] Run `printf 'before exit'; exit 7`, a command with a trailing comment, and `true &`; confirm output and exit status are preserved without a missing-status error.
 - [ ] Open **Files**, create and rename a folder, and confirm blank, unchanged, relative, and path-separator names cannot be submitted.
 - [ ] Open **Move** for a file or folder and confirm **Move Here** is disabled in its current folder while valid destinations remain selectable.
 - [ ] Start a file upload, download, or mutation; cancel while the automatic folder refresh is running; confirm the loading state clears and Refresh remains available.
