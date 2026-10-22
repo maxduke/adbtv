@@ -15,8 +15,9 @@ launcher. Keep iOS App Intents and system shortcuts for a later feature.
 - Reuse checked launch, installed-package verification, launcher resolution,
   user-change detection, operation ownership, cancellation, and timeout paths.
   No automatic replay, new production dependency, or required helper change.
-- Keep Quick Launch compact above the remote, with a horizontal row and a
-  separate management sheet. Preserve usable labels at accessibility sizes.
+- Keep Quick Launch compact with a horizontal row and a separate management
+  sheet. Show it above the remote at standard text sizes and after the main
+  controls at accessibility sizes, preserving first-screen access to the D-pad.
 - Finish the previously observed large-text issues in Files, App Details, and
   Rename, and use app names plus package identifiers in uninstall confirmation.
 

@@ -4470,7 +4470,9 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
                 )
             }
 
-            quickLaunch()
+            if !dynamicTypeSize.isAccessibilitySize {
+                quickLaunch()
+            }
 
             VStack(spacing: 16) {
                 HStack {
@@ -4522,6 +4524,10 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
                     || status.remoteActionsUnavailable
                     || deviceOperationInProgress
             )
+
+            if dynamicTypeSize.isAccessibilitySize {
+                quickLaunch()
+            }
 
             Divider()
 
