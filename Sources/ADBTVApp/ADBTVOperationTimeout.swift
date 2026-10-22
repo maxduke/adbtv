@@ -15,6 +15,11 @@ enum ADBTVTimedOperation: String, Equatable, Sendable {
     case apkInstallation
     case apkStagingCleanup
     case packageSessionCleanup
+    case fileListing
+    case fileMutation
+    case fileTransfer
+    case fileTransferStall
+    case fileStagingCleanup
 }
 
 enum ADBTVOperationTimeoutError: Error, Equatable, Sendable {
@@ -87,4 +92,9 @@ enum ADBTVOperationTimeoutPolicy {
     static let apkInstallation = ADBTVOperationTimeout(seconds: 15 * 60)
     static let apkStagingCleanup = ADBTVOperationTimeout(seconds: 45)
     static let packageSessionCleanup = ADBTVOperationTimeout(seconds: 45)
+    static let fileListing = ADBTVOperationTimeout(seconds: 30)
+    static let fileMutation = ADBTVOperationTimeout(seconds: 30)
+    static let fileTransfer = ADBTVOperationTimeout(seconds: 15 * 60)
+    static let fileTransferStall = ADBTVOperationTimeout(seconds: 30)
+    static let fileStagingCleanup = ADBTVOperationTimeout(seconds: 45)
 }

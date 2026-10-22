@@ -79,7 +79,7 @@ final class ADBDeviceProbeTests: XCTestCase {
                 .shellInvocation()
                 .shellCommand
                 .rawValue
-                .hasPrefix("getprop ro.build.version.release; ")
+                .hasPrefix("(\ngetprop ro.build.version.release\n); ")
         )
     }
 }
