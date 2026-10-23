@@ -87,6 +87,7 @@
 "Collapsed" = "Collapsed";
 "Command" = "Command";
 "Commands" = "Commands";
+"Completed files are kept." = "Completed files are kept.";
 "Connect" = "Connect";
 "Connect Your TV" = "Connect Your TV";
 "Connect by IP Address" = "Connect by IP Address";
@@ -447,6 +448,7 @@
 "Uploading files" = "Uploading files";
 "Uploads cancelled. Completed files are kept." = "Uploads cancelled. Completed files are kept.";
 "Uploads finished" = "Uploads finished";
+"Uploads stopped" = "Uploads stopped";
 "Uploads stopped. Completed files are kept." = "Uploads stopped. Completed files are kept.";
 "Uptime" = "Uptime";
 "Use This Connection" = "Use This Connection";

@@ -6,6 +6,9 @@
   to the captured TV and directory. Keep APK installation single-selection.
 - Present a scrollable upload sheet with the destination, overall file count,
   per-file byte progress, and explicit uploaded/skipped/unfinished outcomes.
+  Put progress, current-file decisions, and failures before connection details.
+  Use page-sized presentation on iOS 18+ so iPad accessibility layouts have room;
+  keep the existing presentation on iOS 17.
 - Refresh the TV directory before each upload. Pause on a name conflict; allow
   Replace for regular files only, Skip, or Cancel Uploads. A folder, link, or
   other non-regular item can only be skipped. Decisions apply to one file.

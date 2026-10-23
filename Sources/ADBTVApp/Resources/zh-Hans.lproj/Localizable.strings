@@ -87,6 +87,7 @@
 "Collapsed" = "已收起";
 "Command" = "命令";
 "Commands" = "命令";
+"Completed files are kept." = "已完成的文件会保留。";
 "Connect" = "连接";
 "Connect Your TV" = "连接你的电视";
 "Connect by IP Address" = "通过 IP 地址连接";
@@ -447,6 +448,7 @@
 "Uploading files" = "正在上传文件";
 "Uploads cancelled. Completed files are kept." = "上传已取消，已完成的文件会保留。";
 "Uploads finished" = "上传已结束";
+"Uploads stopped" = "上传已停止";
 "Uploads stopped. Completed files are kept." = "上传已停止，已完成的文件会保留。";
 "Uptime" = "运行时间";
 "Use This Connection" = "使用此连接";

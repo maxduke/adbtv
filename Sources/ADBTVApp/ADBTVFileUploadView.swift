@@ -15,23 +15,11 @@ struct ADBTVFileUploadView: View {
             ScrollViewReader { proxy in
                 List {
                     Section {
-                        ADBTVLabeledValue(adbTVLocalized("Device"), value: device.displayName)
-                            .id("uploadSummary")
-                        Text(device.localizedConnectionDescription)
-                            .font(.footnote.monospaced())
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                        Text(directory.rawValue)
-                            .font(.footnote.monospaced())
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
                         Text(phaseTitle)
                             .font(.headline)
+                            .id("uploadSummary")
                         Text(adbTVLocalized("Files processed: %@ of %@", String(queue.processedCount), String(queue.items.count)))
                         ProgressView(value: Double(queue.processedCount), total: Double(queue.items.count))
-                        Text(adbTVLocalized("Uploaded: %@ · Skipped: %@ · Unfinished: %@", String(queue.uploadedCount), String(queue.skippedCount), String(queue.unfinishedCount)))
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
                     }
 
                     if queue.isActive, let index = queue.currentIndex {
@@ -51,6 +39,33 @@ struct ADBTVFileUploadView: View {
                             )
                             .foregroundStyle(.red)
                             DiagnosticDisclosure(diagnosticDetail: failure)
+                        }
+                    }
+
+                    if !queue.isActive {
+                        Section {
+                            Text(adbTVLocalized("Uploaded: %@ · Skipped: %@ · Unfinished: %@", String(queue.uploadedCount), String(queue.skippedCount), String(queue.unfinishedCount)))
+                            if queue.phase == .cancelled || queue.phase == .failed {
+                                Text(adbTVLocalized("Completed files are kept."))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
+                    Section {
+                        DisclosureGroup {
+                            Text(device.localizedConnectionDescription)
+                                .font(.footnote.monospaced())
+                                .textSelection(.enabled)
+                        } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label(device.displayName, systemImage: "tv")
+                                    .font(.subheadline)
+                                Text(directory.rawValue)
+                                    .font(.footnote.monospaced())
+                                    .foregroundStyle(.secondary)
+                                    .textSelection(.enabled)
+                            }
                         }
                     }
 
@@ -152,8 +167,8 @@ struct ADBTVFileUploadView: View {
             ? adbTVLocalized("Choose how to handle this item") : adbTVLocalized("Uploading files")
         case .cancelling: return adbTVLocalized("Cancelling and cleaning up")
         case .finished: return adbTVLocalized("Uploads finished")
-        case .cancelled: return adbTVLocalized("Uploads cancelled. Completed files are kept.")
-        case .failed: return adbTVLocalized("Uploads stopped. Completed files are kept.")
+        case .cancelled: return adbTVLocalized("Cancelled")
+        case .failed: return adbTVLocalized("Uploads stopped")
         }
     }
 

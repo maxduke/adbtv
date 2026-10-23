@@ -159,9 +159,7 @@ struct ADBTVFileBrowserView: View {
             }
         }
         .sheet(isPresented: $isUploadQueuePresented, onDismiss: finishUploads) {
-            if let uploadQueue {
-                ADBTVFileUploadView(queue: uploadQueue, device: device, directory: directory)
-            }
+            uploadSheet
         }
         .alert(adbTVLocalized("New Folder"), isPresented: $isNewFolderPromptPresented) {
             TextField(adbTVLocalized("Folder Name"), text: $newFolderName)
@@ -199,6 +197,22 @@ struct ADBTVFileBrowserView: View {
             ADBTVFileShareView(url: file.url) {
                 cleanupDownload()
             }
+        }
+    }
+
+    @ViewBuilder
+    private var uploadSheet: some View {
+        if let uploadQueue {
+            let content = ADBTVFileUploadView(queue: uploadQueue, device: device, directory: directory)
+#if os(iOS)
+            if #available(iOS 18, *) {
+                content.presentationSizing(.page)
+            } else {
+                content
+            }
+#else
+            content
+#endif
         }
     }
 
