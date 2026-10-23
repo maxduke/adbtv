@@ -10,10 +10,19 @@ on:
           - full
           - library
           - quick-launch
+          - localization
+          - confirmations
         default: full
+      language:
+        description: App language
+        type: choice
+        options:
+          - en
+          - zh-Hans
+        default: en
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.language }}
   cancel-in-progress: true
 
 permissions:
@@ -53,16 +62,23 @@ jobs:
       - name: Capture portrait layouts
         env:
           SNAPSHOT_SCOPE: ${{ inputs.scope }}
+          SNAPSHOT_LANGUAGE: ${{ inputs.language }}
         run: |
           app="build/ui-snapshots/DerivedData/Build/Products/Debug-iphonesimulator/ADBTV.app"
           output="build/ui-snapshots/screenshots"
           mkdir -p "$output"
+          if [ "$SNAPSHOT_LANGUAGE" = zh-Hans ]; then
+            snapshot_locale=zh_Hans_CN
+          else
+            snapshot_locale=en_US
+          fi
 
           capture() {
             udid="$1"
             filename="$2"
             shift 2
-            xcrun simctl launch "$udid" com.maxduke.adbtv "$@"
+            xcrun simctl launch "$udid" com.maxduke.adbtv \
+              -AppleLanguages "($SNAPSHOT_LANGUAGE)" -AppleLocale "$snapshot_locale" "$@"
             sleep 2
             xcrun simctl io "$udid" screenshot "$output/$filename-portrait.png"
             xcrun simctl terminate "$udid" com.maxduke.adbtv
@@ -93,6 +109,38 @@ jobs:
                 prefix="$device_name-$appearance"
                 if [ "$content_size" != large ]; then
                   prefix="$prefix-accessibility"
+                fi
+
+                if [ "$SNAPSHOT_SCOPE" = confirmations ]; then
+                  capture "$udid" "$prefix-clear-data-confirm" --ui-apps --ui-user-app-details --ui-clear-data-confirm
+                  capture "$udid" "$prefix-disable-confirm" --ui-apps --ui-active --ui-app-details --ui-disable-confirm
+                  capture "$udid" "$prefix-restore-confirm" --ui-apps --ui-active --ui-app-details --ui-restore-confirm
+                  continue
+                fi
+
+                if [ "$SNAPSHOT_SCOPE" = localization ]; then
+                  capture "$udid" "$prefix-library-self-signed" --ui-library
+                  capture "$udid" "$prefix-add-device" --ui-add-device
+                  capture "$udid" "$prefix-pair-device" --ui-pair-device
+                  capture "$udid" "$prefix-quick-launch" --ui-preview --ui-quick-launch
+                  capture "$udid" "$prefix-quick-manage" --ui-preview --ui-quick-launch --ui-quick-manage
+                  capture "$udid" "$prefix-quick-failed" --ui-preview --ui-quick-launch --ui-quick-failed
+                  capture "$udid" "$prefix-install" --ui-preview --ui-install
+                  capture "$udid" "$prefix-apps" --ui-apps --ui-active
+                  capture "$udid" "$prefix-app-details" --ui-apps --ui-active --ui-app-details
+                  capture "$udid" "$prefix-user-app-details" --ui-apps --ui-user-app-details
+                  capture "$udid" "$prefix-uninstall-confirm" --ui-apps --ui-user-app-details --ui-uninstall-confirm
+                  if [ "$content_size" != large ]; then
+                    capture "$udid" "$prefix-clear-data-confirm" --ui-apps --ui-user-app-details --ui-clear-data-confirm
+                    capture "$udid" "$prefix-disable-confirm" --ui-apps --ui-active --ui-app-details --ui-disable-confirm
+                    capture "$udid" "$prefix-restore-confirm" --ui-apps --ui-active --ui-app-details --ui-restore-confirm
+                  fi
+                  capture "$udid" "$prefix-tools" --ui-tools
+                  capture "$udid" "$prefix-files" --ui-files
+                  capture "$udid" "$prefix-files-search" --ui-files --ui-files-search
+                  capture "$udid" "$prefix-files-no-matches" --ui-files --ui-files-no-matches
+                  capture "$udid" "$prefix-files-largest" --ui-files --ui-files-largest
+                  continue
                 fi
 
                 if [ "$SNAPSHOT_SCOPE" = quick-launch ]; then

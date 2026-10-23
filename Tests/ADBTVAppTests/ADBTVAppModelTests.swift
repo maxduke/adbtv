@@ -1003,7 +1003,7 @@ final class ADBTVAppModelTests: XCTestCase {
         guard case let .failed(userMessage, diagnosticDetail) = model.pairingStatus else {
             return XCTFail("Expected an invalid QR failure.")
         }
-        XCTAssertEqual(userMessage, "This is not an Android pairing QR code.")
+        XCTAssertEqual(userMessage, adbTVLocalized("This is not an Android pairing QR code."))
         XCTAssertEqual(diagnosticDetail.context["operation"], "parsePairingQRCode")
     }
 

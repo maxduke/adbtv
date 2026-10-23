@@ -1,0 +1,4 @@
+"NSCameraUsageDescription" = "ADB TV 使用相机扫描 Android 无线调试的配对二维码。";
+"NSLocalNetworkUsageDescription" = "ADB TV 使用本地网络发现并连接已开启无线调试的 Android TV 设备。";
+"NSPhotoLibraryAddUsageDescription" = "ADB TV 将共享的 Android TV 截图保存到你的照片图库。";
+"Android application package" = "Android 应用安装包";

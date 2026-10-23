@@ -30,6 +30,15 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Accessibility
 
+- [ ] Repeat primary flows with English and Simplified Chinese as the preferred
+  app language. Confirm labels, failures, confirmations, and VoiceOver text
+  follow that choice while app/device/file names and technical details stay intact.
+- [ ] On a signed fresh install in each language, check camera, Local Network,
+  and photo-library permission descriptions. Switch back to English and relaunch.
+- [ ] At the largest text size on iPad and iPhone, open data-clearing, uninstall,
+  disable, and restore confirmations. Read the full warning and package name;
+  cancel without changing the TV.
+
 - [ ] At the largest Dynamic Type size on iPhone and iPad, open Device Library,
   Remote with Media Controls expanded, Apps, Install, Files, and Tools; confirm
   every action remains reachable and text, icons, and controls do not overlap.
@@ -256,6 +265,14 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Confirm no persistent install-history screen or record is created.
 
 ## Device Tools
+
+- [ ] In a folder with mixed directories and files, search names with Chinese,
+  mixed case, accents, and full-width characters. Confirm matching does not
+  change names/paths or recursively search other folders. Clear search afterward.
+- [ ] Choose Name, Newest First, and Largest First. Check folder-first ordering,
+  natural numeric name order, date/size ties, and unchanged upload/download/delete targets.
+- [ ] Distinguish an empty folder from no search matches. Refresh while searching
+  and after a connection failure; preserve the query/order and cached listing.
 
 - [ ] On Android 8.0 and Android 10.0, load a folder on a connected TV that stops answering; confirm the operation times out within 30 seconds and Refresh becomes available.
 - [ ] Cancel both an initial folder load and a manual Refresh, immediately retry, and confirm no late result replaces the new directory contents.

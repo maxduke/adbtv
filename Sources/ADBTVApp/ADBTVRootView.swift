@@ -129,7 +129,7 @@ public struct ADBTVRootView: View {
                 get: { deviceConnectionState.device?.id ?? model.selectedDeviceID },
                 set: { selectSavedDevice(id: $0) }
             )) {
-                Section("Devices") {
+                Section(adbTVLocalized("Devices")) {
                     if model.devices.isEmpty {
                         emptyLibraryContent
                     } else {
@@ -146,7 +146,7 @@ public struct ADBTVRootView: View {
                 }
 
                 if bonjourCapability.isAvailable {
-                    Section("Discovery") {
+                    Section(adbTVLocalized("Discovery")) {
                         DiscoveryContent(
                             status: model.discoveryStatus,
                             services: model.discoveredServices,
@@ -164,17 +164,17 @@ public struct ADBTVRootView: View {
                     Button {
                         isAboutPresented = true
                     } label: {
-                        Label("About", systemImage: "info.circle")
+                        Label(adbTVLocalized("About"), systemImage: "info.circle")
                             .labelStyle(.iconOnly)
                     }
-                    .help("About")
+                    .help(adbTVLocalized("About"))
 
                     Menu {
                         Button {
                             model.prepareManualPairing()
                             isPairDevicePresented = true
                         } label: {
-                            Label("Pair with Code", systemImage: "key")
+                            Label(adbTVLocalized("Pair with Code"), systemImage: "key")
                         }
 
 #if os(iOS) && canImport(AVFoundation)
@@ -182,7 +182,7 @@ public struct ADBTVRootView: View {
                             Button {
                                 presentQRCodeScanner()
                             } label: {
-                                Label("Scan Pairing QR Code", systemImage: "qrcode.viewfinder")
+                                Label(adbTVLocalized("Scan Pairing QR Code"), systemImage: "qrcode.viewfinder")
                             }
                         }
 #endif
@@ -190,10 +190,10 @@ public struct ADBTVRootView: View {
                         Button {
                             isAddDevicePresented = true
                         } label: {
-                            Label("Add Manually", systemImage: "square.and.pencil")
+                            Label(adbTVLocalized("Add Manually"), systemImage: "square.and.pencil")
                         }
                     } label: {
-                        Label("Add Device", systemImage: "plus")
+                        Label(adbTVLocalized("Add Device"), systemImage: "plus")
                     }
                     .disabled(
                         model.activeDeviceOperation != nil
@@ -345,7 +345,7 @@ public struct ADBTVRootView: View {
                     }
                     .navigationTitle("ADB TV")
                 } else {
-                    ContentUnavailableView("Select a Device", systemImage: "tv.and.hifispeaker.fill")
+                    ContentUnavailableView(adbTVLocalized("Select a Device"), systemImage: "tv.and.hifispeaker.fill")
                 }
             }
         }
@@ -391,13 +391,13 @@ public struct ADBTVRootView: View {
                     onFailure: handleQRCodeScannerFailure
                 )
                 .ignoresSafeArea(edges: .bottom)
-                .navigationTitle("Scan Pairing QR")
+                .navigationTitle(adbTVLocalized("Scan Pairing QR"))
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button {
                             isQRCodeScannerPresented = false
                         } label: {
-                            Label("Cancel", systemImage: "xmark")
+                            Label(adbTVLocalized("Cancel"), systemImage: "xmark")
                                 .labelStyle(.iconOnly)
                         }
                     }
@@ -405,7 +405,7 @@ public struct ADBTVRootView: View {
             }
         }
         .alert(
-            "Camera unavailable",
+            adbTVLocalized("Camera unavailable"),
             isPresented: Binding(
                 get: { qrScannerError != nil },
                 set: { isPresented in
@@ -418,20 +418,20 @@ public struct ADBTVRootView: View {
         ) { detail in
             if detail.context["reason"] == "permissionDenied",
                let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-                Button("Open Settings") {
+                Button(adbTVLocalized("Open Settings")) {
                     openURL(settingsURL)
                 }
             }
-            Button("Copy Technical Details") {
+            Button(adbTVLocalized("Copy Technical Details")) {
                 UIPasteboard.general.string = detail.formattedDescription
             }
-            Button("OK", role: .cancel) {}
-        } message: { detail in
-            Text(detail.formattedDescription)
+            Button(adbTVLocalized("OK"), role: .cancel) {}
+        } message: { _ in
+            Text(adbTVLocalized("Camera access is unavailable. Check Settings, or use Pair with Code. Copy Technical Details for more information."))
         }
 #endif
         .alert(
-            "Device Library issue",
+            adbTVLocalized("Device Library issue"),
             isPresented: Binding(
                 get: { devicePersistenceError != nil },
                 set: { isPresented in
@@ -443,16 +443,18 @@ public struct ADBTVRootView: View {
             presenting: devicePersistenceError
         ) { diagnosticDetail in
 #if os(iOS)
-            Button("Copy Technical Details") {
+            Button(adbTVLocalized("Copy Technical Details")) {
                 UIPasteboard.general.string = diagnosticDetail.formattedDescription
             }
 #endif
-            Button("OK", role: .cancel) {}
+            Button(adbTVLocalized("OK"), role: .cancel) {}
         } message: { diagnosticDetail in
-            Text(diagnosticDetail.formattedDescription)
+            Text(diagnosticDetail.context["operation"] == "loadDevices"
+                ? adbTVLocalized(diagnosticDetail.summary)
+                : adbTVLocalized("Could not update the Device Library. Copy Technical Details for more information."))
         }
         .confirmationDialog(
-            "Replace Input Helper?",
+            adbTVLocalized("Replace Input Helper?"),
             isPresented: Binding(
                 get: { helperReplacementDevice != nil },
                 set: { isPresented in
@@ -463,7 +465,7 @@ public struct ADBTVRootView: View {
             ),
             presenting: helperReplacementDevice
         ) { device in
-            Button("Replace Helper", role: .destructive) {
+            Button(adbTVLocalized("Replace Helper"), role: .destructive) {
                 helperReplacementDevice = nil
                 startInstall(
                     for: device,
@@ -473,9 +475,7 @@ public struct ADBTVRootView: View {
             }
         } message: { _ in
             Text(
-                "Android cannot update the installed helper because it was signed differently. "
-                    + "Replacing it removes only the helper, then installs this version. "
-                    + "No TV app data is affected."
+                adbTVLocalized("Android cannot update the installed helper because it was signed differently. Replacing it removes only the helper, then installs this version. No TV app data is affected.")
             )
         }
 #if os(iOS)
@@ -532,7 +532,7 @@ public struct ADBTVRootView: View {
                 .font(.system(size: 32))
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
-            Text("Connect Your TV")
+            Text(adbTVLocalized("Connect Your TV"))
                 .font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -541,7 +541,7 @@ public struct ADBTVRootView: View {
                     model.prepareManualPairing()
                     isPairDevicePresented = true
                 } label: {
-                    Text("Pair with Code")
+                    Text(adbTVLocalized("Pair with Code"))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .adbTVProminentButton()
@@ -549,7 +549,7 @@ public struct ADBTVRootView: View {
                 Button {
                     isAddDevicePresented = true
                 } label: {
-                    Text("Connect by IP Address")
+                    Text(adbTVLocalized("Connect by IP Address"))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .buttonStyle(.bordered)
@@ -557,12 +557,12 @@ public struct ADBTVRootView: View {
             }
             .disabled(model.activeDeviceOperation != nil || deviceConnectionState.isConnecting)
 
-            Text("Connect to the same Wi-Fi as your TV and enable ADB debugging in its developer options.")
+            Text(adbTVLocalized("Connect to the same Wi-Fi as your TV and enable ADB debugging in its developer options."))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .lineLimit(nil)
                 .fixedSize(horizontal: false, vertical: true)
-            Text("Use a pairing code for Wireless debugging, or connect by IP when network ADB is already enabled.")
+            Text(adbTVLocalized("Use a pairing code for Wireless debugging, or connect by IP when network ADB is already enabled."))
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .lineLimit(nil)
@@ -604,7 +604,7 @@ public struct ADBTVRootView: View {
         case .success(let url):
             guard ADBTVInstallPackageKind(fileName: url.lastPathComponent) != nil else {
                 model.failInstall(
-                    userMessage: "Select an APK or APKM file.",
+                    userMessage: adbTVLocalized("Select an APK or APKM file."),
                     diagnosticDetail: DiagnosticDetail(
                         summary: "The selected file does not use the .apk or .apkm extension.",
                         context: [
@@ -618,7 +618,7 @@ public struct ADBTVRootView: View {
             model.selectPackage(fileURL: url, byteCount: url.adbTVFileByteCount)
         case .failure(let error):
             model.failInstall(
-                userMessage: "Could not open the selected app package.",
+                userMessage: adbTVLocalized("Could not open the selected app package."),
                 diagnosticDetail: DiagnosticDetail(
                     summary: String(describing: error),
                     context: ["source": "documentPicker"]
@@ -831,7 +831,7 @@ public struct ADBTVRootView: View {
         })
 #else
         model.failDiscovery(
-            userMessage: "Device discovery is not available on this platform.",
+            userMessage: adbTVLocalized("Device discovery is not available on this platform."),
             diagnosticDetail: DiagnosticDetail(
                 summary: "Network.framework is unavailable.",
                 context: ["operation": "bonjourDiscovery"]
@@ -844,11 +844,11 @@ public struct ADBTVRootView: View {
     private static func discoveryUserMessage(for failure: ADBBonjourDiscoveryFailure) -> String {
         switch failure.reason {
         case .bonjourCapabilityDenied:
-            return "Automatic discovery is unavailable in this signed build. Add the TV manually."
+            return adbTVLocalized("Automatic discovery is unavailable in this signed build. Add the TV manually.")
         case .localNetworkDenied:
-            return "Local Network access is off. Enable it in Settings to discover Android TV devices."
+            return adbTVLocalized("Local Network access is off. Enable it in Settings to discover Android TV devices.")
         case .other:
-            return "Could not discover Android TV devices."
+            return adbTVLocalized("Could not discover Android TV devices.")
         }
     }
 
@@ -857,11 +857,11 @@ public struct ADBTVRootView: View {
     ) -> String {
         switch failure.reason {
         case .bonjourCapabilityDenied:
-            return "Automatic discovery requires an Apple-approved Multicast Networking entitlement."
+            return adbTVLocalized("Automatic discovery requires an Apple-approved Multicast Networking entitlement.")
         case .localNetworkDenied:
-            return "Local Network access is off. Enable it in Settings to discover Android TV devices."
+            return adbTVLocalized("Local Network access is off. Enable it in Settings to discover Android TV devices.")
         case .other:
-            return "Waiting for the local network before discovering Android TV devices."
+            return adbTVLocalized("Waiting for the local network before discovering Android TV devices.")
         }
     }
 
@@ -1088,7 +1088,7 @@ public struct ADBTVRootView: View {
                     }
                     if model.failPairingConnectionVerification(
                         expectedDeviceID: device.id,
-                        userMessage: "Pairing succeeded, but the app could not connect to the TV.",
+                        userMessage: adbTVLocalized("Pairing succeeded, but the app could not connect to the TV."),
                         diagnosticDetail: DiagnosticDetail(
                             summary: String(describing: error),
                             context: Self.operationDiagnosticContext(
@@ -1127,7 +1127,7 @@ public struct ADBTVRootView: View {
                     }
                     let didFailWaitingPairing = model.failWaitingForPairingService(
                         serviceName: serviceName,
-                        userMessage: "The QR pairing service was not found on the local network.",
+                        userMessage: adbTVLocalized("The QR pairing service was not found on the local network."),
                         diagnosticDetail: DiagnosticDetail(
                             summary: String(describing: error),
                             context: Self.operationDiagnosticContext(
@@ -1167,7 +1167,7 @@ public struct ADBTVRootView: View {
                     }
                     let didFailWaitingPairing = model.failWaitingForConnection(
                         deviceGUID: deviceGUID,
-                        userMessage: "Pairing succeeded, but the TV connection service was not found.",
+                        userMessage: adbTVLocalized("Pairing succeeded, but the TV connection service was not found."),
                         diagnosticDetail: DiagnosticDetail(
                             summary: String(describing: error),
                             context: Self.operationDiagnosticContext(
@@ -1199,9 +1199,9 @@ public struct ADBTVRootView: View {
 
     private static func pairingUserMessage(for error: Error) -> String {
         if error is ADBTVOperationTimeoutError {
-            return "Pairing timed out. Check the TV and try again."
+            return adbTVLocalized("Pairing timed out. Check the TV and try again.")
         }
-        return "Could not pair with this Android TV."
+        return adbTVLocalized("Could not pair with this Android TV.")
     }
 
     private func startInstall(
@@ -1250,7 +1250,7 @@ public struct ADBTVRootView: View {
             } catch {
                 completion = .failure(
                     userMessage: replacingUnicodeInputHelper
-                        ? "Could not replace the Input Helper."
+                        ? adbTVLocalized("Could not replace the Input Helper.")
                         : Self.installUserMessage(for: error),
                     diagnosticDetail: Self.installDiagnosticDetail(
                         error,
@@ -1278,7 +1278,7 @@ public struct ADBTVRootView: View {
             withExtension: "apk"
         ) else {
             model.failInstall(
-                userMessage: "The Unicode Input Helper is missing from this app build.",
+                userMessage: adbTVLocalized("The Unicode Input Helper is missing from this app build."),
                 diagnosticDetail: DiagnosticDetail(
                     summary: "The bundled ADBTVInput.apk resource was not found.",
                     context: ["operation": "installUnicodeInputHelper"]
@@ -1560,22 +1560,22 @@ public struct ADBTVRootView: View {
 
     private static func installUserMessage(for error: Error) -> String {
         if error is ADBTVOperationTimeoutError || error is ADBTVInstallTimeoutCleanupError {
-            return "App installation timed out."
+            return adbTVLocalized("App installation timed out.")
         }
         if error is ADBAPKValidationError {
-            return "The selected file is not a valid APK."
+            return adbTVLocalized("The selected file is not a valid APK.")
         }
         if error is ADBTVAPKMExtractionError {
-            return "The selected file is not a valid APKM bundle."
+            return adbTVLocalized("The selected file is not a valid APKM bundle.")
         }
         if error is ADBTVInstallFileError {
-            return "Could not read the selected app package."
+            return adbTVLocalized("Could not read the selected app package.")
         }
         if error is ADBTVInstallDownloadError {
-            return "Could not download the app package."
+            return adbTVLocalized("Could not download the app package.")
         }
 
-        return "Could not install the app package."
+        return adbTVLocalized("Could not install the app package.")
     }
 
     private func startRemoteSession(for device: ADBTVDeviceSummary) {
@@ -1823,7 +1823,7 @@ public struct ADBTVRootView: View {
                 }
                 completion = .failure(
                     userMessage: Self.appUserChanged(error)
-                        ? "The TV user changed. Refresh Apps before trying again."
+                        ? adbTVLocalized("The TV user changed. Refresh Apps before trying again.")
                         : command.failureMessage,
                     diagnosticDetail: DiagnosticDetail(
                         summary: String(describing: error),
@@ -1871,7 +1871,7 @@ public struct ADBTVRootView: View {
     }
 
     @discardableResult
-    private func cancelInstalledAppOperation(message: String? = "Cancelled.") -> Bool {
+    private func cancelInstalledAppOperation(message: String? = adbTVLocalized("Cancelled.")) -> Bool {
         guard case .installedApps(let deviceID) = model.activeDeviceOperation else {
             return false
         }
@@ -1932,8 +1932,8 @@ public struct ADBTVRootView: View {
                 }
                 installedAppsState.status = .ready(
                     message: remainsActive
-                        ? "Android kept or restarted \(forceStoppedName); it remains active."
-                        : "Stopped \(forceStoppedName)."
+                        ? adbTVLocalized("Android kept or restarted %@; it remains active.", String(describing: forceStoppedName))
+                        : adbTVLocalized("Stopped %@.", String(describing: forceStoppedName))
                 )
             } else if let clearedDataPackage, let clearedDataName {
                 let remainsActive = snapshot.apps.contains {
@@ -1941,8 +1941,8 @@ public struct ADBTVRootView: View {
                 }
                 installedAppsState.status = .ready(
                     message: remainsActive
-                        ? "Cleared data for \(clearedDataName), but Android reports it active."
-                        : "Cleared data for \(clearedDataName)."
+                        ? adbTVLocalized("Cleared data for %@, but Android reports it active.", String(describing: clearedDataName))
+                        : adbTVLocalized("Cleared data for %@.", String(describing: clearedDataName))
                 )
             } else {
                 installedAppsState.status = .ready(message: nil)
@@ -1966,7 +1966,7 @@ public struct ADBTVRootView: View {
             let name = installedAppsState.details[package.packageName]?.displayName
                 ?? package.packageName
             installedAppsState.status = .ready(
-                message: "Launched \(name)."
+                message: adbTVLocalized("Launched %@.", String(describing: name))
             )
         case .success(.stopped(let package)):
             if installedAppsState.mode == .active {
@@ -1984,7 +1984,7 @@ public struct ADBTVRootView: View {
             }
             let name = installedAppsState.details[package.packageName]?.displayName
                 ?? package.packageName
-            installedAppsState.status = .ready(message: "Stopped \(name).")
+            installedAppsState.status = .ready(message: adbTVLocalized("Stopped %@.", String(describing: name)))
         case .success(.uninstalled(let package)):
             if installedAppsState.mode == .active {
                 installedAppsState.pendingForceStopPackage = nil
@@ -1997,14 +1997,14 @@ public struct ADBTVRootView: View {
             installedAppsState.packages.removeAll { $0 == package }
             installedAppsState.details.removeValue(forKey: package.packageName)
             installedAppsState.status = .ready(
-                message: "Uninstalled \(name)."
+                message: adbTVLocalized("Uninstalled %@.", String(describing: name))
             )
         case .success(.openedSettings(let package)):
             let name = installedAppsState.details[package.packageName]?.displayName
                 ?? installedAppsState.activityDetails[package.packageName]?.displayName
                 ?? package.packageName
             installedAppsState.status = .ready(
-                message: "Opened App Settings for \(name) on the TV."
+                message: adbTVLocalized("Opened App Settings for %@ on the TV.", String(describing: name))
             )
         case .success(.clearedData(let package)):
             if installedAppsState.mode == .active {
@@ -2022,7 +2022,7 @@ public struct ADBTVRootView: View {
             }
             let name = installedAppsState.details[package.packageName]?.displayName
                 ?? package.packageName
-            installedAppsState.status = .ready(message: "Cleared data for \(name).")
+            installedAppsState.status = .ready(message: adbTVLocalized("Cleared data for %@.", String(describing: name)))
         case .success(.disabled(let package)):
             if installedAppsState.mode == .active {
                 installedAppsState.pendingForceStopPackage = nil
@@ -2033,7 +2033,7 @@ public struct ADBTVRootView: View {
             installedAppsState.setSystemState(.disabled, for: package)
             let name = installedAppsState.details[package.packageName]?.displayName
                 ?? package.packageName
-            installedAppsState.status = .ready(message: "Disabled \(name).")
+            installedAppsState.status = .ready(message: adbTVLocalized("Disabled %@.", String(describing: name)))
         case .success(.restoredDefault(let package, let state)):
             if installedAppsState.mode == .active {
                 installedAppsState.pendingForceStopPackage = nil
@@ -2045,8 +2045,8 @@ public struct ADBTVRootView: View {
             let name = installedAppsState.details[package.packageName]?.displayName
                 ?? package.packageName
             let message = state == .enabled
-                ? "Restored \(name) to Android default."
-                : "Android default keeps \(name) disabled."
+                ? adbTVLocalized("Restored %@ to Android default.", String(describing: name))
+                : adbTVLocalized("Android default keeps %@ disabled.", String(describing: name))
             installedAppsState.status = .ready(message: message)
         case .failure(let userMessage, let diagnosticDetail):
             installedAppsState.pendingForceStopPackage = nil
@@ -2206,7 +2206,7 @@ public struct ADBTVRootView: View {
                     installedAppsState.userID = nil
                     installedAppsState.pendingDetailsPackages = []
                     installedAppsState.status = .failed(
-                        userMessage: "The TV user changed. Refresh Apps before trying again.",
+                        userMessage: adbTVLocalized("The TV user changed. Refresh Apps before trying again."),
                         diagnosticDetail: DiagnosticDetail(
                             summary: String(describing: error),
                             context: ["operation": "loadInstalledAppDetails"]
@@ -2541,17 +2541,17 @@ public struct ADBTVRootView: View {
         case .connectionFailed(let failure):
             model.remoteStatus = .connectionFailed(
                 userMessage: failure.timedOut
-                    ? "The TV did not respond in time."
-                    : "Could not connect to the TV.",
+                    ? adbTVLocalized("The TV did not respond in time.")
+                    : adbTVLocalized("Could not connect to the TV."),
                 diagnosticDetail: Self.remoteSessionDiagnosticDetail(failure, device: device)
             )
             Self.remoteWarningFeedback()
         case .reconnectFailed(let actionFailure, let connectionFailure):
             var detail = Self.remoteSessionDiagnosticDetail(connectionFailure, device: device)
-            detail.context["failedAction"] = actionFailure.action?.displayTitle ?? "unknown"
+            detail.context["failedAction"] = actionFailure.action.map { String(describing: $0) } ?? "unknown"
             detail.context["actionFailure"] = actionFailure.summary
             model.remoteStatus = .connectionFailed(
-                userMessage: "Connection to the TV was lost.",
+                userMessage: adbTVLocalized("Connection to the TV was lost."),
                 diagnosticDetail: detail
             )
             Self.remoteWarningFeedback()
@@ -2589,21 +2589,21 @@ public struct ADBTVRootView: View {
 
     private static func remoteTextUserMessage(for error: Error) -> String {
         if error is ADBTVOperationTimeoutError {
-            return "The TV did not respond in time."
+            return adbTVLocalized("The TV did not respond in time.")
         }
         if let shellError = error as? ADBTVRemoteShellInvocationError,
            case let .commandFailed(exitCode, _) = shellError {
             if (21 ... 22).contains(exitCode) {
-                return "Install the Unicode Input Helper, then try sending the text again."
+                return adbTVLocalized("Install the Unicode Input Helper, then try sending the text again.")
             }
             if exitCode == 24 {
-                return "Could not restore the previous TV keyboard. Select it in the TV settings."
+                return adbTVLocalized("Could not restore the previous TV keyboard. Select it in the TV settings.")
             }
             if exitCode == 23 || exitCode == 25 {
-                return "Focus a text field on the TV, then try sending the Unicode text again."
+                return adbTVLocalized("Focus a text field on the TV, then try sending the Unicode text again.")
             }
         }
-        return "Could not send text."
+        return adbTVLocalized("Could not send text.")
     }
 
     private static func deviceToolUserMessage(
@@ -2613,7 +2613,7 @@ public struct ADBTVRootView: View {
         if case .screenshot = operation,
            let toolsError = error as? ADBTVDeviceToolsError,
            case .screenshotUnavailable = toolsError {
-            return "Screenshot unavailable. The current app or TV may block screen capture."
+            return adbTVLocalized("Screenshot unavailable. The current app or TV may block screen capture.")
         }
         return operation.failureMessage
     }
@@ -2781,25 +2781,25 @@ private enum ADBTVInstalledAppCommand: Sendable {
     var failureMessage: String {
         switch self {
         case .list:
-            return "Could not load installed apps."
+            return adbTVLocalized("Could not load installed apps.")
         case .activitySnapshot:
-            return "Could not load active apps."
+            return adbTVLocalized("Could not load active apps.")
         case .activeSystemSnapshot:
-            return "Could not load system controls."
+            return adbTVLocalized("Could not load system controls.")
         case .launch:
-            return "Could not launch this app."
+            return adbTVLocalized("Could not launch this app.")
         case .forceStop:
-            return "Could not stop this app."
+            return adbTVLocalized("Could not stop this app.")
         case .uninstall:
-            return "Could not uninstall this app."
+            return adbTVLocalized("Could not uninstall this app.")
         case .openSettings:
-            return "Could not open App Settings on the TV."
+            return adbTVLocalized("Could not open App Settings on the TV.")
         case .clearData:
-            return "Could not clear this app's data."
+            return adbTVLocalized("Could not clear this app's data.")
         case .disable:
-            return "Could not disable this system app."
+            return adbTVLocalized("Could not disable this system app.")
         case .restoreDefault:
-            return "Could not restore this system app."
+            return adbTVLocalized("Could not restore this system app.")
         }
     }
 }
@@ -2848,18 +2848,18 @@ private struct ADBTVAboutView: View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent("Version", value: versionDescription)
+                    LabeledContent(adbTVLocalized("Version"), value: versionDescription)
                 }
 
-                Section("Legal") {
+                Section(adbTVLocalized("Legal")) {
                     NavigationLink {
                         ADBTVOpenSourceNoticesView()
                     } label: {
-                        Label("Licenses & Notices", systemImage: "doc.text")
+                        Label(adbTVLocalized("Licenses & Notices"), systemImage: "doc.text")
                     }
                 }
             }
-            .navigationTitle("About ADB TV")
+            .navigationTitle(adbTVLocalized("About ADB TV"))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -2868,10 +2868,10 @@ private struct ADBTVAboutView: View {
                     Button {
                         dismiss()
                     } label: {
-                        Label("Close", systemImage: "xmark")
+                        Label(adbTVLocalized("Close"), systemImage: "xmark")
                             .labelStyle(.iconOnly)
                     }
-                    .help("Close")
+                    .help(adbTVLocalized("Close"))
                 }
             }
         }
@@ -2891,7 +2891,7 @@ private struct ADBTVAboutView: View {
         case let (nil, build?):
             return build
         case (nil, nil):
-            return "Unknown"
+            return adbTVLocalized("Unknown")
         }
     }
 }
@@ -2905,7 +2905,7 @@ private struct ADBTVOpenSourceNoticesView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
         }
-        .navigationTitle("Licenses & Notices")
+        .navigationTitle(adbTVLocalized("Licenses & Notices"))
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -2929,8 +2929,8 @@ private struct PairDeviceView: View {
         NavigationStack {
             Form {
                 Section {
-                    ADBTVFormField("Name (Optional)") {
-                        TextField("Device Name", text: $draft.displayName)
+                    ADBTVFormField(adbTVLocalized("Name (Optional)")) {
+                        TextField(adbTVLocalized("Device Name"), text: $draft.displayName)
                             .focused($focusedField, equals: .name)
                             .submitLabel(.next)
                             .onSubmit {
@@ -2939,19 +2939,19 @@ private struct PairDeviceView: View {
                             }
                     }
                     if let qrCode = draft.pairingQRCode {
-                        ADBTVLabeledValue("Service", value: qrCode.serviceName)
+                        ADBTVLabeledValue(adbTVLocalized("Service"), value: qrCode.serviceName)
                     } else if let service = draft.discoveredService {
-                        ADBTVLabeledValue("Service", value: service.displayName)
+                        ADBTVLabeledValue(adbTVLocalized("Service"), value: service.displayName)
                     } else {
-                        ADBTVFormField("Host or IP Address") {
-                            TextField("192.168.1.50 or tv.local", text: $draft.host)
+                        ADBTVFormField(adbTVLocalized("Host or IP Address")) {
+                            TextField(adbTVLocalized("192.168.1.50 or tv.local"), text: $draft.host)
                                 .adbTVAddressInput()
                                 .focused($focusedField, equals: .host)
                                 .submitLabel(.next)
                                 .onSubmit { focusedField = .connectionPort }
                         }
-                        ADBTVFormField("Connection Port") {
-                            TextField("Port on the Wireless debugging screen", text: $draft.connectionPortString)
+                        ADBTVFormField(adbTVLocalized("Connection Port")) {
+                            TextField(adbTVLocalized("Port on the Wireless debugging screen"), text: $draft.connectionPortString)
                                 .adbTVNumericInput()
                                 .focused($focusedField, equals: .connectionPort)
                                 .submitLabel(.next)
@@ -2959,26 +2959,26 @@ private struct PairDeviceView: View {
                         }
                     }
                 } header: {
-                    Text("Device")
+                    Text(adbTVLocalized("Device"))
                 } footer: {
                     if draft.discoveredService == nil && draft.pairingQRCode == nil {
-                        Text("On your TV, open Developer options → Wireless debugging. Use the IP address and connection port on that main screen.")
+                        Text(adbTVLocalized("On your TV, open Developer options → Wireless debugging. Use the IP address and connection port on that main screen."))
                     }
                 }
 
                 if draft.pairingQRCode == nil {
                     Section {
                         if draft.discoveredService == nil {
-                            ADBTVFormField("Pairing Port") {
-                                TextField("Port in the pairing dialog", text: $draft.pairingPortString)
+                            ADBTVFormField(adbTVLocalized("Pairing Port")) {
+                                TextField(adbTVLocalized("Port in the pairing dialog"), text: $draft.pairingPortString)
                                     .adbTVNumericInput()
                                     .focused($focusedField, equals: .pairingPort)
                                     .submitLabel(.next)
                                     .onSubmit { focusedField = .code }
                             }
                         }
-                        ADBTVFormField("Pairing Code") {
-                            TextField("6-Digit Code", text: $draft.codeString)
+                        ADBTVFormField(adbTVLocalized("Pairing Code")) {
+                            TextField(adbTVLocalized("6-Digit Code"), text: $draft.codeString)
                                 .adbTVNumericInput()
                                 .focused($focusedField, equals: .code)
                                 .submitLabel(.done)
@@ -2990,12 +2990,12 @@ private struct PairDeviceView: View {
                                 }
                         }
                     } header: {
-                        Text("Pairing")
+                        Text(adbTVLocalized("Pairing"))
                     } footer: {
                         if draft.discoveredService == nil {
-                            Text("Choose Pair device with pairing code on your TV. Enter the code and pairing port from that dialog; its port differs from the connection port.")
+                            Text(adbTVLocalized("Choose Pair device with pairing code on your TV. Enter the code and pairing port from that dialog; its port differs from the connection port."))
                         } else {
-                            Text("Keep the pairing dialog open on your TV and enter its 6-digit code.")
+                            Text(adbTVLocalized("Keep the pairing dialog open on your TV and enter its 6-digit code."))
                         }
                     }
                 }
@@ -3003,7 +3003,7 @@ private struct PairDeviceView: View {
                 PairingStatusView(status: status)
             }
             .disabled(status.isPairing || hasPaired)
-            .navigationTitle("Pair Device")
+            .navigationTitle(adbTVLocalized("Pair Device"))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -3011,11 +3011,11 @@ private struct PairDeviceView: View {
 #if os(iOS)
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("Done") { focusedField = nil }
+                    Button(adbTVLocalized("Done")) { focusedField = nil }
                 }
 #endif
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(hasPaired ? "Done" : "Cancel") {
+                    Button(hasPaired ? adbTVLocalized("Done") : adbTVLocalized("Cancel")) {
                         cancelPairing()
                         dismiss()
                     }
@@ -3023,7 +3023,7 @@ private struct PairDeviceView: View {
 
                 if !hasPaired && draft.pairingQRCode == nil {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button("Pair") {
+                        Button(adbTVLocalized("Pair")) {
                             focusedField = nil
                             startPairing()
                         }
@@ -3058,7 +3058,7 @@ private struct PairingStatusView: View {
             Section {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Finding the pairing service")
+                    Text(adbTVLocalized("Finding the pairing service"))
                         .foregroundStyle(.secondary)
                 }
                 Text(serviceName)
@@ -3070,7 +3070,7 @@ private struct PairingStatusView: View {
             Section {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Pairing with \(target)")
+                    Text(adbTVLocalized("Pairing with %@", String(describing: target)))
                         .foregroundStyle(.secondary)
                 }
             }
@@ -3078,7 +3078,7 @@ private struct PairingStatusView: View {
             Section {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Finding the connection service")
+                    Text(adbTVLocalized("Finding the connection service"))
                         .foregroundStyle(.secondary)
                 }
                 Text(deviceGUID)
@@ -3090,19 +3090,19 @@ private struct PairingStatusView: View {
             Section {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Verifying the TV connection")
+                    Text(adbTVLocalized("Verifying the TV connection"))
                         .foregroundStyle(.secondary)
                 }
-                Text(device.connectionDescription)
+                Text(device.localizedConnectionDescription)
                     .font(.footnote.monospaced())
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
         case .paired(let device):
             Section {
-                Label("Paired with \(device.displayName)", systemImage: "checkmark.circle.fill")
+                Label(adbTVLocalized("Paired with %@", String(describing: device.displayName)), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(Color.accentColor)
-                Text("Saved as \(device.connectionDescription)")
+                Text(adbTVLocalized("Saved as %@", device.localizedConnectionDescription))
                     .foregroundStyle(.secondary)
             }
         case .failed(let userMessage, let diagnosticDetail):
@@ -3117,7 +3117,7 @@ private struct PairingStatusView: View {
 
 private func connectionUserMessage(for error: Error, fallback: String) -> String {
     error is ADBTVOperationTimeoutError
-        ? "The TV did not respond in time."
+        ? adbTVLocalized("The TV did not respond in time.")
         : fallback
 }
 
@@ -3154,20 +3154,20 @@ private struct AddDeviceView: View {
         NavigationStack {
             Form {
                 Section {
-                    ADBTVFormField("Name (Optional)") {
-                        TextField("Device Name", text: $displayName)
+                    ADBTVFormField(adbTVLocalized("Name (Optional)")) {
+                        TextField(adbTVLocalized("Device Name"), text: $displayName)
                             .focused($focusedField, equals: .name)
                             .submitLabel(.next)
                             .onSubmit { focusedField = .host }
                     }
-                    ADBTVFormField("Host or IP Address") {
-                        TextField("192.168.1.50 or tv.local", text: $host)
+                    ADBTVFormField(adbTVLocalized("Host or IP Address")) {
+                        TextField(adbTVLocalized("192.168.1.50 or tv.local"), text: $host)
                             .adbTVAddressInput()
                             .focused($focusedField, equals: .host)
                             .submitLabel(.next)
                             .onSubmit { focusedField = .port }
                     }
-                    ADBTVFormField("Connection Port") {
+                    ADBTVFormField(adbTVLocalized("Connection Port")) {
                         TextField("5555", text: $port)
                             .adbTVNumericInput()
                             .focused($focusedField, equals: .port)
@@ -3175,15 +3175,15 @@ private struct AddDeviceView: View {
                             .onSubmit { connectAndSave() }
                     }
                 } header: {
-                    Text("Device")
+                    Text(adbTVLocalized("Device"))
                 } footer: {
-                    Text("Use the address and port shown by your TV's network ADB settings. Verified connections are saved. For Wireless debugging, use Pair with Code first.")
+                    Text(adbTVLocalized("Use the address and port shown by your TV's network ADB settings. Verified connections are saved. For Wireless debugging, use Pair with Code first."))
                 }
                 .disabled(status.isConnecting || status.isConnected)
 
                 ManualDeviceConnectionStatusView(status: status)
             }
-            .navigationTitle("Add Device")
+            .navigationTitle(adbTVLocalized("Add Device"))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -3191,11 +3191,11 @@ private struct AddDeviceView: View {
 #if os(iOS)
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("Done") { focusedField = nil }
+                    Button(adbTVLocalized("Done")) { focusedField = nil }
                 }
 #endif
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(status.isConnected ? "Close" : "Cancel") {
+                    Button(status.isConnected ? adbTVLocalized("Close") : adbTVLocalized("Cancel")) {
                         connectionTask?.cancel()
                         dismiss()
                     }
@@ -3203,7 +3203,7 @@ private struct AddDeviceView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     if !status.isConnected {
-                        Button("Connect") {
+                        Button(adbTVLocalized("Connect")) {
                             connectAndSave()
                         }
                         .disabled(validatedDevice == nil || status.isConnecting)
@@ -3258,7 +3258,7 @@ private struct AddDeviceView: View {
                 status = .failed(
                     userMessage: connectionUserMessage(
                         for: error,
-                        fallback: "Could not connect to this Android TV device."
+                        fallback: adbTVLocalized("Could not connect to this Android TV device.")
                     ),
                     diagnosticDetail: DiagnosticDetail(
                         summary: String(describing: error),
@@ -3309,15 +3309,15 @@ private struct ManualDeviceConnectionStatusView: View {
             Section {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Connecting")
+                    Text(adbTVLocalized("Connecting"))
                         .foregroundStyle(.secondary)
                 }
             }
         case .connected(let device):
             Section {
-                Label("Connected and saved", systemImage: "checkmark.circle.fill")
+                Label(adbTVLocalized("Connected and saved"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(Color.accentColor)
-                LabeledContent("Device", value: device.model ?? device.displayName)
+                LabeledContent(adbTVLocalized("Device"), value: device.model ?? device.displayName)
             }
         case .failed(let userMessage, let diagnosticDetail):
             Section {
@@ -3342,7 +3342,7 @@ private struct DiscoveryContent: View {
                 toggleDiscovery()
             } label: {
                 Label(
-                    status.isBrowsing ? "Stop Discovery" : "Discover Devices",
+                    status.isBrowsing ? adbTVLocalized("Stop Discovery") : adbTVLocalized("Discover Devices"),
                     systemImage: status.isBrowsing ? "stop.circle" : "dot.radiowaves.left.and.right"
                 )
             }
@@ -3367,19 +3367,24 @@ private struct DiscoveryStatusView: View {
     var status: ADBTVDiscoveryStatus
     var serviceCount: Int
 
+    private var foundServicesTitle: String {
+        serviceCount == 1 ? adbTVLocalized("1 service found")
+            : adbTVLocalized("%@ services found", serviceCount.formatted())
+    }
+
     var body: some View {
         switch status {
         case .idle:
             if serviceCount == 0 {
                 EmptyView()
             } else {
-                Label("\(serviceCount) service\(serviceCount == 1 ? "" : "s") found", systemImage: "checkmark.circle")
+                Label(foundServicesTitle, systemImage: "checkmark.circle")
                     .foregroundStyle(.secondary)
             }
         case .browsing:
             HStack(spacing: 8) {
                 ProgressView()
-                Text(serviceCount == 0 ? "Searching local network" : "\(serviceCount) service\(serviceCount == 1 ? "" : "s") found")
+                Text(serviceCount == 0 ? adbTVLocalized("Searching local network") : foundServicesTitle)
                     .foregroundStyle(.secondary)
             }
         case .waitingForLocalNetworkAuthorization(let userMessage, let diagnosticDetail):
@@ -3413,7 +3418,7 @@ private struct DiscoveryStatusView: View {
             }
             openURL(settingsURL)
         } label: {
-            Label("Open Settings", systemImage: "gear")
+            Label(adbTVLocalized("Open Settings"), systemImage: "gear")
         }
     }
 #endif
@@ -3451,7 +3456,7 @@ private struct DiscoveredServiceRow: View {
             if service.kind == .pairing {
                 Image(systemName: "key")
                     .foregroundStyle(.secondary)
-                    .accessibilityLabel("Pair")
+                    .accessibilityLabel(adbTVLocalized("Pair"))
             }
         }
         .contentShape(Rectangle())
@@ -3459,9 +3464,9 @@ private struct DiscoveredServiceRow: View {
     }
 
     private var subtitle: String {
-        let kind = service.kind?.displayName ?? service.serviceType
+        let kind = service.kind.map { adbTVLocalized($0.displayName) } ?? service.serviceType
         if let interfaceName = service.interfaceName, !interfaceName.isEmpty {
-            return "\(kind) on \(interfaceName)"
+            return adbTVLocalized("%@ on %@", kind, interfaceName)
         }
 
         return kind
@@ -3475,7 +3480,7 @@ private struct DeviceRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(device.displayName)
                 .font(.headline)
-            Text(device.connectionDescription)
+            Text(device.localizedConnectionDescription)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -3528,24 +3533,24 @@ private struct SavedDeviceConnectionView: View {
                 case .connecting:
                     HStack(spacing: 10) {
                         ProgressView()
-                        Text("Connecting and verifying")
+                        Text(adbTVLocalized("Connecting and verifying"))
                             .foregroundStyle(.secondary)
                     }
                 case .failed(_, let diagnosticDetail):
                     VStack(alignment: .leading, spacing: 12) {
                         Label(
-                            "Could not connect to this TV.",
+                            adbTVLocalized("Could not connect to this TV."),
                             systemImage: "exclamationmark.triangle.fill"
                         )
                         .foregroundStyle(.red)
 
                         Button(action: retry) {
-                            Label("Retry Connection", systemImage: "arrow.clockwise")
+                            Label(adbTVLocalized("Retry Connection"), systemImage: "arrow.clockwise")
                         }
                         .adbTVProminentButton()
 
                         Button(action: repair) {
-                            Label("Update Connection", systemImage: "network")
+                            Label(adbTVLocalized("Update Connection"), systemImage: "network")
                         }
                         .buttonStyle(.bordered)
 
@@ -3584,29 +3589,29 @@ private struct RenameDeviceView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Device Name") {
-                    TextField("Name", text: $displayName, axis: .vertical)
+                Section(adbTVLocalized("Device Name")) {
+                    TextField(adbTVLocalized("Name"), text: $displayName, axis: .vertical)
                         .lineLimit(1...4)
                 }
 
                 if let saveError {
                     Section {
-                        Label("Could not rename this device.", systemImage: "exclamationmark.triangle.fill")
+                        Label(adbTVLocalized("Could not rename this device."), systemImage: "exclamationmark.triangle.fill")
                             .foregroundStyle(.red)
                         DiagnosticDisclosure(diagnosticDetail: saveError)
                     }
                 }
             }
-            .navigationTitle("Rename Device")
+            .navigationTitle(adbTVLocalized("Rename Device"))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(adbTVLocalized("Cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") { save() }
+                    Button(adbTVLocalized("Save")) { save() }
                         .disabled(
                             normalizedDisplayName.isEmpty
                                 || normalizedDisplayName == device.displayName
@@ -3673,24 +3678,24 @@ private struct RepairDeviceConnectionView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Saved Device") {
-                    ADBTVLabeledValue("Name", value: device.displayName)
-                    ADBTVLabeledValue("Current Connection", value: device.connectionDescription)
+                Section(adbTVLocalized("Saved Device")) {
+                    ADBTVLabeledValue(adbTVLocalized("Name"), value: device.displayName)
+                    ADBTVLabeledValue(adbTVLocalized("Current Connection"), value: device.localizedConnectionDescription)
                     if let model = device.model {
-                        ADBTVLabeledValue("Expected Model", value: model)
+                        ADBTVLabeledValue(adbTVLocalized("Expected Model"), value: model)
                     }
                 }
 
-                Section("New Connection") {
-                    ADBTVFormField("Host or IP Address") {
-                        TextField("192.168.1.50 or tv.local", text: $host)
+                Section(adbTVLocalized("New Connection")) {
+                    ADBTVFormField(adbTVLocalized("Host or IP Address")) {
+                        TextField(adbTVLocalized("192.168.1.50 or tv.local"), text: $host)
                             .adbTVAddressInput()
                             .focused($focusedField, equals: .host)
                             .submitLabel(.next)
                             .onSubmit { focusedField = .port }
                     }
-                    ADBTVFormField("Connection Port") {
-                        TextField("Port on your TV", text: $port)
+                    ADBTVFormField(adbTVLocalized("Connection Port")) {
+                        TextField(adbTVLocalized("Port on your TV"), text: $port)
                             .adbTVNumericInput()
                             .focused($focusedField, equals: .port)
                             .submitLabel(.done)
@@ -3704,7 +3709,7 @@ private struct RepairDeviceConnectionView: View {
                         Button {
                             testConnection()
                         } label: {
-                            Label("Test Connection", systemImage: "network")
+                            Label(adbTVLocalized("Test Connection"), systemImage: "network")
                                 .frame(maxWidth: .infinity)
                         }
                         .disabled(candidateDevice == nil || status.isVerifying)
@@ -3716,7 +3721,7 @@ private struct RepairDeviceConnectionView: View {
                     warnsAboutDifferentModel: status.verifiedDevice.map(modelDiffers) ?? false
                 )
             }
-            .navigationTitle("Update Connection")
+            .navigationTitle(adbTVLocalized("Update Connection"))
 #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -3724,11 +3729,11 @@ private struct RepairDeviceConnectionView: View {
 #if os(iOS)
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("Done") { focusedField = nil }
+                    Button(adbTVLocalized("Done")) { focusedField = nil }
                 }
 #endif
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
+                    Button(adbTVLocalized("Cancel")) {
                         verificationTask?.cancel()
                         dismiss()
                     }
@@ -3736,7 +3741,7 @@ private struct RepairDeviceConnectionView: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     if let verifiedDevice = status.verifiedDevice {
-                        Button("Save") {
+                        Button(adbTVLocalized("Save")) {
                             if modelDiffers(from: verifiedDevice) {
                                 confirmsDifferentModel = true
                             } else {
@@ -3752,18 +3757,17 @@ private struct RepairDeviceConnectionView: View {
         .onChange(of: port) { _, _ in resetVerification() }
         .onDisappear { verificationTask?.cancel() }
         .confirmationDialog(
-            "This looks like a different TV",
+            adbTVLocalized("This looks like a different TV"),
             isPresented: $confirmsDifferentModel,
             presenting: status.verifiedDevice
         ) { verifiedDevice in
-            Button("Use This Connection", role: .destructive) {
+            Button(adbTVLocalized("Use This Connection"), role: .destructive) {
                 save(verifiedDevice)
             }
-            Button("Cancel", role: .cancel) {}
+            Button(adbTVLocalized("Cancel"), role: .cancel) {}
         } message: { verifiedDevice in
             Text(
-                "The saved model is \(device.model ?? "unknown"), but this endpoint reports "
-                    + "\(verifiedDevice.model ?? "an unknown model")."
+                adbTVLocalized("The saved model is %@, but this endpoint reports %@.", device.model ?? adbTVLocalized("Unknown"), verifiedDevice.model ?? adbTVLocalized("Unknown"))
             )
         }
     }
@@ -3810,7 +3814,7 @@ private struct RepairDeviceConnectionView: View {
                 status = .failed(
                     userMessage: connectionUserMessage(
                         for: error,
-                        fallback: "Could not verify this connection."
+                        fallback: adbTVLocalized("Could not verify this connection.")
                     ),
                     diagnosticDetail: DiagnosticDetail(
                         summary: String(describing: error),
@@ -3864,9 +3868,9 @@ private struct RepairDeviceConnectionView: View {
 
     private func saveFailureMessage(for error: Error) -> String {
         if case let ADBTVDeviceRepairError.endpointAlreadySaved(displayName) = error {
-            return "This connection is already saved as \(displayName)."
+            return adbTVLocalized("This connection is already saved as %@.", String(describing: displayName))
         }
-        return "Could not save the updated connection."
+        return adbTVLocalized("Could not save the updated connection.")
     }
 }
 
@@ -3904,19 +3908,19 @@ private struct RepairDeviceConnectionStatusView: View {
             Section {
                 HStack(spacing: 8) {
                     ProgressView()
-                    Text("Testing connection")
+                    Text(adbTVLocalized("Testing connection"))
                         .foregroundStyle(.secondary)
                 }
             }
         case .verified(let device):
-            Section("Verified Device") {
-                Label("Connection verified", systemImage: "checkmark.circle.fill")
+            Section(adbTVLocalized("Verified Device")) {
+                Label(adbTVLocalized("Connection verified"), systemImage: "checkmark.circle.fill")
                     .foregroundStyle(Color.accentColor)
-                LabeledContent("Detected Model", value: device.model ?? "Unknown")
-                LabeledContent("Connection", value: device.connectionDescription)
+                LabeledContent(adbTVLocalized("Detected Model"), value: device.model ?? adbTVLocalized("Unknown"))
+                LabeledContent(adbTVLocalized("Connection"), value: device.localizedConnectionDescription)
                 if warnsAboutDifferentModel {
                     Label(
-                        "The detected model differs from the saved device.",
+                        adbTVLocalized("The detected model differs from the saved device."),
                         systemImage: "exclamationmark.triangle.fill"
                     )
                     .foregroundStyle(.orange)
@@ -3997,7 +4001,7 @@ private struct DeviceDetailView: View {
                     actionsDisabled: deviceOperationInProgress
                 )
 
-                Picker("Device Tool", selection: $selectedTool) {
+                Picker(adbTVLocalized("Device Tool"), selection: $selectedTool) {
                     ForEach(DeviceTool.allCases) { tool in
                         Text(tool.title).tag(tool)
                     }
@@ -4114,7 +4118,7 @@ private struct DeviceDetailView: View {
             .frame(maxWidth: 520, alignment: .leading)
             .padding()
         }
-        .navigationTitle("Install App")
+        .navigationTitle(adbTVLocalized("Install App"))
 #if os(iOS)
         .navigationBarBackButtonHidden(installDraft.status.isRunning)
         .navigationBarTitleDisplayMode(.inline)
@@ -4152,11 +4156,11 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .remote:
-            return "Remote"
+            return adbTVLocalized("Remote")
         case .apps:
-            return "Apps"
+            return adbTVLocalized("Apps")
         case .tools:
-            return "Tools"
+            return adbTVLocalized("Tools")
         }
     }
 
@@ -4193,7 +4197,7 @@ private struct DeviceHeader: View {
                 Text(model)
                     .font(.headline)
             }
-            Text(device.connectionDescription)
+            Text(device.localizedConnectionDescription)
                 .font(.footnote.monospaced())
                 .foregroundStyle(.secondary)
         }
@@ -4202,20 +4206,20 @@ private struct DeviceHeader: View {
     private var actions: some View {
         HStack(spacing: 12) {
             Button(action: repair) {
-                Label("Update Connection", systemImage: "network")
+                Label(adbTVLocalized("Update Connection"), systemImage: "network")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.bordered)
             .disabled(actionsDisabled)
-            .help("Update Connection")
+            .help(adbTVLocalized("Update Connection"))
 
             Button(action: rename) {
-                Label("Rename Device", systemImage: "pencil")
+                Label(adbTVLocalized("Rename Device"), systemImage: "pencil")
                     .labelStyle(.iconOnly)
             }
             .buttonStyle(.bordered)
             .disabled(actionsDisabled)
-            .help("Rename Device")
+            .help(adbTVLocalized("Rename Device"))
         }
     }
 }
@@ -4263,29 +4267,29 @@ private struct APKInstallPanel: View {
                 }
             }
 
-            TextField("App package URL", text: installURLString)
+            TextField(adbTVLocalized("App package URL"), text: installURLString)
                 .adbTVAddressInput()
                 .textFieldStyle(.roundedBorder)
                 .disabled(installDraft.status.isRunning || deviceOperationInProgress)
 
             if !installURLString.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                !installDraft.canPrepareInstallPackage {
-                Label("Enter a direct HTTP or HTTPS APK or APKM URL", systemImage: "exclamationmark.triangle")
+                Label(adbTVLocalized("Enter a direct HTTP or HTTPS APK or APKM URL"), systemImage: "exclamationmark.triangle")
                     .foregroundStyle(.secondary)
             }
 
             if let package = installDraft.selectedPackage {
-                ADBTVLabeledValue("Package", value: package.fileName)
+                ADBTVLabeledValue(adbTVLocalized("Package"), value: package.fileName)
                 if let byteCount = package.byteCount {
-                    ADBTVLabeledValue("Size", value: Self.formattedByteCount(byteCount))
+                    ADBTVLabeledValue(adbTVLocalized("Size"), value: Self.formattedByteCount(byteCount))
                 }
             } else if let url = installDraft.validatedURL {
-                ADBTVLabeledValue("Source", value: url.absoluteString)
+                ADBTVLabeledValue(adbTVLocalized("Source"), value: url.absoluteString)
             }
 
             if installDraft.usesInsecureHTTP {
                 Label(
-                    "HTTP downloads are not protected in transit.",
+                    adbTVLocalized("HTTP downloads are not protected in transit."),
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .foregroundStyle(.orange)
@@ -4299,7 +4303,7 @@ private struct APKInstallPanel: View {
         Button {
             chooseAPK()
         } label: {
-            Label("Choose Package", systemImage: "doc.badge.plus")
+            Label(adbTVLocalized("Choose Package"), systemImage: "doc.badge.plus")
                 .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
         .buttonStyle(.bordered)
@@ -4310,7 +4314,7 @@ private struct APKInstallPanel: View {
         Button {
             install()
         } label: {
-            Label("Install", systemImage: "square.and.arrow.down")
+            Label(adbTVLocalized("Install"), systemImage: "square.and.arrow.down")
                 .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
         .adbTVProminentButton()
@@ -4321,7 +4325,7 @@ private struct APKInstallPanel: View {
         Button(role: .cancel) {
             cancelInstall()
         } label: {
-            Label("Cancel", systemImage: "xmark.circle")
+            Label(adbTVLocalized("Cancel"), systemImage: "xmark.circle")
                 .frame(maxWidth: dynamicTypeSize.isAccessibilitySize ? .infinity : nil)
         }
         .buttonStyle(.bordered)
@@ -4340,7 +4344,7 @@ private struct InstallStatusView: View {
         case .idle:
             EmptyView()
         case .ready:
-            Label("Ready to install", systemImage: "checkmark.circle")
+            Label(adbTVLocalized("Ready to install"), systemImage: "checkmark.circle")
                 .foregroundStyle(.secondary)
         case .running(let phase):
             VStack(alignment: .leading, spacing: 8) {
@@ -4352,42 +4356,42 @@ private struct InstallStatusView: View {
             VStack(alignment: .leading, spacing: 8) {
                 if let totalByteCount, totalByteCount > 0 {
                     ProgressView(value: progressFraction(receivedByteCount, totalByteCount))
-                    Text("\(receivedByteCount) of \(totalByteCount) bytes")
+                    Text(adbTVLocalized("%@ of %@ bytes", String(describing: receivedByteCount), String(describing: totalByteCount)))
                         .font(.footnote.monospacedDigit())
                         .foregroundStyle(.secondary)
                 } else {
                     ProgressView()
-                    Text("\(receivedByteCount) bytes received")
+                    Text(adbTVLocalized("%@ bytes received", receivedByteCount.formatted()))
                         .font(.footnote.monospacedDigit())
                         .foregroundStyle(.secondary)
                 }
-                Label("Downloading package", systemImage: "arrow.down.doc")
+                Label(adbTVLocalized("Downloading package"), systemImage: "arrow.down.doc")
                     .foregroundStyle(.secondary)
             }
         case .transferring(let sentByteCount, let totalByteCount):
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView(value: transferFraction(sentByteCount, totalByteCount))
-                Label("Transferring package", systemImage: "arrow.up.doc")
+                Label(adbTVLocalized("Transferring package"), systemImage: "arrow.up.doc")
                     .foregroundStyle(.secondary)
-                Text("\(sentByteCount) of \(totalByteCount) bytes")
+                Text(adbTVLocalized("%@ of %@ bytes", String(describing: sentByteCount), String(describing: totalByteCount)))
                     .font(.footnote.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
         case .cancelling:
             VStack(alignment: .leading, spacing: 8) {
                 ProgressView()
-                Label("Cancelling and cleaning up", systemImage: "trash")
+                Label(adbTVLocalized("Cancelling and cleaning up"), systemImage: "trash")
                     .foregroundStyle(.secondary)
             }
         case .succeeded:
-            Label("Installed", systemImage: "checkmark.circle.fill")
+            Label(adbTVLocalized("Installed"), systemImage: "checkmark.circle.fill")
                 .foregroundStyle(Color.accentColor)
         case .cancelled:
-            Label("Installation cancelled", systemImage: "xmark.circle")
+            Label(adbTVLocalized("Installation cancelled"), systemImage: "xmark.circle")
                 .foregroundStyle(.secondary)
         case .cancelledWithCleanupFailure(let diagnosticDetail):
             VStack(alignment: .leading, spacing: 8) {
-                Label("Installation cancelled, but device cleanup failed.", systemImage: "exclamationmark.triangle.fill")
+                Label(adbTVLocalized("Installation cancelled, but device cleanup failed."), systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
                 DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
             }
@@ -4403,15 +4407,15 @@ private struct InstallStatusView: View {
     private func statusTitle(for phase: ADBAPKInstallPhase) -> String {
         switch phase {
         case .validatePackage:
-            return "Validating package"
+            return adbTVLocalized("Validating package")
         case .prepareRemoteDirectory:
-            return "Preparing device"
+            return adbTVLocalized("Preparing device")
         case .transferPackage:
-            return "Transferring package"
+            return adbTVLocalized("Transferring package")
         case .installPackage:
-            return "Installing"
+            return adbTVLocalized("Installing")
         case .cleanup:
-            return "Cleaning up"
+            return adbTVLocalized("Cleaning up")
         }
     }
 
@@ -4491,7 +4495,7 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
                         .frame(width: 152, height: dynamicTypeSize.isAccessibilitySize ? 60 : 44)
                         .background(controlBackground, in: Capsule())
                 }
-                .accessibilityLabel("Back")
+                .accessibilityLabel(adbTVLocalized("Back"))
 
                 ViewThatFits(in: .horizontal) {
                     HStack {
@@ -4535,18 +4539,18 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
                 mediaControls
                     .padding(.top, 12)
             } label: {
-                Label("Media Controls", systemImage: "play.rectangle")
+                Label(adbTVLocalized("Media Controls"), systemImage: "play.rectangle")
                     .font(.headline)
             }
 
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Text Input")
+                Text(adbTVLocalized("Text Input"))
                     .font(.headline)
 
                 HStack(spacing: 8) {
-                    TextField("Type text to send", text: text)
+                    TextField(adbTVLocalized("Type text to send"), text: text)
                         .autocorrectionDisabled()
                         .textFieldStyle(.roundedBorder)
                         .focused($focusedControl, equals: .text)
@@ -4554,14 +4558,14 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
                     Button {
                         sendText()
                     } label: {
-                        Label("Send Text", systemImage: "paperplane.fill")
+                        Label(adbTVLocalized("Send Text"), systemImage: "paperplane.fill")
                             .labelStyle(.iconOnly)
                             .font(.system(size: min(remoteSymbolSize, 28), weight: .semibold))
                             .frame(width: 28, height: 28)
                     }
                     .adbTVProminentButton()
                     .disabled(!canSendText || status.remoteActionsUnavailable)
-                    .accessibilityLabel("Send Text")
+                    .accessibilityLabel(adbTVLocalized("Send Text"))
                 }
 
                 if text.wrappedValue.unicodeScalars.contains(where: { !$0.isASCII }) {
@@ -4640,7 +4644,7 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
                     .position(x: size / 2, y: size * 0.82)
 
                 RemoteControlButton(action: { sendFromControl(.select) }) {
-                    Text("OK")
+                    Text(adbTVLocalized("OK"))
                         .font(.title3.bold())
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
@@ -4649,7 +4653,7 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
                         .background(ADBTVControlColors.actionFill, in: Circle())
                 }
                 .foregroundStyle(Color.white)
-                .accessibilityLabel("Select")
+                .accessibilityLabel(adbTVLocalized("Select"))
             }
         }
         .aspectRatio(1, contentMode: .fit)
@@ -4668,15 +4672,15 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
                     columns: [GridItem(.adaptive(minimum: 96), spacing: 12)],
                     spacing: 12
                 ) {
-                    mediaButton(.mediaPrevious, systemImage: "backward.end.fill", title: "Prev")
-                    mediaButton(.mediaRewind, systemImage: "backward.fill", title: "Rew")
-                    mediaButton(.mediaPlayPause, systemImage: "playpause.fill", title: "Play")
-                    mediaButton(.mediaFastForward, systemImage: "forward.fill", title: "FF")
-                    mediaButton(.mediaNext, systemImage: "forward.end.fill", title: "Next")
-                    mediaButton(.mediaStop, systemImage: "stop.fill", title: "Stop", tint: .red)
-                    mediaButton(.enter, systemImage: "return", title: "Enter")
-                    mediaButton(.delete, systemImage: "delete.left.fill", title: "Delete")
-                    mediaButton(.tab, systemImage: "arrow.right.to.line", title: "Tab")
+                    mediaButton(.mediaPrevious, systemImage: "backward.end.fill", title: adbTVLocalized("Prev"))
+                    mediaButton(.mediaRewind, systemImage: "backward.fill", title: adbTVLocalized("Rew"))
+                    mediaButton(.mediaPlayPause, systemImage: "playpause.fill", title: adbTVLocalized("Play"))
+                    mediaButton(.mediaFastForward, systemImage: "forward.fill", title: adbTVLocalized("FF"))
+                    mediaButton(.mediaNext, systemImage: "forward.end.fill", title: adbTVLocalized("Next"))
+                    mediaButton(.mediaStop, systemImage: "stop.fill", title: adbTVLocalized("Stop"), tint: .red)
+                    mediaButton(.enter, systemImage: "return", title: adbTVLocalized("Enter"))
+                    mediaButton(.delete, systemImage: "delete.left.fill", title: adbTVLocalized("Delete"))
+                    mediaButton(.tab, systemImage: "arrow.right.to.line", title: adbTVLocalized("Tab"))
                 }
             } else {
                 defaultMediaControls
@@ -4692,26 +4696,26 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
     private var defaultMediaControls: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 0) {
-                mediaButton(.mediaPrevious, systemImage: "backward.end.fill", title: "Prev")
+                mediaButton(.mediaPrevious, systemImage: "backward.end.fill", title: adbTVLocalized("Prev"))
                 Spacer(minLength: 4)
-                mediaButton(.mediaRewind, systemImage: "backward.fill", title: "Rew")
+                mediaButton(.mediaRewind, systemImage: "backward.fill", title: adbTVLocalized("Rew"))
                 Spacer(minLength: 4)
-                mediaButton(.mediaPlayPause, systemImage: "playpause.fill", title: "Play")
+                mediaButton(.mediaPlayPause, systemImage: "playpause.fill", title: adbTVLocalized("Play"))
                 Spacer(minLength: 4)
-                mediaButton(.mediaFastForward, systemImage: "forward.fill", title: "FF")
+                mediaButton(.mediaFastForward, systemImage: "forward.fill", title: adbTVLocalized("FF"))
                 Spacer(minLength: 4)
-                mediaButton(.mediaNext, systemImage: "forward.end.fill", title: "Next")
+                mediaButton(.mediaNext, systemImage: "forward.end.fill", title: adbTVLocalized("Next"))
             }
 
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
-                mediaButton(.mediaStop, systemImage: "stop.fill", title: "Stop", tint: .red)
+                mediaButton(.mediaStop, systemImage: "stop.fill", title: adbTVLocalized("Stop"), tint: .red)
                 Spacer(minLength: 12)
-                mediaButton(.enter, systemImage: "return", title: "Enter")
+                mediaButton(.enter, systemImage: "return", title: adbTVLocalized("Enter"))
                 Spacer(minLength: 12)
-                mediaButton(.delete, systemImage: "delete.left.fill", title: "Delete")
+                mediaButton(.delete, systemImage: "delete.left.fill", title: adbTVLocalized("Delete"))
                 Spacer(minLength: 12)
-                mediaButton(.tab, systemImage: "arrow.right.to.line", title: "Tab")
+                mediaButton(.tab, systemImage: "arrow.right.to.line", title: adbTVLocalized("Tab"))
                 Spacer(minLength: 0)
             }
         }
@@ -4800,7 +4804,7 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
 
     private var unicodeHelperLabel: some View {
         Label(
-            "Chinese and other Unicode text uses the optional TV input helper.",
+            adbTVLocalized("Chinese and other Unicode text uses the optional TV input helper."),
             systemImage: "character.cursor.ibeam"
         )
         .font(.footnote)
@@ -4811,7 +4815,7 @@ private struct RemoteActionsPanel<QuickLaunch: View>: View {
         Button {
             installUnicodeInputHelper()
         } label: {
-            Label("Install Input Helper", systemImage: "keyboard")
+            Label(adbTVLocalized("Install Input Helper"), systemImage: "keyboard")
         }
         .buttonStyle(.bordered)
         .disabled(deviceOperationInProgress || status.remoteActionsUnavailable)
@@ -4923,32 +4927,32 @@ private struct RemoteStatusView: View {
         case .idle:
             EmptyView()
         case .connecting:
-            connectionStatus("Connecting to TV")
+            connectionStatus(adbTVLocalized("Connecting to TV"))
         case .reconnecting:
-            connectionStatus("Reconnecting to TV")
+            connectionStatus(adbTVLocalized("Reconnecting to TV"))
         case .catchingUp:
-            Label("Remote is catching up", systemImage: "clock.arrow.circlepath")
+            Label(adbTVLocalized("Remote is catching up"), systemImage: "clock.arrow.circlepath")
                 .foregroundStyle(.orange)
         case .connectionFailed(let userMessage, let diagnosticDetail):
             VStack(alignment: .leading, spacing: 10) {
                 Label(userMessage, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                 Button(action: retry) {
-                    Label("Retry Connection", systemImage: "arrow.clockwise")
+                    Label(adbTVLocalized("Retry Connection"), systemImage: "arrow.clockwise")
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .adbTVProminentButton()
                 DiagnosticDisclosure(diagnosticDetail: diagnosticDetail)
             }
         case .sending(let action):
-            sendingStatus("Sending \(action.displayTitle)")
+            sendingStatus(adbTVLocalized("Sending %@", String(describing: action.displayTitle)))
         case .sendingText:
-            sendingStatus("Sending text")
+            sendingStatus(adbTVLocalized("Sending text"))
         case .sent(let action):
-            Label("Sent \(action.displayTitle)", systemImage: "checkmark.circle")
+            Label(adbTVLocalized("Sent %@", String(describing: action.displayTitle)), systemImage: "checkmark.circle")
                 .foregroundStyle(.secondary)
         case .sentText:
-            Label("Text sent", systemImage: "checkmark.circle")
+            Label(adbTVLocalized("Text sent"), systemImage: "checkmark.circle")
                 .foregroundStyle(.secondary)
         case .failed(_, let userMessage, let diagnosticDetail):
             RemoteFailureView(
@@ -4990,7 +4994,7 @@ private struct RemoteStatusView: View {
 
     private var cancelButton: some View {
         Button(role: .cancel, action: cancel) {
-            Label("Cancel", systemImage: "xmark.circle")
+            Label(adbTVLocalized("Cancel"), systemImage: "xmark.circle")
         }
         .buttonStyle(.bordered)
     }
@@ -5013,7 +5017,7 @@ struct DiagnosticDisclosure: View {
     var diagnosticDetail: DiagnosticDetail
 
     var body: some View {
-        DisclosureGroup("Technical Details") {
+        DisclosureGroup(adbTVLocalized("Technical Details")) {
             ScrollView([.horizontal, .vertical]) {
                 Text(diagnosticDetail.formattedDescription)
                     .font(.caption.monospaced())
@@ -5029,49 +5033,49 @@ private extension ADBTVRemoteAction {
     var displayTitle: String {
         switch self {
         case .home:
-            return "Home"
+            return adbTVLocalized("Home")
         case .back:
-            return "Back"
+            return adbTVLocalized("Back")
         case .up:
-            return "Up"
+            return adbTVLocalized("Up")
         case .down:
-            return "Down"
+            return adbTVLocalized("Down")
         case .left:
-            return "Left"
+            return adbTVLocalized("Left")
         case .right:
-            return "Right"
+            return adbTVLocalized("Right")
         case .select:
-            return "OK"
+            return adbTVLocalized("OK")
         case .settings:
-            return "Settings"
+            return adbTVLocalized("Settings")
         case .menu:
-            return "Menu"
+            return adbTVLocalized("Menu")
         case .volumeUp:
-            return "Volume Up"
+            return adbTVLocalized("Volume Up")
         case .volumeDown:
-            return "Volume Down"
+            return adbTVLocalized("Volume Down")
         case .volumeMute:
-            return "Mute"
+            return adbTVLocalized("Mute")
         case .power:
-            return "Power"
+            return adbTVLocalized("Power")
         case .mediaPrevious:
-            return "Previous"
+            return adbTVLocalized("Previous")
         case .mediaRewind:
-            return "Rewind"
+            return adbTVLocalized("Rewind")
         case .mediaPlayPause:
-            return "Play or Pause"
+            return adbTVLocalized("Play or Pause")
         case .mediaFastForward:
-            return "Fast Forward"
+            return adbTVLocalized("Fast Forward")
         case .mediaNext:
-            return "Next"
+            return adbTVLocalized("Next")
         case .mediaStop:
-            return "Stop"
+            return adbTVLocalized("Stop")
         case .enter:
-            return "Enter"
+            return adbTVLocalized("Enter")
         case .delete:
-            return "Delete"
+            return adbTVLocalized("Delete")
         case .tab:
-            return "Tab"
+            return adbTVLocalized("Tab")
         }
     }
 }

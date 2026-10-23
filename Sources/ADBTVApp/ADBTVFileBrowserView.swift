@@ -16,6 +16,7 @@ struct ADBTVFileBrowserView: View {
     var directory: ADBSharedStoragePath = .root
 
     @State private var items: [ADBSharedStorageItem] = []
+    @State private var query = ADBTVFileBrowserQuery()
     @State private var status = ADBTVFileListStatus.idle
     @State private var operationTask: Task<Void, Never>?
     @State private var operationID: UUID?
@@ -47,58 +48,80 @@ struct ADBTVFileBrowserView: View {
                     Section {
                         HStack(spacing: 12) {
                             ProgressView()
-                            Text("Loading files")
+                            Text(adbTVLocalized("Loading files"))
                                 .foregroundStyle(.secondary)
                         }
                     }
                 case .ready:
                     ContentUnavailableView(
-                        "Folder Is Empty",
+                        adbTVLocalized("Folder Is Empty"),
                         systemImage: "folder",
-                        description: Text("Upload a file or create a folder.")
+                        description: Text(adbTVLocalized("Upload a file or create a folder."))
                     )
                 case .failed:
                     EmptyView()
                 }
+            } else if query.emptyState(items: items, status: status) == .noMatches {
+                ContentUnavailableView {
+                    Label(adbTVLocalized("No Matching Files"), systemImage: "magnifyingglass")
+                } description: {
+                    Text(adbTVLocalized("Try a different file name in this folder."))
+                } actions: {
+                    Button(adbTVLocalized("Clear Search")) { query.searchText = "" }
+                }
             } else {
                 Section {
-                    ForEach(items) { item in
+                    ForEach(query.apply(to: items)) { item in
                         itemRow(item)
                     }
                 }
             }
         }
-        .navigationTitle(directory.name)
+        .navigationTitle(directory.adbTVDisplayName)
 #if os(iOS)
+        .searchable(text: $query.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: adbTVLocalized("Search This Folder"))
         .navigationBarTitleDisplayMode(.inline)
+#else
+        .searchable(text: $query.searchText, prompt: adbTVLocalized("Search This Folder"))
 #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
                 if isBusy, transfer == nil {
-                    Button("Cancel", action: cancelOperation)
+                    Button(adbTVLocalized("Cancel"), action: cancelOperation)
                         .disabled(operationTask?.isCancelled == true)
                 }
                 Button {
                     refreshContents()
                 } label: {
-                    Label("Refresh", systemImage: "arrow.clockwise")
+                    Label(adbTVLocalized("Refresh"), systemImage: "arrow.clockwise")
                 }
                 .disabled(isBusy)
+
+                Menu {
+                    Picker(adbTVLocalized("Sort Files"), selection: $query.sortOrder) {
+                        ForEach(ADBTVFileSortOrder.allCases) { order in
+                            Text(order.title).tag(order)
+                        }
+                    }
+                } label: {
+                    Label(adbTVLocalized("Sort Files"), systemImage: "arrow.up.arrow.down")
+                }
+                .accessibilityValue(query.sortOrder.title)
 
                 Menu {
                     Button {
                         isImporterPresented = true
                     } label: {
-                        Label("Upload File", systemImage: "arrow.up.doc")
+                        Label(adbTVLocalized("Upload File"), systemImage: "arrow.up.doc")
                     }
                     Button {
                         newFolderName = ""
                         isNewFolderPromptPresented = true
                     } label: {
-                        Label("New Folder", systemImage: "folder.badge.plus")
+                        Label(adbTVLocalized("New Folder"), systemImage: "folder.badge.plus")
                     }
                 } label: {
-                    Label("Add", systemImage: "plus")
+                    Label(adbTVLocalized("Add"), systemImage: "plus")
                 }
                 .disabled(isBusy)
             }
@@ -127,41 +150,41 @@ struct ADBTVFileBrowserView: View {
             case .success(let url):
                 selectUpload(url)
             case .failure(let error):
-                fail("Could not open the selected file.", error: error, operation: "selectUpload")
+                fail(adbTVLocalized("Could not open the selected file."), error: error, operation: "selectUpload")
             }
         }
-        .alert("New Folder", isPresented: $isNewFolderPromptPresented) {
-            TextField("Folder Name", text: $newFolderName)
-            Button("Create") { createFolder() }
+        .alert(adbTVLocalized("New Folder"), isPresented: $isNewFolderPromptPresented) {
+            TextField(adbTVLocalized("Folder Name"), text: $newFolderName)
+            Button(adbTVLocalized("Create")) { createFolder() }
                 .disabled(!canCreateFolder)
-            Button("Cancel", role: .cancel) {}
+            Button(adbTVLocalized("Cancel"), role: .cancel) {}
         } message: {
-            Text("Create a folder in \(directory.name).")
+            Text(adbTVLocalized("Create a folder in %@.", directory.adbTVDisplayName))
         }
-        .alert("Rename", isPresented: renamePromptBinding) {
-            TextField("Name", text: $renameName)
-            Button("Save") { renameSelectedItem() }
+        .alert(adbTVLocalized("Rename"), isPresented: renamePromptBinding) {
+            TextField(adbTVLocalized("Name"), text: $renameName)
+            Button(adbTVLocalized("Save")) { renameSelectedItem() }
                 .disabled(!canRenameItem)
-            Button("Cancel", role: .cancel) { renameItem = nil }
+            Button(adbTVLocalized("Cancel"), role: .cancel) { renameItem = nil }
         }
-        .alert("Delete Item?", isPresented: deletePromptBinding, presenting: deleteItem) { item in
-            Button("Delete", role: .destructive) { delete(item) }
-            Button("Cancel", role: .cancel) { deleteItem = nil }
+        .alert(adbTVLocalized("Delete Item?"), isPresented: deletePromptBinding, presenting: deleteItem) { item in
+            Button(adbTVLocalized("Delete"), role: .destructive) { delete(item) }
+            Button(adbTVLocalized("Cancel"), role: .cancel) { deleteItem = nil }
         } message: { item in
             Text(item.kind == .directory
-                ? "This permanently deletes \"\(item.name)\" and everything inside it."
-                : "This permanently deletes \"\(item.name)\".")
+                ? adbTVLocalized("This permanently deletes \"%@\" and everything inside it.", String(describing: item.name))
+                : adbTVLocalized("This permanently deletes \"%@\".", String(describing: item.name)))
         }
-        .alert("Replace Existing File?", isPresented: uploadReplacementBinding) {
-            Button("Replace", role: .destructive) {
+        .alert(adbTVLocalized("Replace Existing File?"), isPresented: uploadReplacementBinding) {
+            Button(adbTVLocalized("Replace"), role: .destructive) {
                 if let url = pendingUploadURL {
                     upload(url, replacingExisting: true)
                 }
                 pendingUploadURL = nil
             }
-            Button("Cancel", role: .cancel) { pendingUploadURL = nil }
+            Button(adbTVLocalized("Cancel"), role: .cancel) { pendingUploadURL = nil }
         } message: {
-            Text("A file with this name already exists in \(directory.name).")
+            Text(adbTVLocalized("A file with this name already exists in %@.", directory.adbTVDisplayName))
         }
         .sheet(item: $moveItem) { item in
             ADBTVFolderPickerView(
@@ -216,23 +239,23 @@ struct ADBTVFileBrowserView: View {
         Menu {
             if item.kind == .file {
                 Button { download(item) } label: {
-                    Label("Download and Share", systemImage: "arrow.down.doc")
+                    Label(adbTVLocalized("Download and Share"), systemImage: "arrow.down.doc")
                 }
             }
             Button {
                 renameName = item.name
                 renameItem = item
             } label: {
-                Label("Rename", systemImage: "pencil")
+                Label(adbTVLocalized("Rename"), systemImage: "pencil")
             }
             Button { moveItem = item } label: {
-                Label("Move", systemImage: "folder")
+                Label(adbTVLocalized("Move"), systemImage: "folder")
             }
             Button(role: .destructive) { deleteItem = item } label: {
-                Label("Delete", systemImage: "trash")
+                Label(adbTVLocalized("Delete"), systemImage: "trash")
             }
         } label: {
-            Label("Actions for \(item.name)", systemImage: "ellipsis.circle")
+            Label(adbTVLocalized("Actions for %@", String(describing: item.name)), systemImage: "ellipsis.circle")
                 .labelStyle(.iconOnly)
         }
         .disabled(isBusy)
@@ -292,7 +315,7 @@ struct ADBTVFileBrowserView: View {
                 }
                 Spacer()
                 Button(action: cancelOperation) {
-                    Label("Cancel", systemImage: "xmark")
+                    Label(adbTVLocalized("Cancel"), systemImage: "xmark")
                         .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
@@ -369,7 +392,7 @@ struct ADBTVFileBrowserView: View {
 
     private func cancelOperation() {
         operationTask?.cancel()
-        transfer?.title = "Cancelling and cleaning up"
+        transfer?.title = adbTVLocalized("Cancelling and cleaning up")
     }
 
     @MainActor
@@ -378,6 +401,14 @@ struct ADBTVFileBrowserView: View {
         status = .loading
         if ProcessInfo.processInfo.arguments.contains("--ui-files") {
             items = Self.previewItems(in: directory)
+            if ProcessInfo.processInfo.arguments.contains("--ui-files-search") {
+                query.searchText = ".apk"
+            } else if ProcessInfo.processInfo.arguments.contains("--ui-files-no-matches") {
+                query.searchText = "missing-file"
+            }
+            if ProcessInfo.processInfo.arguments.contains("--ui-files-largest") {
+                query.sortOrder = .largest
+            }
             status = .ready
             return
         }
@@ -392,7 +423,7 @@ struct ADBTVFileBrowserView: View {
                 status.finishCancelledLoad()
                 return
             }
-            fail("Could not load this folder.", error: error, operation: "listDirectory")
+            fail(adbTVLocalized("Could not load this folder."), error: error, operation: "listDirectory")
         }
     }
 
@@ -400,7 +431,7 @@ struct ADBTVFileBrowserView: View {
         if let existing = items.first(where: { $0.name == url.lastPathComponent }) {
             guard existing.kind == .file else {
                 fail(
-                    "A folder with this name already exists.",
+                    adbTVLocalized("A folder with this name already exists."),
                     error: ADBTVFileBrowserError.destinationIsDirectory,
                     operation: "uploadFile"
                 )
@@ -413,7 +444,7 @@ struct ADBTVFileBrowserView: View {
     }
 
     private func upload(_ url: URL, replacingExisting: Bool = false) {
-        startOperation(title: "Uploading \(url.lastPathComponent)", showsByteCounts: true) { id in
+        startOperation(title: adbTVLocalized("Uploading %@", String(describing: url.lastPathComponent)), showsByteCounts: true, operationName: "uploadFile") { id in
             try await Self.upload(
                 url, to: directory, on: device, replacingExisting: replacingExisting
             ) { current, total in
@@ -424,7 +455,7 @@ struct ADBTVFileBrowserView: View {
     }
 
     private func download(_ item: ADBSharedStorageItem) {
-        startOperation(title: "Downloading \(item.name)", showsByteCounts: true) { id in
+        startOperation(title: adbTVLocalized("Downloading %@", String(describing: item.name)), showsByteCounts: true, operationName: "downloadFile") { id in
             let container = FileManager.default.temporaryDirectory
                 .appendingPathComponent("ADBTV-\(UUID().uuidString)", isDirectory: true)
             try FileManager.default.createDirectory(at: container, withIntermediateDirectories: false)
@@ -447,7 +478,7 @@ struct ADBTVFileBrowserView: View {
     private func createFolder() {
         guard canCreateFolder else { return }
         let name = normalizedNewFolderName
-        startOperation(title: "Creating \(name)") { id in
+        startOperation(title: adbTVLocalized("Creating %@", String(describing: name)), operationName: "createDirectory") { id in
             try await Self.createDirectory(named: name, in: directory, on: device)
             await loadContents(operationID: id)
         }
@@ -457,14 +488,14 @@ struct ADBTVFileBrowserView: View {
         guard let item = renameItem, canRenameItem else { return }
         let name = normalizedRenameName
         renameItem = nil
-        startOperation(title: "Renaming \(item.name)") { id in
+        startOperation(title: adbTVLocalized("Renaming %@", String(describing: item.name)), operationName: "renameItem") { id in
             try await Self.rename(item, to: name, on: device)
             await loadContents(operationID: id)
         }
     }
 
     private func move(_ item: ADBSharedStorageItem, to destination: ADBSharedStoragePath) {
-        startOperation(title: "Moving \(item.name)") { id in
+        startOperation(title: adbTVLocalized("Moving %@", String(describing: item.name)), operationName: "moveItem") { id in
             try await Self.move(item, to: destination, on: device)
             await loadContents(operationID: id)
         }
@@ -472,7 +503,7 @@ struct ADBTVFileBrowserView: View {
 
     private func delete(_ item: ADBSharedStorageItem) {
         deleteItem = nil
-        startOperation(title: "Deleting \(item.name)") { id in
+        startOperation(title: adbTVLocalized("Deleting %@", String(describing: item.name)), operationName: "deleteItem") { id in
             try await Self.delete(item, on: device)
             await loadContents(operationID: id)
         }
@@ -482,6 +513,7 @@ struct ADBTVFileBrowserView: View {
     private func startOperation(
         title: String? = nil,
         showsByteCounts: Bool = false,
+        operationName: String = "listDirectory",
         operation: @escaping @MainActor @Sendable (UUID) async throws -> Void
     ) -> Task<Void, Never>? {
         guard operationTask == nil else { return nil }
@@ -503,12 +535,12 @@ struct ADBTVFileBrowserView: View {
                 guard operationID == id else { return }
                 if error is ADBSharedStorageUploadCleanupError {
                     fail(
-                        "Could not remove the upload's temporary file. See Technical Details.",
+                        adbTVLocalized("Could not remove the upload's temporary file. See Technical Details."),
                         error: error,
-                        operation: title ?? "listDirectory"
+                        operation: operationName
                     )
                 } else if !Task.isCancelled, !(error is CancellationError) {
-                    fail("The file operation failed.", error: error, operation: title ?? "listDirectory")
+                    fail(adbTVLocalized("The file operation failed."), error: error, operation: operationName)
                 }
             }
         }
@@ -550,13 +582,13 @@ struct ADBTVFileBrowserView: View {
         let date = item.modificationTime.formatted(date: .abbreviated, time: .shortened)
         switch item.kind {
         case .directory:
-            return "Folder | \(date)"
+            return adbTVLocalized("Folder | %@", String(describing: date))
         case .file:
             return "\(ByteCountFormatter.string(fromByteCount: item.byteCount, countStyle: .file)) | \(date)"
         case .symbolicLink:
-            return "Link | \(date)"
+            return adbTVLocalized("Link | %@", String(describing: date))
         case .other:
-            return "Item | \(date)"
+            return adbTVLocalized("Item | %@", String(describing: date))
         }
     }
 
@@ -781,7 +813,7 @@ private struct ADBTVFolderPickerView: View {
             )
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button(adbTVLocalized("Cancel")) { dismiss() }
                 }
             }
         }
@@ -805,7 +837,7 @@ private struct ADBTVFolderPickerDirectoryView: View {
                 Button {
                     select(directory)
                 } label: {
-                    Label("Move Here", systemImage: "folder.badge.plus")
+                    Label(adbTVLocalized("Move Here"), systemImage: "folder.badge.plus")
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .disabled(directory == sourceDirectory || isExcluded(directory))
@@ -815,7 +847,7 @@ private struct ADBTVFolderPickerDirectoryView: View {
                 Section {
                     HStack(spacing: 12) {
                         ProgressView()
-                        Text("Loading folders").foregroundStyle(.secondary)
+                        Text(adbTVLocalized("Loading folders")).foregroundStyle(.secondary)
                     }
                 }
             } else if let error {
@@ -824,7 +856,7 @@ private struct ADBTVFolderPickerDirectoryView: View {
                         .foregroundStyle(.red)
                 }
             } else {
-                Section("Folders") {
+                Section(adbTVLocalized("Folders")) {
                     ForEach(visibleFolders) { item in
                         NavigationLink {
                             ADBTVFolderPickerDirectoryView(
@@ -842,7 +874,7 @@ private struct ADBTVFolderPickerDirectoryView: View {
                 }
             }
         }
-        .navigationTitle(directory.name)
+        .navigationTitle(directory.adbTVDisplayName)
 #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
 #endif
@@ -853,7 +885,7 @@ private struct ADBTVFolderPickerDirectoryView: View {
             } catch is CancellationError {
                 return
             } catch {
-                self.error = "Could not load folders."
+                self.error = adbTVLocalized("Could not load folders.")
             }
             isLoading = false
         }
@@ -883,24 +915,7 @@ private struct ADBTVFileTransferState: Equatable {
     var detail: String {
         let completed = ByteCountFormatter.string(fromByteCount: completedByteCount, countStyle: .file)
         guard let totalByteCount else { return completed }
-        return "\(completed) of \(ByteCountFormatter.string(fromByteCount: totalByteCount, countStyle: .file))"
-    }
-}
-
-struct ADBTVFileBrowserFailure: Equatable {
-    var userMessage: String
-    var diagnosticDetail: DiagnosticDetail
-}
-
-enum ADBTVFileListStatus: Equatable {
-    case idle
-    case loading
-    case ready
-    case failed(ADBTVFileBrowserFailure)
-
-    mutating func finishCancelledLoad() {
-        guard self == .loading else { return }
-        self = .ready
+        return adbTVLocalized("%@ of %@", String(describing: completed), String(describing: ByteCountFormatter.string(fromByteCount: totalByteCount, countStyle: .file)))
     }
 }
 
@@ -953,9 +968,9 @@ private struct ADBTVFileShareView: View {
     var body: some View {
         VStack(spacing: 16) {
             ShareLink(item: url) {
-                Label("Share File", systemImage: "square.and.arrow.up")
+                Label(adbTVLocalized("Share File"), systemImage: "square.and.arrow.up")
             }
-            Button("Done") {
+            Button(adbTVLocalized("Done")) {
                 completion()
                 dismiss()
             }

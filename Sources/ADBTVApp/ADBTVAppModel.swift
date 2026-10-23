@@ -218,7 +218,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
             installDraft.status = .succeeded
         case .failure(let message):
             installDraft.status = .failed(
-                userMessage: "App install failed.",
+                userMessage: adbTVLocalized("App install failed."),
                 diagnosticDetail: DiagnosticDetail(
                     summary: message,
                     context: ["phase": "installPackage"]
@@ -522,7 +522,7 @@ public struct ADBTVAppModel: Equatable, Sendable {
             pairingStatus = .waitingForPairingService(serviceName: serviceName)
         } else {
             pairingStatus = .failed(
-                userMessage: "This is not an Android pairing QR code.",
+                userMessage: adbTVLocalized("This is not an Android pairing QR code."),
                 diagnosticDetail: DiagnosticDetail(
                     summary: "The scanned payload is not a supported ADB pairing payload.",
                     context: ["operation": "parsePairingQRCode"]
@@ -743,6 +743,11 @@ public struct ADBTVDeviceSummary: Codable, Identifiable, Equatable, Sendable {
         case .bonjour(let service):
             return "\(service.serviceName) via Bonjour"
         }
+    }
+
+    var localizedConnectionDescription: String {
+        guard let service = bonjourService else { return connectionDescription }
+        return adbTVLocalized("%@ via Bonjour", service.serviceName)
     }
 
     fileprivate func matchesEndpoint(of other: ADBTVDeviceSummary) -> Bool {
@@ -966,7 +971,7 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
                 self = .running(.transferPackage)
             case .failed(let message):
                 self = .failed(
-                    userMessage: "Package transfer failed.",
+                    userMessage: adbTVLocalized("Package transfer failed."),
                     diagnosticDetail: DiagnosticDetail(
                         summary: message,
                         context: ["phase": "transferPackage"]
@@ -979,7 +984,7 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
                 self = .running(.cleanup)
             case .failure(let message):
                 self = .failed(
-                    userMessage: "App install failed.",
+                    userMessage: adbTVLocalized("App install failed."),
                     diagnosticDetail: DiagnosticDetail(
                         summary: message,
                         context: ["phase": "installPackage"]
@@ -1006,7 +1011,7 @@ public enum ADBTVInstallStatus: Equatable, Sendable {
                 self = .running(.cleanup)
             case .failure(let message):
                 self = .failed(
-                    userMessage: "App install failed.",
+                    userMessage: adbTVLocalized("App install failed."),
                     diagnosticDetail: DiagnosticDetail(
                         summary: message,
                         context: ["phase": "installPackage"]
