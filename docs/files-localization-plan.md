@@ -25,7 +25,8 @@
    user-facing static and formatted text without changing protocol behavior.
    Localize app permission descriptions through InfoPlist.strings.
    Use alerts with short actions for data clearing and system-state changes so
-   long translated warnings remain visible at large accessibility sizes.
+   concise warnings present the consequences before package identifiers at large
+   accessibility sizes. Keep cancellation explicit.
 3. Add resource/format coverage checks and English/Chinese presentation tests.
    Update README and device acceptance guidance.
 4. Run portable tests and Swift syntax checks locally, then deliver a PR with
@@ -40,6 +41,8 @@ sources parse with Swift 6.2.4; YAML, shell syntax, action SHA pins, and snapsho
 dry runs pass. Both language resources contain 439 matching, format-checked keys.
 The focused localization matrix captures 140 images per language, including
 search results/no matches, size sorting, and largest-text destructive warnings.
+A confirmations-only matrix captures 24 images per language for focused checks
+of data clearing, disabling, and restoring the Android default.
 
 Static snapshots do not prove TV file actions, VoiceOver focus, keyboard input,
 or system permission prompts on a signed physical device. Those remain explicit

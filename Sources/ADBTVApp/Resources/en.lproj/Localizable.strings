@@ -1,6 +1,4 @@
 // User-facing text. External values and diagnostics stay verbatim.
-"%@\n\nTV features or other apps may stop working. The app and its data will remain installed." = "%@\n\nTV features or other apps may stop working. The app and its data will remain installed.";
-"%@\n\nThis permanently removes accounts, settings, downloads, and other data stored by this app. The app remains installed." = "%@\n\nThis permanently removes accounts, settings, downloads, and other data stored by this app. The app remains installed.";
 "%@ (API %@)" = "%@ (API %@)";
 "%@ available" = "%@ available";
 "%@ bytes received" = "%@ bytes received";
@@ -70,11 +68,11 @@
 "Choose Package" = "Choose Package";
 "Choose Pair device with pairing code on your TV. Enter the code and pairing port from that dialog; its port differs from the connection port." = "Choose Pair device with pairing code on your TV. Enter the code and pairing port from that dialog; its port differs from the connection port.";
 "Cleaning up" = "Cleaning up";
+"Clear" = "Clear";
 "Clear App Caches" = "Clear App Caches";
 "Clear App Caches?" = "Clear App Caches?";
 "Clear App Data" = "Clear App Data";
 "Clear Caches" = "Clear Caches";
-"Clear Data" = "Clear Data";
 "Clear Data for %@?" = "Clear Data for %@?";
 "Clear Search" = "Clear Search";
 "Cleared data for %@, but Android reports it active." = "Cleared data for %@, but Android reports it active.";
@@ -230,6 +228,8 @@
 "Local Network access is off. Enable it in Settings to discover Android TV devices." = "Local Network access is off. Enable it in Settings to discover Android TV devices.";
 "Manage" = "Manage";
 "Manufacturer" = "Manufacturer";
+"May disrupt TV features or other apps. Keeps app and data.\n%@" = "May disrupt TV features or other apps. Keeps app and data.\n%@";
+"May undo a prior disable setting and re-enable this app.\n%@" = "May undo a prior disable setting and re-enable this app.\n%@";
 "Media Controls" = "Media Controls";
 "Memory" = "Memory";
 "Memory unavailable" = "Memory unavailable";
@@ -278,6 +278,7 @@
 "Pairing succeeded, but the app could not connect to the TV." = "Pairing succeeded, but the app could not connect to the TV.";
 "Pairing timed out. Check the TV and try again." = "Pairing timed out. Check the TV and try again.";
 "Pairing with %@" = "Pairing with %@";
+"Permanently deletes all app data. App stays installed.\n%@" = "Permanently deletes all app data. App stays installed.\n%@";
 "Pin to Remote" = "Pin to Remote";
 "Pinned apps changed. Reopen Manage to reorder the current list." = "Pinned apps changed. Reopen Manage to reorder the current list.";
 "Play" = "Play";
@@ -321,8 +322,8 @@
 "Resolution" = "Resolution";
 "Restore" = "Restore";
 "Restore Android Default" = "Restore Android Default";
-"Restore Android Default?" = "Restore Android Default?";
 "Restore Android's package default without removing app data." = "Restore Android's package default without removing app data.";
+"Restore Default?" = "Restore Default?";
 "Restored %@ to Android default." = "Restored %@ to Android default.";
 "Restoring %@ to Android default" = "Restoring %@ to Android default";
 "Retry App Details" = "Retry App Details";
@@ -403,7 +404,6 @@
 "This permanently deletes \"%@\" and everything inside it." = "This permanently deletes \"%@\" and everything inside it.";
 "This permanently deletes \"%@\"." = "This permanently deletes \"%@\".";
 "This removes %@ and its app data for the current TV user.\n\n%@" = "This removes %@ and its app data for the current TV user.\n\n%@";
-"This removes the per-user override for %@. Android may enable an app disabled by the manufacturer or another tool." = "This removes the per-user override for %@. Android may enable an app disabled by the manufacturer or another tool.";
 "This stops the app, background activity, and playback without removing its data." = "This stops the app, background activity, and playback without removing its data.";
 "Tools" = "Tools";
 "Transferring package" = "Transferring package";

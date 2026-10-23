@@ -838,14 +838,14 @@ private struct InstalledAppDetailsView: View {
                 adbTVLocalized("Clear Data for %@?", appTitle),
                 isPresented: $confirmsClearData
             ) {
-                Button(adbTVLocalized("Clear Data"), role: .destructive) {
+                Button(adbTVLocalized("Clear"), role: .destructive) {
                     dismiss()
                     clearData(package)
                 }
                 Button(adbTVLocalized("Cancel"), role: .cancel) {}
             } message: {
                 Text(
-                    adbTVLocalized("%@\n\nThis permanently removes accounts, settings, downloads, and other data stored by this app. The app remains installed.", String(describing: package.packageName))
+                    adbTVLocalized("Permanently deletes all app data. App stays installed.\n%@", String(describing: package.packageName))
                 )
             }
             .alert(
@@ -862,11 +862,11 @@ private struct InstalledAppDetailsView: View {
                 Button(adbTVLocalized("Cancel"), role: .cancel) {}
             } message: {
                 Text(
-                    adbTVLocalized("%@\n\nTV features or other apps may stop working. The app and its data will remain installed.", String(describing: package.packageName))
+                    adbTVLocalized("May disrupt TV features or other apps. Keeps app and data.\n%@", String(describing: package.packageName))
                 )
             }
             .alert(
-                adbTVLocalized("Restore Android Default?"),
+                adbTVLocalized("Restore Default?"),
                 isPresented: $confirmsRestoreDefault
             ) {
                 Button(adbTVLocalized("Restore")) {
@@ -879,7 +879,7 @@ private struct InstalledAppDetailsView: View {
                 Button(adbTVLocalized("Cancel"), role: .cancel) {}
             } message: {
                 Text(
-                    adbTVLocalized("This removes the per-user override for %@. Android may enable an app disabled by the manufacturer or another tool.", String(describing: package.packageName))
+                    adbTVLocalized("May undo a prior disable setting and re-enable this app.\n%@", String(describing: package.packageName))
                 )
             }
             .confirmationDialog(

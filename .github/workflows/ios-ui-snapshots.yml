@@ -11,6 +11,7 @@ on:
           - library
           - quick-launch
           - localization
+          - confirmations
         default: full
       language:
         description: App language
@@ -108,6 +109,13 @@ jobs:
                 prefix="$device_name-$appearance"
                 if [ "$content_size" != large ]; then
                   prefix="$prefix-accessibility"
+                fi
+
+                if [ "$SNAPSHOT_SCOPE" = confirmations ]; then
+                  capture "$udid" "$prefix-clear-data-confirm" --ui-apps --ui-user-app-details --ui-clear-data-confirm
+                  capture "$udid" "$prefix-disable-confirm" --ui-apps --ui-active --ui-app-details --ui-disable-confirm
+                  capture "$udid" "$prefix-restore-confirm" --ui-apps --ui-active --ui-app-details --ui-restore-confirm
+                  continue
                 fi
 
                 if [ "$SNAPSHOT_SCOPE" = localization ]; then
