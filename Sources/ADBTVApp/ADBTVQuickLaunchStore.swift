@@ -45,13 +45,31 @@ struct ADBTVQuickLaunchStore {
     var userDefaults: UserDefaults = .standard
     var keyPrefix = "ADBTV.quickLaunch."
 
-    private struct UserApps: Codable {
+    struct UserApps: Codable, Equatable, Sendable {
         var userID: Int
         var apps: [ADBTVPinnedApp]
     }
 
     func hasSavedApps(deviceID: UUID) -> Bool {
         userDefaults.object(forKey: key(deviceID)) != nil
+    }
+
+    func allUsers(deviceID: UUID) throws -> [UserApps] {
+        try archive(deviceID)
+    }
+
+    static func encodedArchive(_ users: [UserApps]) throws -> Data {
+        try validate(users)
+        let data = try JSONEncoder().encode(users)
+        guard data.count <= maximumArchiveByteCount else { throw ADBTVQuickLaunchError.invalidArchive }
+        return data
+    }
+
+    // Restore only a previously absent key. Existing/orphan data is never replaced.
+    func restoreNewArchive(_ users: [UserApps], deviceID: UUID) throws {
+        guard !hasSavedApps(deviceID: deviceID) else { throw ADBTVQuickLaunchError.invalidArchive }
+        let data = try Self.encodedArchive(users)
+        if !users.isEmpty { userDefaults.set(data, forKey: key(deviceID)) }
     }
 
     func apps(deviceID: UUID, userID: Int) throws -> [ADBTVPinnedApp] {
@@ -117,6 +135,11 @@ struct ADBTVQuickLaunchStore {
               let users = try? JSONDecoder().decode([UserApps].self, from: data) else {
             throw ADBTVQuickLaunchError.invalidArchive
         }
+        try Self.validate(users)
+        return users
+    }
+
+    private static func validate(_ users: [UserApps]) throws {
         guard Set(users.map(\.userID)).count == users.count else {
             throw ADBTVQuickLaunchError.invalidArchive
         }
@@ -133,7 +156,6 @@ struct ADBTVQuickLaunchStore {
                 }
             }
         }
-        return users
     }
 
     private func update(
@@ -152,10 +174,7 @@ struct ADBTVQuickLaunchStore {
         if users.isEmpty {
             userDefaults.removeObject(forKey: key(deviceID))
         } else {
-            let data = try JSONEncoder().encode(users)
-            guard data.count <= Self.maximumArchiveByteCount else {
-                throw ADBTVQuickLaunchError.invalidArchive
-            }
+            let data = try Self.encodedArchive(users)
             userDefaults.set(data, forKey: key(deviceID))
         }
         return apps

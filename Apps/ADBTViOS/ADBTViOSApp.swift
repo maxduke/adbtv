@@ -12,7 +12,9 @@ struct ADBTViOSApp: App {
     @ViewBuilder
     private var appRoot: some View {
 #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--ui-about") {
+        if ProcessInfo.processInfo.arguments.contains("--ui-backup") {
+            ADBTVRootView(model: ADBTVAppModel(), automaticallyStartsDiscovery: false, bonjourDiscoveryAvailable: false, initiallyPresentsBackup: true)
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-about") {
             ADBTVRootView(
                 model: ADBTVAppModel(),
                 automaticallyStartsDiscovery: false,

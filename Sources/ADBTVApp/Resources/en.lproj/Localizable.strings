@@ -32,6 +32,8 @@
 "Add App" = "Add App";
 "Add Device" = "Add Device";
 "Add Manually" = "Add Manually";
+"Added: %@ · Skipped: %@" = "Added: %@ · Skipped: %@";
+"Already Saved — Skipped" = "Already Saved — Skipped";
 "Android TV Screenshot" = "Android TV Screenshot";
 "Android cannot update the installed helper because it was signed differently. Replacing it removes only the helper, then installs this version. No TV app data is affected." = "Android cannot update the installed helper because it was signed differently. Replacing it removes only the helper, then installs this version. No TV app data is affected.";
 "Android default keeps %@ disabled." = "Android default keeps %@ disabled.";
@@ -50,7 +52,11 @@
 "Automatic discovery is unavailable in this signed build. Add the TV manually." = "Automatic discovery is unavailable in this signed build. Add the TV manually.";
 "Automatic discovery requires an Apple-approved Multicast Networking entitlement." = "Automatic discovery requires an Apple-approved Multicast Networking entitlement.";
 "Back" = "Back";
+"Back up saved TV connections and Quick Launch pins by TV user. Pairing keys, passwords, and TV app data are not included." = "Back up saved TV connections and Quick Launch pins by TV user. Pairing keys, passwords, and TV app data are not included.";
 "Background" = "Background";
+"Backup and Restore" = "Backup and Restore";
+"Backup saved" = "Backup saved";
+"Backups support up to 100 devices and a 1 MiB file." = "Backups support up to 100 devices and a 1 MiB file.";
 "Browse shared storage" = "Browse shared storage";
 "Build" = "Build";
 "Built-in Commands" = "Built-in Commands";
@@ -88,6 +94,7 @@
 "Command" = "Command";
 "Commands" = "Commands";
 "Completed files are kept." = "Completed files are kept.";
+"Configuration restored" = "Configuration restored";
 "Connect" = "Connect";
 "Connect Your TV" = "Connect Your TV";
 "Connect by IP Address" = "Connect by IP Address";
@@ -125,6 +132,7 @@
 "Could not load this folder." = "Could not load this folder.";
 "Could not open App Settings on the TV." = "Could not open App Settings on the TV.";
 "Could not open the selected app package." = "Could not open the selected app package.";
+"Could not open the selected backup." = "Could not open the selected backup.";
 "Could not open the selected file." = "Could not open the selected file.";
 "Could not open the selected files." = "Could not open the selected files.";
 "Could not pair with this Android TV." = "Could not pair with this Android TV.";
@@ -133,10 +141,12 @@
 "Could not remove the upload's temporary file. See Technical Details." = "Could not remove the upload's temporary file. See Technical Details.";
 "Could not rename this device." = "Could not rename this device.";
 "Could not replace the Input Helper." = "Could not replace the Input Helper.";
+"Could not restore or export configuration. Existing data was preserved." = "Could not restore or export configuration. Existing data was preserved.";
 "Could not restore the previous TV keyboard. Select it in the TV settings." = "Could not restore the previous TV keyboard. Select it in the TV settings.";
 "Could not restore this system app." = "Could not restore this system app.";
 "Could not run the shell command." = "Could not run the shell command.";
 "Could not save Quick Launch apps." = "Could not save Quick Launch apps.";
+"Could not save the backup. Choose another location and try again." = "Could not save the backup. Choose another location and try again.";
 "Could not save the updated connection." = "Could not save the updated connection.";
 "Could not send text." = "Could not send text.";
 "Could not stop this app." = "Could not stop this app.";
@@ -149,6 +159,7 @@
 "Creating %@" = "Creating %@";
 "Current Connection" = "Current Connection";
 "Current File" = "Current File";
+"Current names, connections, and favorites are kept for already-saved devices." = "Current names, connections, and favorites are kept for already-saved devices.";
 "Delete" = "Delete";
 "Delete Item?" = "Delete Item?";
 "Deleting %@" = "Deleting %@";
@@ -179,9 +190,11 @@
 "Enabled" = "Enabled";
 "Enter" = "Enter";
 "Enter a direct HTTP or HTTPS APK or APKM URL" = "Enter a direct HTTP or HTTPS APK or APKM URL";
+"Existing devices and their Quick Launch pins were kept. Select a restored TV to reconnect; pair again if asked." = "Existing devices and their Quick Launch pins were kept. Select a restored TV to reconnect; pair again if asked.";
 "Exit %@" = "Exit %@";
 "Expanded" = "Expanded";
 "Expected Model" = "Expected Model";
+"Export Backup" = "Export Backup";
 "FF" = "FF";
 "Failed" = "Failed";
 "Fast Forward" = "Fast Forward";
@@ -201,6 +214,8 @@
 "HTTP downloads are not protected in transit." = "HTTP downloads are not protected in transit.";
 "Home" = "Home";
 "Host or IP Address" = "Host or IP Address";
+"Import Backup" = "Import Backup";
+"Import adds only the new devices you select. Already-saved devices and their preferences are skipped." = "Import adds only the new devices you select. Already-saved devices and their preferences are skipped.";
 "Information" = "Information";
 "Install" = "Install";
 "Install Android Helper" = "Install Android Helper";
@@ -254,6 +269,7 @@
 "Needs a decision" = "Needs a decision";
 "Network Interfaces" = "Network Interfaces";
 "New Connection" = "New Connection";
+"New Devices" = "New Devices";
 "New Folder" = "New Folder";
 "Newest First" = "Newest First";
 "Next" = "Next";
@@ -261,6 +277,7 @@
 "No Device Information" = "No Device Information";
 "No Matching Apps" = "No Matching Apps";
 "No Matching Files" = "No Matching Files";
+"No New Devices" = "No New Devices";
 "No System Apps" = "No System Apps";
 "No User Apps" = "No User Apps";
 "No available launcher was found for this app. Check whether it is disabled on the TV." = "No available launcher was found for this app. Check whether it is disabled on the TV.";
@@ -293,6 +310,7 @@
 "Permanently deletes all app data. App stays installed.\n%@" = "Permanently deletes all app data. App stays installed.\n%@";
 "Pin to Remote" = "Pin to Remote";
 "Pinned apps changed. Reopen Manage to reorder the current list." = "Pinned apps changed. Reopen Manage to reorder the current list.";
+"Pinned apps: %@ · TV users: %@" = "Pinned apps: %@ · TV users: %@";
 "Play" = "Play";
 "Play or Pause" = "Play or Pause";
 "Port in the pairing dialog" = "Port in the pairing dialog";
@@ -312,6 +330,8 @@
 "Protected because this provides Android Settings." = "Protected because this provides Android Settings.";
 "Quick Launch" = "Quick Launch";
 "Quick Launch Full (6)" = "Quick Launch Full (6)";
+"Quick Launch pins retain their saved TV user IDs. Reconnect to the original TV before using them." = "Quick Launch pins retain their saved TV user IDs. Reconnect to the original TV before using them.";
+"Reading backup" = "Reading backup";
 "Ready to install" = "Ready to install";
 "Recent System Log" = "Recent System Log";
 "Reconnecting to TV" = "Reconnecting to TV";
@@ -339,10 +359,14 @@
 "Restore Android Default" = "Restore Android Default";
 "Restore Android's package default without removing app data." = "Restore Android's package default without removing app data.";
 "Restore Default?" = "Restore Default?";
+"Restore Selected" = "Restore Selected";
 "Restored %@ to Android default." = "Restored %@ to Android default.";
 "Restoring %@ to Android default" = "Restoring %@ to Android default";
+"Restoring configuration does not connect to a TV or restore pairing trust. Keep the backup private; it contains device addresses and app names." = "Restoring configuration does not connect to a TV or restore pairing trust. Keep the backup private; it contains device addresses and app names.";
 "Retry App Details" = "Retry App Details";
 "Retry Connection" = "Retry Connection";
+"Review Backup" = "Review Backup";
+"Review the names, addresses, and saved TV users before restoring." = "Review the names, addresses, and saved TV users before restoring.";
 "Rew" = "Rew";
 "Rewind" = "Rewind";
 "Right" = "Right";
@@ -352,7 +376,9 @@
 "Saved Device" = "Saved Device";
 "Saved Quick Launch apps could not be read. Existing preferences were preserved." = "Saved Quick Launch apps could not be read. Existing preferences were preserved.";
 "Saved as %@" = "Saved as %@";
+"Saved configuration could not be read safely. Existing data was preserved." = "Saved configuration could not be read safely. Existing data was preserved.";
 "Saved devices could not be loaded because the Device Library data is invalid." = "Saved devices could not be loaded because the Device Library data is invalid.";
+"Saved devices or preferences changed. Import the backup again to review the current result." = "Saved devices or preferences changed. Import the backup again to review the current result.";
 "Scan Pairing QR" = "Scan Pairing QR";
 "Scan Pairing QR Code" = "Scan Pairing QR Code";
 "Screenshot" = "Screenshot";
@@ -363,7 +389,9 @@
 "Select" = "Select";
 "Select a Device" = "Select a Device";
 "Select an APK or APKM file." = "Select an APK or APKM file.";
+"Select at least one new device to restore." = "Select at least one new device to restore.";
 "Select at most %@ files at a time." = "Select at most %@ files at a time.";
+"Selected %@ of %@ new devices" = "Selected %@ of %@ new devices";
 "Send Text" = "Send Text";
 "Sending %@" = "Sending %@";
 "Sending text" = "Sending text";
@@ -396,6 +424,8 @@
 "System Apps" = "System Apps";
 "System Control" = "System Control";
 "System controls are unavailable for this snapshot." = "System controls are unavailable for this snapshot.";
+"TV users: %@" = "TV users: %@";
+"TV users: %@ (+%@ more)" = "TV users: %@ (+%@ more)";
 "Tab" = "Tab";
 "Technical Details" = "Technical Details";
 "Test Connection" = "Test Connection";
@@ -413,10 +443,13 @@
 "The saved model is %@, but this endpoint reports %@." = "The saved model is %@, but this endpoint reports %@.";
 "The selected file is not a valid APK." = "The selected file is not a valid APK.";
 "The selected file is not a valid APKM bundle." = "The selected file is not a valid APKM bundle.";
+"There is nothing to add. Existing configuration will remain unchanged." = "There is nothing to add. Existing configuration will remain unchanged.";
 "Third-party Apps" = "Third-party Apps";
 "This app is no longer installed for this TV user. Remove it from Quick Launch or reinstall it." = "This app is no longer installed for this TV user. Remove it from Quick Launch or reinstall it.";
+"This backup uses an unsupported format version." = "This backup uses an unsupported format version.";
 "This connection is already saved as %@." = "This connection is already saved as %@.";
 "This is a system app. Stopping it may temporarily affect TV features, and Android may restart it." = "This is a system app. Stopping it may temporarily affect TV features, and Android may restart it.";
+"This is not a valid ADB TV configuration backup." = "This is not a valid ADB TV configuration backup.";
 "This is not an Android pairing QR code." = "This is not an Android pairing QR code.";
 "This looks like a different TV" = "This looks like a different TV";
 "This permanently deletes \"%@\" and everything inside it." = "This permanently deletes \"%@\" and everything inside it.";

@@ -7,6 +7,7 @@ struct ADBTVDocumentPicker: UIViewControllerRepresentable {
     typealias Completion = (Result<[URL], Error>) -> Void
 
     var allowsMultipleSelection = false
+    var allowedContentTypes: [UTType] = [.item]
     var completion: Completion
 
     func makeCoordinator() -> Coordinator {
@@ -15,7 +16,7 @@ struct ADBTVDocumentPicker: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
         let picker = UIDocumentPickerViewController(
-            forOpeningContentTypes: [.item],
+            forOpeningContentTypes: allowedContentTypes,
             asCopy: true
         )
         picker.delegate = context.coordinator

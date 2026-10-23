@@ -19,6 +19,7 @@ public struct ADBTVRootView: View {
 
     @State private var model: ADBTVAppModel
     @State private var isFileImporterPresented = false
+    @State private var isBackupPresented = false
     @State private var isAddDevicePresented = false
     @State private var isPairDevicePresented = false
     @State private var isAboutPresented: Bool
@@ -91,7 +92,8 @@ public struct ADBTVRootView: View {
         initiallyPresentsDeviceRename: Bool = false,
         initiallyPresentsInstalledApps: Bool = false,
         initiallyPresentsDeviceTools: Bool = false,
-        initiallyPresentsFileBrowser: Bool = false
+        initiallyPresentsFileBrowser: Bool = false,
+        initiallyPresentsBackup: Bool = false
     ) {
         self.deviceStore = deviceStore
         self.initiallyPresentsFileBrowser = initiallyPresentsFileBrowser
@@ -103,6 +105,7 @@ public struct ADBTVRootView: View {
         } ?? .current(automaticallyStartsDiscovery: automaticallyStartsDiscovery)
         self._model = State(initialValue: model)
         self._isAboutPresented = State(initialValue: initiallyPresentsAbout)
+        self._isBackupPresented = State(initialValue: initiallyPresentsBackup)
         self._isAddDevicePresented = State(initialValue: initiallyPresentsAddDevice)
         self._isPairDevicePresented = State(initialValue: initiallyPresentsPairDevice)
         self._repairingDevice = State(
@@ -168,6 +171,15 @@ public struct ADBTVRootView: View {
                             .labelStyle(.iconOnly)
                     }
                     .help(adbTVLocalized("About"))
+
+                    Button {
+                        isBackupPresented = true
+                    } label: {
+                        Label(adbTVLocalized("Backup and Restore"), systemImage: "externaldrive")
+                            .labelStyle(.iconOnly)
+                    }
+                    .help(adbTVLocalized("Backup and Restore"))
+                    .disabled(model.activeDeviceOperation != nil || deviceConnectionState.isConnecting)
 
                     Menu {
                         Button {
@@ -383,6 +395,7 @@ public struct ADBTVRootView: View {
         .sheet(isPresented: $isAboutPresented) {
             ADBTVAboutView()
         }
+        .sheet(isPresented: $isBackupPresented) { backupSheet }
 #if os(iOS) && canImport(AVFoundation)
         .sheet(isPresented: $isQRCodeScannerPresented) {
             NavigationStack {
@@ -529,6 +542,30 @@ public struct ADBTVRootView: View {
             cancelPairing()
             stopDiscovery()
         }
+    }
+
+    @MainActor
+    @ViewBuilder
+    private var backupSheet: some View {
+        let content = ADBTVConfigurationBackupView(deviceStore: deviceStore, restore: restoreConfiguration)
+#if os(iOS)
+        if #available(iOS 18, *) { content.presentationSizing(.page) }
+        else { content }
+#else
+        content
+#endif
+    }
+
+    @MainActor
+    private func restoreConfiguration(_ plan: ADBTVConfigurationRestorePlan, selectedIDs: Set<UUID>) throws -> ADBTVConfigurationRestoreReport {
+        guard model.activeDeviceOperation == nil, !deviceConnectionState.isConnecting else {
+            throw ADBTVConfigurationBackupError.busy
+        }
+        let result = try ADBTVConfigurationBackupStore(deviceStore: deviceStore).restore(plan, selectedIDs: selectedIDs)
+        stopRemoteSession()
+        selectSavedDevice(id: nil)
+        model.devices = result.devices
+        return result
     }
 
     private var emptyLibraryContent: some View {
