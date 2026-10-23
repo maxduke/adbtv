@@ -12,6 +12,7 @@ on:
           - quick-launch
           - localization
           - confirmations
+          - uploads
         default: full
       language:
         description: App language
@@ -109,6 +110,13 @@ jobs:
                 prefix="$device_name-$appearance"
                 if [ "$content_size" != large ]; then
                   prefix="$prefix-accessibility"
+                fi
+
+                if [ "$SNAPSHOT_SCOPE" = uploads ]; then
+                  for scenario in progress conflict blocked finished cancelled failed cancelling; do
+                    capture "$udid" "$prefix-uploads-$scenario" --ui-files --ui-uploads "$scenario"
+                  done
+                  continue
                 fi
 
                 if [ "$SNAPSHOT_SCOPE" = confirmations ]; then

@@ -67,6 +67,8 @@ Implemented so far:
 - file-backed single-APK transfer with at most one ADB sync frame and one 1 MiB transport batch in memory;
 - owned local package staging with cleanup after validation, success, failure, cancellation, or timeout;
 - staged shared-storage uploads that preserve an existing destination until transfer completes;
+- sequential multi-file uploads (up to 100 files) with overall/per-file progress,
+  individual conflict decisions, cancellation cleanup, and visible partial results;
 - local search within the current TV folder and Name, Newest First, or Largest First ordering, with folders kept first;
 - TV-side upload conflict checks with explicit replacement, bounded independent staging cleanup after interruption, and visible cleanup failures;
 - cancellable folder reads and file operations, with 30-second folder/mutation and transfer-inactivity limits and a 15-minute transfer limit;
@@ -181,6 +183,20 @@ Search ignores case, accents, and character width. **Sort Files** offers **Name*
 sorting use the loaded listing without additional TV requests. Refresh reloads
 the listing while retaining the current search and sort choice. A failed refresh
 preserves cached rows and reports the connection error.
+
+Use **Add → Upload Files** to select up to 100 files for the current TV folder.
+The upload sheet shows file-count progress, the current file's byte progress,
+and uploaded/skipped/unfinished results. Files are sent in selection order.
+When a name already exists, choose **Replace File** for that regular file,
+**Skip File**, or **Cancel** to stop the remaining uploads. Folders, links, and
+other non-file items cannot be replaced. A replacement choice applies only to
+that file; repeated names in the selection require another decision.
+
+Uploads stop at the first error and do not retry automatically. Completed files
+remain on the TV. Cancellation waits for the current transfer's bounded cleanup
+before the results can be closed; cleanup failures include Technical Details.
+Closing the results refreshes the folder. Backgrounding requests cancellation;
+the queue is not saved or resumed after leaving or relaunching the app.
 
 `PolicyDenied` means Local Network access is disabled; enable it in iOS Settings and retry. `NoAuth` is a distinct Bonjour capability denial and can indicate inconsistent entitlement signing. The default self-signed IPA hides Discovery and QR Pairing and keeps **Pair with Code** and **Add Manually** available because granting Local Network access does not add the restricted entitlement. The packaged app still declares both Android Wireless Debugging Bonjour service types, and the IPA build fails if those declarations are missing from the built product. If a signing tool rewrites `Info.plist`, make sure it preserves `NSBonjourServices` and `NSLocalNetworkUsageDescription`.
 

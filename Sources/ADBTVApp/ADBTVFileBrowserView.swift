@@ -28,7 +28,9 @@ struct ADBTVFileBrowserView: View {
     @State private var renameName = ""
     @State private var moveItem: ADBSharedStorageItem?
     @State private var deleteItem: ADBSharedStorageItem?
-    @State private var pendingUploadURL: URL?
+    @State private var uploadQueue: ADBTVFileUploadQueue?
+    @State private var isUploadQueuePresented = false
+    @State private var isVisible = false
     @State private var downloadedFile: ADBTVDownloadedFile?
     @State private var downloadContainerURL: URL?
 
@@ -112,7 +114,7 @@ struct ADBTVFileBrowserView: View {
                     Button {
                         isImporterPresented = true
                     } label: {
-                        Label(adbTVLocalized("Upload File"), systemImage: "arrow.up.doc")
+                        Label(adbTVLocalized("Upload Files"), systemImage: "arrow.up.doc")
                     }
                     Button {
                         newFolderName = ""
@@ -138,19 +140,27 @@ struct ADBTVFileBrowserView: View {
         .task(id: directory.rawValue) {
             await refreshContentsAndWait()
         }
+        .onAppear { isVisible = true }
         .onDisappear {
+            isVisible = false
+            uploadQueue?.cancel()
             operationTask?.cancel()
             operationID = nil
             operationTask = nil
             transfer = nil
             status.finishCancelledLoad()
         }
-        .filePicker(isPresented: $isImporterPresented) { result in
+        .filePicker(isPresented: $isImporterPresented, onDismiss: presentUploads) { result in
             switch result {
-            case .success(let url):
-                selectUpload(url)
+            case .success(let urls):
+                selectUploads(urls)
             case .failure(let error):
-                fail(adbTVLocalized("Could not open the selected file."), error: error, operation: "selectUpload")
+                fail(adbTVLocalized("Could not open the selected files."), error: error, operation: "selectUploads")
+            }
+        }
+        .sheet(isPresented: $isUploadQueuePresented, onDismiss: finishUploads) {
+            if let uploadQueue {
+                ADBTVFileUploadView(queue: uploadQueue, device: device, directory: directory)
             }
         }
         .alert(adbTVLocalized("New Folder"), isPresented: $isNewFolderPromptPresented) {
@@ -174,17 +184,6 @@ struct ADBTVFileBrowserView: View {
             Text(item.kind == .directory
                 ? adbTVLocalized("This permanently deletes \"%@\" and everything inside it.", String(describing: item.name))
                 : adbTVLocalized("This permanently deletes \"%@\".", String(describing: item.name)))
-        }
-        .alert(adbTVLocalized("Replace Existing File?"), isPresented: uploadReplacementBinding) {
-            Button(adbTVLocalized("Replace"), role: .destructive) {
-                if let url = pendingUploadURL {
-                    upload(url, replacingExisting: true)
-                }
-                pendingUploadURL = nil
-            }
-            Button(adbTVLocalized("Cancel"), role: .cancel) { pendingUploadURL = nil }
-        } message: {
-            Text(adbTVLocalized("A file with this name already exists in %@.", directory.adbTVDisplayName))
         }
         .sheet(item: $moveItem) { item in
             ADBTVFolderPickerView(
@@ -333,7 +332,7 @@ struct ADBTVFileBrowserView: View {
     }
 
     private var isBusy: Bool {
-        operationTask != nil || status == .loading
+        operationTask != nil || status == .loading || uploadQueue != nil
     }
 
     private var normalizedNewFolderName: String {
@@ -367,13 +366,6 @@ struct ADBTVFileBrowserView: View {
         )
     }
 
-    private var uploadReplacementBinding: Binding<Bool> {
-        Binding(
-            get: { pendingUploadURL != nil },
-            set: { if !$0 { pendingUploadURL = nil } }
-        )
-    }
-
     @discardableResult
     private func refreshContents() -> Task<Void, Never>? {
         startOperation { id in
@@ -391,6 +383,7 @@ struct ADBTVFileBrowserView: View {
     }
 
     private func cancelOperation() {
+        uploadQueue?.cancel()
         operationTask?.cancel()
         transfer?.title = adbTVLocalized("Cancelling and cleaning up")
     }
@@ -410,6 +403,13 @@ struct ADBTVFileBrowserView: View {
                 query.sortOrder = .largest
             }
             status = .ready
+            let arguments = ProcessInfo.processInfo.arguments
+            if let index = arguments.firstIndex(of: "--ui-uploads"),
+               arguments.indices.contains(index + 1),
+               let scenario = ADBTVFileUploadQueue.Preview(rawValue: arguments[index + 1]) {
+                uploadQueue = try? ADBTVFileUploadQueue.preview(scenario)
+                isUploadQueuePresented = uploadQueue != nil
+            }
             return
         }
         do {
@@ -427,30 +427,46 @@ struct ADBTVFileBrowserView: View {
         }
     }
 
-    private func selectUpload(_ url: URL) {
-        if let existing = items.first(where: { $0.name == url.lastPathComponent }) {
-            guard existing.kind == .file else {
-                fail(
-                    adbTVLocalized("A folder with this name already exists."),
-                    error: ADBTVFileBrowserError.destinationIsDirectory,
-                    operation: "uploadFile"
-                )
-                return
-            }
-            pendingUploadURL = url
-            return
+    private func selectUploads(_ urls: [URL]) {
+        guard isVisible, !isBusy else { return }
+        do {
+            uploadQueue = try ADBTVFileUploadQueue(urls: urls)
+        } catch {
+            let message = error as? ADBTVFileUploadQueue.SelectionError == .tooManyFiles
+                ? adbTVLocalized("Select at most %@ files at a time.", String(ADBTVFileUploadQueue.maximumFileCount))
+                : adbTVLocalized("Could not open the selected files.")
+            fail(message, error: error, operation: "selectUploads")
         }
-        upload(url)
     }
 
-    private func upload(_ url: URL, replacingExisting: Bool = false) {
-        startOperation(title: adbTVLocalized("Uploading %@", String(describing: url.lastPathComponent)), showsByteCounts: true, operationName: "uploadFile") { id in
-            try await Self.upload(
-                url, to: directory, on: device, replacingExisting: replacingExisting
-            ) { current, total in
-                await updateTransfer(current: current, total: total, operationID: id)
+    private func presentUploads() {
+        guard isVisible, let uploadQueue else { return }
+        isUploadQueuePresented = true
+        uploadQueue.start(
+            diagnosticContext: ["device": device.connectionDescription, "path": directory.rawValue],
+            checkDestination: { url in
+                let contents = try await Self.contents(of: directory, on: device)
+                return contents.first { $0.name == url.lastPathComponent }?.kind
+            },
+            upload: { url, replacing, progress in
+                try await Self.upload(
+                    url, to: directory, on: device, replacingExisting: replacing,
+                    progress: progress
+                )
             }
-            await loadContents(operationID: id)
+        )
+    }
+
+    private func finishUploads() {
+        guard let queue = uploadQueue else { return }
+        queue.cancel()
+        Task {
+            await queue.waitForCompletion()
+            guard uploadQueue?.id == queue.id else { return }
+            uploadQueue = nil
+            if isVisible, !ProcessInfo.processInfo.arguments.contains("--ui-uploads") {
+                refreshContents()
+            }
         }
     }
 
@@ -663,6 +679,9 @@ private extension ADBTVFileBrowserView {
         let didStartAccessing = localURL.startAccessingSecurityScopedResource()
         defer {
             if didStartAccessing { localURL.stopAccessingSecurityScopedResource() }
+        }
+        guard try localURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
+            throw ADBSharedStorageError.notARegularFile
         }
         let cleanupRecorder = ADBTVFileUploadCleanupRecorder()
         do {
@@ -920,7 +939,6 @@ private struct ADBTVFileTransferState: Equatable {
 }
 
 private enum ADBTVFileBrowserError: Error {
-    case destinationIsDirectory
     case unsupportedPlatform
 }
 
@@ -984,11 +1002,12 @@ private extension View {
     @ViewBuilder
     func filePicker(
         isPresented: Binding<Bool>,
-        completion: @escaping (Result<URL, Error>) -> Void
+        onDismiss: @escaping () -> Void,
+        completion: @escaping (Result<[URL], Error>) -> Void
     ) -> some View {
 #if os(iOS)
-        sheet(isPresented: isPresented) {
-            ADBTVDocumentPicker { result in
+        sheet(isPresented: isPresented, onDismiss: onDismiss) {
+            ADBTVDocumentPicker(allowsMultipleSelection: true) { result in
                 isPresented.wrappedValue = false
                 completion(result)
             }
@@ -997,13 +1016,10 @@ private extension View {
         fileImporter(
             isPresented: isPresented,
             allowedContentTypes: [.item],
-            allowsMultipleSelection: false
+            allowsMultipleSelection: true
         ) { result in
-            switch result.map({ $0.first }) {
-            case .success(let url?): completion(.success(url))
-            case .success(nil): break
-            case .failure(let error): completion(.failure(error))
-            }
+            completion(result)
+            onDismiss()
         }
 #endif
     }
