@@ -32,6 +32,8 @@
 "Add App" = "添加应用";
 "Add Device" = "添加设备";
 "Add Manually" = "手动添加";
+"Added: %@ · Skipped: %@" = "已新增：%@ · 已跳过：%@";
+"Already Saved — Skipped" = "已保存，将跳过";
 "Android TV Screenshot" = "Android TV 截图";
 "Android cannot update the installed helper because it was signed differently. Replacing it removes only the helper, then installs this version. No TV app data is affected." = "已安装的助手使用了不同签名，Android 无法直接更新。替换时仅卸载助手，然后安装此版本。电视上其他应用的数据不受影响。";
 "Android default keeps %@ disabled." = "Android 的默认状态仍会停用 %@。";
@@ -50,7 +52,11 @@
 "Automatic discovery is unavailable in this signed build. Add the TV manually." = "当前签名版本不支持自动发现，请手动添加电视。";
 "Automatic discovery requires an Apple-approved Multicast Networking entitlement." = "自动发现需要 Apple 批准的组播网络权限。";
 "Back" = "返回";
+"Back up saved TV connections and Quick Launch pins by TV user. Pairing keys, passwords, and TV app data are not included." = "备份已保存的电视连接和各电视用户的快捷启动收藏，不包含配对密钥、密码或电视应用数据。";
 "Background" = "后台";
+"Backup and Restore" = "备份与恢复";
+"Backup saved" = "备份已保存";
+"Backups support up to 100 devices and a 1 MiB file." = "备份最多支持 100 台设备，文件大小不得超过 1 MiB。";
 "Browse shared storage" = "浏览共享存储";
 "Build" = "构建";
 "Built-in Commands" = "内置命令";
@@ -88,6 +94,7 @@
 "Command" = "命令";
 "Commands" = "命令";
 "Completed files are kept." = "已完成的文件会保留。";
+"Configuration restored" = "配置已恢复";
 "Connect" = "连接";
 "Connect Your TV" = "连接你的电视";
 "Connect by IP Address" = "通过 IP 地址连接";
@@ -125,6 +132,7 @@
 "Could not load this folder." = "无法加载此文件夹。";
 "Could not open App Settings on the TV." = "无法在电视上打开应用设置。";
 "Could not open the selected app package." = "无法打开所选安装包。";
+"Could not open the selected backup." = "无法打开所选备份。";
 "Could not open the selected file." = "无法打开所选文件。";
 "Could not open the selected files." = "无法打开所选文件。";
 "Could not pair with this Android TV." = "无法与此 Android TV 配对。";
@@ -133,10 +141,12 @@
 "Could not remove the upload's temporary file. See Technical Details." = "无法删除上传的临时文件，请查看技术详情。";
 "Could not rename this device." = "无法重命名此设备。";
 "Could not replace the Input Helper." = "无法替换输入助手。";
+"Could not restore or export configuration. Existing data was preserved." = "无法恢复或导出配置，原有数据已保留。";
 "Could not restore the previous TV keyboard. Select it in the TV settings." = "无法恢复电视原来的键盘，请在电视设置中重新选择。";
 "Could not restore this system app." = "无法恢复此系统应用。";
 "Could not run the shell command." = "无法执行终端命令。";
 "Could not save Quick Launch apps." = "无法保存快捷启动应用。";
+"Could not save the backup. Choose another location and try again." = "无法保存备份，请选择其他位置后重试。";
 "Could not save the updated connection." = "无法保存更新后的连接。";
 "Could not send text." = "无法发送文本。";
 "Could not stop this app." = "无法停止此应用。";
@@ -149,6 +159,7 @@
 "Creating %@" = "正在创建 %@";
 "Current Connection" = "当前连接";
 "Current File" = "当前文件";
+"Current names, connections, and favorites are kept for already-saved devices." = "已保存设备的当前名称、连接和收藏会保留。";
 "Delete" = "删除";
 "Delete Item?" = "删除项目？";
 "Deleting %@" = "正在删除 %@";
@@ -179,9 +190,11 @@
 "Enabled" = "已启用";
 "Enter" = "回车";
 "Enter a direct HTTP or HTTPS APK or APKM URL" = "输入 APK 或 APKM 文件的 HTTP 或 HTTPS 直链";
+"Existing devices and their Quick Launch pins were kept. Select a restored TV to reconnect; pair again if asked." = "原有设备和快捷启动收藏已保留。选择恢复的电视以重新连接；如有提示，请重新配对。";
 "Exit %@" = "退出码 %@";
 "Expanded" = "已展开";
 "Expected Model" = "预期型号";
+"Export Backup" = "导出备份";
 "FF" = "快进";
 "Failed" = "失败";
 "Fast Forward" = "快进";
@@ -201,6 +214,8 @@
 "HTTP downloads are not protected in transit." = "HTTP 下载的数据在传输过程中未加密。";
 "Home" = "主页";
 "Host or IP Address" = "主机名或 IP 地址";
+"Import Backup" = "导入备份";
+"Import adds only the new devices you select. Already-saved devices and their preferences are skipped." = "仅新增你选择的设备，已保存的设备及其偏好设置会跳过。";
 "Information" = "信息";
 "Install" = "安装";
 "Install Android Helper" = "安装 Android 助手";
@@ -254,6 +269,7 @@
 "Needs a decision" = "等待选择";
 "Network Interfaces" = "网络接口";
 "New Connection" = "新连接";
+"New Devices" = "新设备";
 "New Folder" = "新建文件夹";
 "Newest First" = "修改时间从新到旧";
 "Next" = "下一项";
@@ -261,6 +277,7 @@
 "No Device Information" = "暂无设备信息";
 "No Matching Apps" = "没有匹配的应用";
 "No Matching Files" = "没有匹配的文件";
+"No New Devices" = "没有新设备";
 "No System Apps" = "没有系统应用";
 "No User Apps" = "没有用户应用";
 "No available launcher was found for this app. Check whether it is disabled on the TV." = "未找到此应用的可用启动入口，请检查它是否已在电视上被停用。";
@@ -293,6 +310,7 @@
 "Permanently deletes all app data. App stays installed.\n%@" = "永久删除全部应用数据，保留应用本身。\n%@";
 "Pin to Remote" = "固定到遥控器";
 "Pinned apps changed. Reopen Manage to reorder the current list." = "已固定的应用发生变化，请重新打开“管理”后排序。";
+"Pinned apps: %@ · TV users: %@" = "收藏应用：%@ · 电视用户：%@";
 "Play" = "播放";
 "Play or Pause" = "播放或暂停";
 "Port in the pairing dialog" = "配对弹窗中的端口";
@@ -312,6 +330,8 @@
 "Protected because this provides Android Settings." = "此应用提供 Android 设置功能，已受保护。";
 "Quick Launch" = "快捷启动";
 "Quick Launch Full (6)" = "快捷启动已满（6 个）";
+"Quick Launch pins retain their saved TV user IDs. Reconnect to the original TV before using them." = "快捷启动收藏会保留原有电视用户编号，使用前请连接到原来的电视。";
+"Reading backup" = "正在读取备份";
 "Ready to install" = "可以安装";
 "Recent System Log" = "最近的系统日志";
 "Reconnecting to TV" = "正在重新连接电视";
@@ -339,10 +359,14 @@
 "Restore Android Default" = "恢复 Android 默认状态";
 "Restore Android's package default without removing app data." = "恢复 Android 对此应用的默认状态，保留应用数据。";
 "Restore Default?" = "恢复默认？";
+"Restore Selected" = "恢复所选";
 "Restored %@ to Android default." = "已将 %@ 恢复为 Android 默认状态。";
 "Restoring %@ to Android default" = "正在将 %@ 恢复为 Android 默认状态";
+"Restoring configuration does not connect to a TV or restore pairing trust. Keep the backup private; it contains device addresses and app names." = "恢复配置不会连接电视或恢复配对授权。备份包含设备地址和应用名称，请妥善保管。";
 "Retry App Details" = "重试加载应用详情";
 "Retry Connection" = "重试连接";
+"Review Backup" = "检查备份";
+"Review the names, addresses, and saved TV users before restoring." = "恢复前，请检查设备名称、地址和保存的电视用户。";
 "Rew" = "快退";
 "Rewind" = "快退";
 "Right" = "向右";
@@ -352,7 +376,9 @@
 "Saved Device" = "已保存的设备";
 "Saved Quick Launch apps could not be read. Existing preferences were preserved." = "无法读取已保存的快捷启动应用。现有设置未被修改。";
 "Saved as %@" = "已保存为 %@";
+"Saved configuration could not be read safely. Existing data was preserved." = "无法安全读取已保存的配置，原有数据已保留。";
 "Saved devices could not be loaded because the Device Library data is invalid." = "设备列表数据无效，无法加载已保存的设备。";
+"Saved devices or preferences changed. Import the backup again to review the current result." = "已保存的设备或偏好设置发生了变化，请重新导入备份并检查结果。";
 "Scan Pairing QR" = "扫描配对二维码";
 "Scan Pairing QR Code" = "扫描配对二维码";
 "Screenshot" = "截图";
@@ -363,7 +389,9 @@
 "Select" = "确定";
 "Select a Device" = "选择设备";
 "Select an APK or APKM file." = "请选择 APK 或 APKM 文件。";
+"Select at least one new device to restore." = "请至少选择一台要恢复的新设备。";
 "Select at most %@ files at a time." = "每次最多选择 %@ 个文件。";
+"Selected %@ of %@ new devices" = "已选择 %@ 台新设备，共 %@ 台";
 "Send Text" = "发送文本";
 "Sending %@" = "正在发送 %@";
 "Sending text" = "正在发送文本";
@@ -396,6 +424,8 @@
 "System Apps" = "系统应用";
 "System Control" = "系统应用控制";
 "System controls are unavailable for this snapshot." = "当前快照无法提供系统应用控制。";
+"TV users: %@" = "电视用户：%@";
+"TV users: %@ (+%@ more)" = "电视用户：%@（另有 %@ 位）";
 "Tab" = "Tab 键";
 "Technical Details" = "技术详情";
 "Test Connection" = "测试连接";
@@ -413,10 +443,13 @@
 "The saved model is %@, but this endpoint reports %@." = "已保存的型号是 %@，但此连接返回的型号是 %@。";
 "The selected file is not a valid APK." = "所选文件不是有效的 APK。";
 "The selected file is not a valid APKM bundle." = "所选文件不是有效的 APKM 安装包。";
+"There is nothing to add. Existing configuration will remain unchanged." = "没有可新增的设备，原有配置会保留。";
 "Third-party Apps" = "第三方应用";
 "This app is no longer installed for this TV user. Remove it from Quick Launch or reinstall it." = "此应用已不在当前电视用户的已安装列表中。请将其从快捷启动移除，或重新安装。";
+"This backup uses an unsupported format version." = "此备份的格式版本暂不受支持。";
 "This connection is already saved as %@." = "此连接已保存为 %@。";
 "This is a system app. Stopping it may temporarily affect TV features, and Android may restart it." = "这是系统应用。停止它可能暂时影响电视功能，Android 也可能重新启动它。";
+"This is not a valid ADB TV configuration backup." = "这不是有效的 ADB TV 配置备份。";
 "This is not an Android pairing QR code." = "这不是 Android 配对二维码。";
 "This looks like a different TV" = "这可能是另一台电视";
 "This permanently deletes \"%@\" and everything inside it." = "这将永久删除“%@”及其中的全部内容。";

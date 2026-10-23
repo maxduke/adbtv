@@ -23,6 +23,7 @@ Current direction:
 - Android TV as the primary target;
 - Wireless Debugging pairing by code and QR;
 - multiple saved devices;
+- configuration backup/restore for saved TV connections and per-user Quick Launch pins;
 - target-bound device operations that prevent cross-device status or endpoint confusion;
 - synced ADB identity through iCloud Keychain;
 - structured actions instead of raw shell in the first version;
@@ -170,6 +171,28 @@ The unsigned IPA supports manual IP and port entry without special Apple capabil
 The ADB identity is a synchronizable, When Unlocked Keychain item. To reuse it across iOS devices, sign each build with the same team and bundle identifier, enable iCloud Keychain for the same Apple Account, and allow time for Keychain synchronization. Changing the team or bundle identifier creates a different Keychain access namespace and therefore a different ADB identity. Pairing still works without Keychain sync, but each isolated identity must be authorized separately by the Android TV.
 
 ## Troubleshooting
+
+In Device Library, use **Backup and Restore** (the drive icon) to export a JSON
+backup to Files or import one for review. Backups include device names, model and
+connection metadata, and Quick Launch apps in their saved order for each TV user.
+They contain device addresses and app names; keep the file private. ADB identity
+keys, pairing codes, passwords, and TV app data are excluded.
+
+Import previews every device before applying changes. Select the new devices to
+add; saved UUIDs or equivalent connection endpoints are skipped, preserving their
+current names, connections, and favorites. A changed Device Library invalidates
+the preview and requires another review. Imported devices retain their saved IDs,
+and their pins remain grouped by Android user; reconnect to the original TV and
+pair again if required. Restoring never connects or runs a TV command automatically.
+After a successful restore, the current Remote session closes and the TV is
+deselected so the next selection performs checked reconnect.
+
+Backup files support up to 100 devices and 1 MiB. Invalid formats, unsupported
+versions, ambiguous records, and invalid pins are rejected before any writes.
+Bonjour connection backups omit phone-specific interface bindings; discovery still
+requires the appropriate signed build, or use **Update Connection** to set a manual
+endpoint. Re-importing keeps already-restored devices, including renamed or repaired
+connections. Restoring adds configuration and does not replace an existing library.
 
 The interface follows the system's preferred app language: English or Simplified
 Chinese, with English as the default fallback. Device/app names, file names,

@@ -96,6 +96,25 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Reconnect And Device Library
 
+- [ ] Export a backup to local Files and an iCloud/third-party provider; reopen
+  it and verify TV names/connections and ordered Quick Launch pins for two TV
+  users. Confirm credentials and unrelated preferences are absent.
+- [ ] On an empty app/library, import the backup, review and deselect a device,
+  restore, and reconnect only after explicitly selecting an imported TV. Verify
+  pairing is still required when the app's identity is not trusted by the TV.
+- [ ] Import into a populated library with an old name/address for an existing
+  UUID and a different UUID for an existing endpoint. Confirm both are skipped
+  and current connection/name/favorite bytes stay unchanged. Re-import after
+  renaming or repairing a restored device; confirm no duplicate is added.
+- [ ] Change the library in another window after preview. Confirm Restore
+  refuses the stale preview. Existing favorites changed after preview must remain.
+- [ ] Cancel Files import/export and an in-progress read, then retry. Test a
+  malformed, unsupported-version, and oversized file; confirm no configuration
+  is changed or raw file content included in errors.
+- [ ] Review and cancel in both languages at the largest font size on iPhone
+  and iPad, including long names/endpoints, duplicates, selected count, and
+  VoiceOver toggle labels. Check iOS 17's presentation fallback when available.
+
 - [ ] Force-quit and relaunch the app, then reconnect without pairing again.
 - [ ] Confirm relaunch shows no saved-device tool page until a Managed Device passes checked reconnect and model verification.
 - [ ] Select an unreachable saved device, confirm a bounded connection error replaces the tools, and confirm **Retry Connection** works after restoring the TV.

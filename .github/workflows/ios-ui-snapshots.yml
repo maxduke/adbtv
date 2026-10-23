@@ -13,6 +13,7 @@ on:
           - localization
           - confirmations
           - uploads
+          - backup
         default: full
       language:
         description: App language
@@ -110,6 +111,13 @@ jobs:
                 prefix="$device_name-$appearance"
                 if [ "$content_size" != large ]; then
                   prefix="$prefix-accessibility"
+                fi
+
+                if [ "$SNAPSHOT_SCOPE" = backup ]; then
+                  for scenario in home review duplicates restored exported failed; do
+                    capture "$udid" "$prefix-backup-$scenario" --ui-backup "$scenario"
+                  done
+                  continue
                 fi
 
                 if [ "$SNAPSHOT_SCOPE" = uploads ]; then
