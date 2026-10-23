@@ -482,7 +482,12 @@ public struct ADBTVRootView: View {
         .sheet(isPresented: $isFileImporterPresented) {
             ADBTVAPKDocumentPicker { result in
                 isFileImporterPresented = false
-                handlePackageSelection(result)
+                switch result {
+                case .success(let urls):
+                    if let url = urls.first { handlePackageSelection(.success(url)) }
+                case .failure(let error):
+                    handlePackageSelection(.failure(error))
+                }
             }
         }
 #else

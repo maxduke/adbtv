@@ -4,8 +4,9 @@ import UIKit
 import UniformTypeIdentifiers
 
 struct ADBTVDocumentPicker: UIViewControllerRepresentable {
-    typealias Completion = (Result<URL, Error>) -> Void
+    typealias Completion = (Result<[URL], Error>) -> Void
 
+    var allowsMultipleSelection = false
     var completion: Completion
 
     func makeCoordinator() -> Coordinator {
@@ -18,7 +19,7 @@ struct ADBTVDocumentPicker: UIViewControllerRepresentable {
             asCopy: true
         )
         picker.delegate = context.coordinator
-        picker.allowsMultipleSelection = false
+        picker.allowsMultipleSelection = allowsMultipleSelection
         picker.shouldShowFileExtensions = true
         return picker
     }
@@ -39,10 +40,8 @@ struct ADBTVDocumentPicker: UIViewControllerRepresentable {
             _ controller: UIDocumentPickerViewController,
             didPickDocumentsAt urls: [URL]
         ) {
-            guard let url = urls.first else {
-                return
-            }
-            completion(.success(url))
+            guard !urls.isEmpty else { return }
+            completion(.success(urls))
         }
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {}

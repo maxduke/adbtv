@@ -19,6 +19,7 @@
 "6-Digit Code" = "6-Digit Code";
 "A file with this name already exists in %@." = "A file with this name already exists in %@.";
 "A folder with this name already exists." = "A folder with this name already exists.";
+"A folder, link, or other non-file item has this name. It cannot be replaced." = "A folder, link, or other non-file item has this name. It cannot be replaced.";
 "ADB Shell" = "ADB Shell";
 "APK Size" = "APK Size";
 "About" = "About";
@@ -57,16 +58,20 @@
 "Camera unavailable" = "Camera unavailable";
 "Cancel" = "Cancel";
 "Cancel Cache Cleanup" = "Cancel Cache Cleanup";
+"Cancel stops all remaining uploads." = "Cancel stops all remaining uploads.";
+"Cancelled" = "Cancelled";
 "Cancelled." = "Cancelled.";
 "Cancelling and cleaning up" = "Cancelling and cleaning up";
 "Capture Screenshot" = "Capture Screenshot";
 "Captured Android TV screen" = "Captured Android TV screen";
 "Capturing TV screen" = "Capturing TV screen";
 "Checking TV user" = "Checking TV user";
+"Checking destination" = "Checking destination";
 "Chinese and other Unicode text uses the optional TV input helper." = "Chinese and other Unicode text uses the optional TV input helper.";
 "Choose Apps" = "Choose Apps";
 "Choose Package" = "Choose Package";
 "Choose Pair device with pairing code on your TV. Enter the code and pairing port from that dialog; its port differs from the connection port." = "Choose Pair device with pairing code on your TV. Enter the code and pairing port from that dialog; its port differs from the connection port.";
+"Choose how to handle this item" = "Choose how to handle this item";
 "Cleaning up" = "Cleaning up";
 "Clear" = "Clear";
 "Clear App Caches" = "Clear App Caches";
@@ -82,6 +87,7 @@
 "Collapsed" = "Collapsed";
 "Command" = "Command";
 "Commands" = "Commands";
+"Completed files are kept." = "Completed files are kept.";
 "Connect" = "Connect";
 "Connect Your TV" = "Connect Your TV";
 "Connect by IP Address" = "Connect by IP Address";
@@ -120,6 +126,7 @@
 "Could not open App Settings on the TV." = "Could not open App Settings on the TV.";
 "Could not open the selected app package." = "Could not open the selected app package.";
 "Could not open the selected file." = "Could not open the selected file.";
+"Could not open the selected files." = "Could not open the selected files.";
 "Could not pair with this Android TV." = "Could not pair with this Android TV.";
 "Could not read the selected app package." = "Could not read the selected app package.";
 "Could not refresh apps. Showing the previous list." = "Could not refresh apps. Showing the previous list.";
@@ -141,6 +148,7 @@
 "Create a folder in %@." = "Create a folder in %@.";
 "Creating %@" = "Creating %@";
 "Current Connection" = "Current Connection";
+"Current File" = "Current File";
 "Delete" = "Delete";
 "Delete Item?" = "Delete Item?";
 "Deleting %@" = "Deleting %@";
@@ -175,8 +183,10 @@
 "Expanded" = "Expanded";
 "Expected Model" = "Expected Model";
 "FF" = "FF";
+"Failed" = "Failed";
 "Fast Forward" = "Fast Forward";
 "Files" = "Files";
+"Files processed: %@ of %@" = "Files processed: %@ of %@";
 "Finding the connection service" = "Finding the connection service";
 "Finding the pairing service" = "Finding the pairing service";
 "Focus a text field on the TV, then try sending the Unicode text again." = "Focus a text field on the TV, then try sending the Unicode text again.";
@@ -241,6 +251,7 @@
 "Mute" = "Mute";
 "Name" = "Name";
 "Name (Optional)" = "Name (Optional)";
+"Needs a decision" = "Needs a decision";
 "Network Interfaces" = "Network Interfaces";
 "New Connection" = "New Connection";
 "New Folder" = "New Folder";
@@ -254,6 +265,7 @@
 "No User Apps" = "No User Apps";
 "No available launcher was found for this app. Check whether it is disabled on the TV." = "No available launcher was found for this app. Check whether it is disabled on the TV.";
 "No output" = "No output";
+"Not uploaded" = "Not uploaded";
 "OK" = "OK";
 "On your TV, open Developer options → Wireless debugging. Use the IP address and connection port on that main screen." = "On your TV, open Developer options → Wireless debugging. Use the IP address and connection port on that main screen.";
 "Open App Settings on TV" = "Open App Settings on TV";
@@ -288,6 +300,7 @@
 "Port on your TV" = "Port on your TV";
 "Power" = "Power";
 "Preparing device" = "Preparing device";
+"Preparing uploads" = "Preparing uploads";
 "Prev" = "Prev";
 "Previous" = "Previous";
 "Processes" = "Processes";
@@ -317,8 +330,10 @@
 "Renaming %@" = "Renaming %@";
 "Replace" = "Replace";
 "Replace Existing File?" = "Replace Existing File?";
+"Replace File" = "Replace File";
 "Replace Helper" = "Replace Helper";
 "Replace Input Helper?" = "Replace Input Helper?";
+"Replacing permanently overwrites this file. You can skip it instead." = "Replacing permanently overwrites this file. You can skip it instead.";
 "Resolution" = "Resolution";
 "Restore" = "Restore";
 "Restore Android Default" = "Restore Android Default";
@@ -348,6 +363,7 @@
 "Select" = "Select";
 "Select a Device" = "Select a Device";
 "Select an APK or APKM file." = "Select an APK or APKM file.";
+"Select at most %@ files at a time." = "Select at most %@ files at a time.";
 "Send Text" = "Send Text";
 "Sending %@" = "Sending %@";
 "Sending text" = "Sending text";
@@ -359,6 +375,8 @@
 "Shared Storage" = "Shared Storage";
 "Show details for %@" = "Show details for %@";
 "Size" = "Size";
+"Skip File" = "Skip File";
+"Skipped" = "Skipped";
 "Some activity details are unavailable." = "Some activity details are unavailable.";
 "Some app names and icons could not be loaded." = "Some app names and icons could not be loaded.";
 "Some saved devices could not be loaded. Valid devices were recovered." = "Some saved devices could not be loaded. Valid devices were recovered.";
@@ -421,8 +439,17 @@
 "Update Connection" = "Update Connection";
 "Updated" = "Updated";
 "Upload File" = "Upload File";
+"Upload Files" = "Upload Files";
 "Upload a file or create a folder." = "Upload a file or create a folder.";
+"Uploaded" = "Uploaded";
+"Uploaded: %@ · Skipped: %@ · Unfinished: %@" = "Uploaded: %@ · Skipped: %@ · Unfinished: %@";
+"Uploading" = "Uploading";
 "Uploading %@" = "Uploading %@";
+"Uploading files" = "Uploading files";
+"Uploads cancelled. Completed files are kept." = "Uploads cancelled. Completed files are kept.";
+"Uploads finished" = "Uploads finished";
+"Uploads stopped" = "Uploads stopped";
+"Uploads stopped. Completed files are kept." = "Uploads stopped. Completed files are kept.";
 "Uptime" = "Uptime";
 "Use This Connection" = "Use This Connection";
 "Use a pairing code for Wireless debugging, or connect by IP when network ADB is already enabled." = "Use a pairing code for Wireless debugging, or connect by IP when network ADB is already enabled.";
@@ -436,5 +463,6 @@
 "Version Code" = "Version Code";
 "Volume Down" = "Volume Down";
 "Volume Up" = "Volume Up";
+"Waiting" = "Waiting";
 "Waiting for the local network before discovering Android TV devices." = "Waiting for the local network before discovering Android TV devices.";
 "You can pin up to six apps for each TV user. Remove an app before adding another." = "You can pin up to six apps for each TV user. Remove an app before adding another.";

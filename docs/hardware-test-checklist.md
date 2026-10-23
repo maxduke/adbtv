@@ -266,6 +266,25 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 
 ## Device Tools
 
+- [ ] In Files, select several local files and repeat with an iCloud/third-party
+  Files provider. Confirm selection-order upload, responsive count/byte progress,
+  accurate results, and a refreshed listing after Done. APK installation stays single-selection.
+- [ ] Select files from different folders with the same basename. Confirm the
+  second upload pauses for its own Replace/Skip/Cancel decision. Repeat with an
+  existing TV file, directory, and symlink; only regular files allow replacement.
+- [ ] Create a target after the pre-upload check, or change it to a directory/link
+  while uploading. Confirm commit-time checks preserve unconfirmed/non-file targets.
+- [ ] Cancel while checking, sending, and paused on a conflict. Confirm no later
+  file starts, existing completed files remain, and Done waits for cleanup.
+- [ ] Disconnect during the second upload and during cleanup. Confirm the queue
+  stops, later files stay unfinished, and the failed filename/staging path remain
+  available in Technical Details. Retry only through a new explicit selection.
+- [ ] Background the app during upload and return. Confirm cancellation is
+  requested, cleanup/result state stays truthful, and no remaining upload resumes.
+- [ ] In both languages and at the largest text size, read the full destination,
+  long filenames, conflict warning, Replace/Skip/Cancel, and partial results. Check
+  VoiceOver focus and that cancelled or failed rows are distinguishable.
+
 - [ ] In a folder with mixed directories and files, search names with Chinese,
   mixed case, accents, and full-width characters. Confirm matching does not
   change names/paths or recursively search other folders. Clear search afterward.

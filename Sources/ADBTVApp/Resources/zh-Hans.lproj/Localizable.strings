@@ -19,6 +19,7 @@
 "6-Digit Code" = "6 位配对码";
 "A file with this name already exists in %@." = "%@ 中已存在同名文件。";
 "A folder with this name already exists." = "已存在同名文件夹。";
+"A folder, link, or other non-file item has this name. It cannot be replaced." = "已有同名文件夹、链接或其他非普通文件，无法替换。";
 "ADB Shell" = "ADB 终端";
 "APK Size" = "APK 大小";
 "About" = "关于";
@@ -57,16 +58,20 @@
 "Camera unavailable" = "相机不可用";
 "Cancel" = "取消";
 "Cancel Cache Cleanup" = "取消缓存清理";
+"Cancel stops all remaining uploads." = "取消会停止所有剩余上传。";
+"Cancelled" = "已取消";
 "Cancelled." = "已取消。";
 "Cancelling and cleaning up" = "正在取消并清理";
 "Capture Screenshot" = "截取屏幕";
 "Captured Android TV screen" = "已截取的 Android TV 屏幕";
 "Capturing TV screen" = "正在截取电视屏幕";
 "Checking TV user" = "正在确认电视用户";
+"Checking destination" = "正在检查目标位置";
 "Chinese and other Unicode text uses the optional TV input helper." = "中文及其他 Unicode 文本需要可选的电视输入助手。";
 "Choose Apps" = "选择应用";
 "Choose Package" = "选择安装包";
 "Choose Pair device with pairing code on your TV. Enter the code and pairing port from that dialog; its port differs from the connection port." = "在电视上选择“使用配对码配对设备”，输入弹窗中的配对码和配对端口。配对端口与连接端口不同。";
+"Choose how to handle this item" = "请选择如何处理此项目";
 "Cleaning up" = "正在清理";
 "Clear" = "清除";
 "Clear App Caches" = "清理应用缓存";
@@ -82,6 +87,7 @@
 "Collapsed" = "已收起";
 "Command" = "命令";
 "Commands" = "命令";
+"Completed files are kept." = "已完成的文件会保留。";
 "Connect" = "连接";
 "Connect Your TV" = "连接你的电视";
 "Connect by IP Address" = "通过 IP 地址连接";
@@ -120,6 +126,7 @@
 "Could not open App Settings on the TV." = "无法在电视上打开应用设置。";
 "Could not open the selected app package." = "无法打开所选安装包。";
 "Could not open the selected file." = "无法打开所选文件。";
+"Could not open the selected files." = "无法打开所选文件。";
 "Could not pair with this Android TV." = "无法与此 Android TV 配对。";
 "Could not read the selected app package." = "无法读取所选安装包。";
 "Could not refresh apps. Showing the previous list." = "无法刷新应用，正在显示上次的列表。";
@@ -141,6 +148,7 @@
 "Create a folder in %@." = "在 %@ 中创建文件夹。";
 "Creating %@" = "正在创建 %@";
 "Current Connection" = "当前连接";
+"Current File" = "当前文件";
 "Delete" = "删除";
 "Delete Item?" = "删除项目？";
 "Deleting %@" = "正在删除 %@";
@@ -175,8 +183,10 @@
 "Expanded" = "已展开";
 "Expected Model" = "预期型号";
 "FF" = "快进";
+"Failed" = "失败";
 "Fast Forward" = "快进";
 "Files" = "文件";
+"Files processed: %@ of %@" = "已处理 %@ 个文件，共 %@ 个";
 "Finding the connection service" = "正在查找连接服务";
 "Finding the pairing service" = "正在查找配对服务";
 "Focus a text field on the TV, then try sending the Unicode text again." = "请先在电视上选中输入框，再尝试发送 Unicode 文本。";
@@ -241,6 +251,7 @@
 "Mute" = "静音";
 "Name" = "名称";
 "Name (Optional)" = "名称（可选）";
+"Needs a decision" = "等待选择";
 "Network Interfaces" = "网络接口";
 "New Connection" = "新连接";
 "New Folder" = "新建文件夹";
@@ -254,6 +265,7 @@
 "No User Apps" = "没有用户应用";
 "No available launcher was found for this app. Check whether it is disabled on the TV." = "未找到此应用的可用启动入口，请检查它是否已在电视上被停用。";
 "No output" = "暂无输出";
+"Not uploaded" = "未上传";
 "OK" = "确定";
 "On your TV, open Developer options → Wireless debugging. Use the IP address and connection port on that main screen." = "在电视上打开“开发者选项 → 无线调试”，使用主页面显示的 IP 地址和连接端口。";
 "Open App Settings on TV" = "在电视上打开应用设置";
@@ -288,6 +300,7 @@
 "Port on your TV" = "电视上显示的端口";
 "Power" = "电源";
 "Preparing device" = "正在准备设备";
+"Preparing uploads" = "正在准备上传";
 "Prev" = "上一项";
 "Previous" = "上一项";
 "Processes" = "进程数";
@@ -317,8 +330,10 @@
 "Renaming %@" = "正在重命名 %@";
 "Replace" = "替换";
 "Replace Existing File?" = "替换现有文件？";
+"Replace File" = "替换文件";
 "Replace Helper" = "替换助手";
 "Replace Input Helper?" = "替换输入助手？";
+"Replacing permanently overwrites this file. You can skip it instead." = "替换会永久覆盖此文件。也可以跳过此次上传。";
 "Resolution" = "分辨率";
 "Restore" = "恢复";
 "Restore Android Default" = "恢复 Android 默认状态";
@@ -348,6 +363,7 @@
 "Select" = "确定";
 "Select a Device" = "选择设备";
 "Select an APK or APKM file." = "请选择 APK 或 APKM 文件。";
+"Select at most %@ files at a time." = "每次最多选择 %@ 个文件。";
 "Send Text" = "发送文本";
 "Sending %@" = "正在发送 %@";
 "Sending text" = "正在发送文本";
@@ -359,6 +375,8 @@
 "Shared Storage" = "共享存储";
 "Show details for %@" = "查看 %@ 的详情";
 "Size" = "大小";
+"Skip File" = "跳过文件";
+"Skipped" = "已跳过";
 "Some activity details are unavailable." = "部分运行详情不可用。";
 "Some app names and icons could not be loaded." = "部分应用名称和图标无法加载。";
 "Some saved devices could not be loaded. Valid devices were recovered." = "部分已保存的设备无法加载。有效的设备记录已恢复。";
@@ -421,8 +439,17 @@
 "Update Connection" = "更新连接";
 "Updated" = "更新时间";
 "Upload File" = "上传文件";
+"Upload Files" = "上传文件";
 "Upload a file or create a folder." = "上传文件或创建文件夹。";
+"Uploaded" = "已上传";
+"Uploaded: %@ · Skipped: %@ · Unfinished: %@" = "已上传：%@ · 已跳过：%@ · 未完成：%@";
+"Uploading" = "正在上传";
 "Uploading %@" = "正在上传 %@";
+"Uploading files" = "正在上传文件";
+"Uploads cancelled. Completed files are kept." = "上传已取消，已完成的文件会保留。";
+"Uploads finished" = "上传已结束";
+"Uploads stopped" = "上传已停止";
+"Uploads stopped. Completed files are kept." = "上传已停止，已完成的文件会保留。";
 "Uptime" = "运行时间";
 "Use This Connection" = "使用此连接";
 "Use a pairing code for Wireless debugging, or connect by IP when network ADB is already enabled." = "无线调试请使用配对码连接；已开启网络 ADB 时，可通过 IP 地址连接。";
@@ -436,5 +463,6 @@
 "Version Code" = "版本号";
 "Volume Down" = "减小音量";
 "Volume Up" = "增大音量";
+"Waiting" = "等待上传";
 "Waiting for the local network before discovering Android TV devices." = "正在等待本地网络就绪，以发现 Android TV 设备。";
 "You can pin up to six apps for each TV user. Remove an app before adding another." = "每个电视用户最多固定 6 个应用。请先移除一个应用，再添加其他应用。";
