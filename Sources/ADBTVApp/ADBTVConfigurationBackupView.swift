@@ -24,17 +24,24 @@ struct ADBTVConfigurationBackupView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                if let errorMessage {
-                    Section {
-                        Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.red)
+            ScrollViewReader { proxy in
+                List {
+                    if let errorMessage {
+                        Section {
+                            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    if let plan {
+                        previewSections(plan)
+                    } else {
+                        homeSections
                     }
                 }
-                if let plan {
-                    previewSections(plan)
-                } else {
-                    homeSections
+                .onChange(of: plan?.rows.first(where: { !$0.alreadySaved })?.id, initial: true) { _, id in
+                    if isPreview, ProcessInfo.processInfo.arguments.contains("--ui-backup-row"), let id {
+                        proxy.scrollTo(id, anchor: .top)
+                    }
                 }
             }
             .navigationTitle(plan == nil ? adbTVLocalized("Backup and Restore") : adbTVLocalized("Review Backup"))
@@ -51,7 +58,7 @@ struct ADBTVConfigurationBackupView: View {
                 }
                 if plan != nil {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(adbTVLocalized("Restore Selected"), action: restoreSelected)
+                        Button(adbTVLocalized("Restore"), action: restoreSelected)
                             .disabled(selectedIDs.isEmpty)
                     }
                 }
@@ -133,10 +140,12 @@ struct ADBTVConfigurationBackupView: View {
 
     @ViewBuilder
     private func previewSections(_ plan: ADBTVConfigurationRestorePlan) -> some View {
-        Section {
-            Text(adbTVLocalized("Selected %@ of %@ new devices", String(selectedIDs.count), String(plan.newDeviceIDs.count)))
-                .font(.headline)
-            Text(adbTVLocalized("Review the names, addresses, and saved TV users before restoring."))
+        if !plan.newDeviceIDs.isEmpty {
+            Section {
+                Text(adbTVLocalized("Selected %@ of %@ new devices", String(selectedIDs.count), String(plan.newDeviceIDs.count)))
+                    .font(.headline)
+                Text(adbTVLocalized("Review the names, addresses, and saved TV users before restoring."))
+            }
         }
         if plan.newDeviceIDs.isEmpty {
             Section {
@@ -150,6 +159,7 @@ struct ADBTVConfigurationBackupView: View {
                         get: { selectedIDs.contains(row.id) },
                         set: { if $0 { selectedIDs.insert(row.id) } else { selectedIDs.remove(row.id) } }
                     )) { recordLabel(row.record) }
+                    .id(row.id)
                 }
             }
         }

@@ -117,6 +117,9 @@ jobs:
                   for scenario in home review duplicates restored exported failed; do
                     capture "$udid" "$prefix-backup-$scenario" --ui-backup "$scenario"
                   done
+                  if [ "$content_size" != large ]; then
+                    capture "$udid" "$prefix-backup-review-row" --ui-backup review --ui-backup-row
+                  fi
                   continue
                 fi
 

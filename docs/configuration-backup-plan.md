@@ -41,6 +41,8 @@ with current-head SwiftPM/iOS checks, unsigned IPA, and focused English/Chinese
 iPhone/iPad snapshots at normal and largest text sizes. Inspect final screenshots.
 The focused backup scope captures six states across eight device/appearance/text
 size combinations (48 images per language).
+An additional four captures per language show the long-name selection row at the
+largest text size after scrolling (52 images per language in total).
 
 Signed-device Files-provider access/cancellation, real reconnect and pairing,
 VoiceOver, and interactive large-text navigation remain manual acceptance.
@@ -48,4 +50,4 @@ VoiceOver, and interactive large-text navigation remain manual acceptance.
 Local validation: 397 portable tests pass, including 18 new backup/restore tests.
 Swift 6.2.4 parses all app/test sources. Both locales have 500 matching keys, and
 format/literal-lookup checks, YAML/bash syntax, action SHA pins, and bilingual
-48-capture dry runs pass. Native checks and screenshot acceptance follow in PR delivery.
+52-capture dry runs pass. Native checks and screenshot acceptance follow in PR delivery.
