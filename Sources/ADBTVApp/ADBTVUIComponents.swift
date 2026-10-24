@@ -1,3 +1,4 @@
+import ADBClientCore
 import SwiftUI
 
 // Prominent controls keep a white foreground in both appearances. The text/link
@@ -100,6 +101,22 @@ struct ADBTVAdaptiveLabeledContentStyle: LabeledContentStyle {
         } else {
             LabeledContent(configuration)
                 .labeledContentStyle(.automatic)
+        }
+    }
+}
+
+struct DiagnosticDisclosure: View {
+    var diagnosticDetail: DiagnosticDetail
+
+    var body: some View {
+        DisclosureGroup(adbTVLocalized("Technical Details")) {
+            ScrollView([.horizontal, .vertical]) {
+                Text(diagnosticDetail.formattedDescription)
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 220)
         }
     }
 }
