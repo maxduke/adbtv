@@ -751,17 +751,7 @@ public struct ADBTVDeviceSummary: Codable, Identifiable, Equatable, Sendable {
     }
 
     fileprivate func matchesEndpoint(of other: ADBTVDeviceSummary) -> Bool {
-        switch (connection, other.connection) {
-        case let (.bonjour(lhs), .bonjour(rhs)):
-            return lhs.serviceName == rhs.serviceName
-                && lhs.serviceType == rhs.serviceType
-                && lhs.domain == rhs.domain
-        case let (.hostPort(lhsHost, lhsPort), .hostPort(rhsHost, rhsPort)):
-            return lhsHost.caseInsensitiveCompare(rhsHost) == .orderedSame
-                && lhsPort == rhsPort
-        case (.bonjour, .hostPort), (.hostPort, .bonjour):
-            return false
-        }
+        ADBTVDeviceEndpoint(connection) == ADBTVDeviceEndpoint(other.connection)
     }
 
     private enum CodingKeys: String, CodingKey {

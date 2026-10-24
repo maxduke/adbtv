@@ -21,7 +21,7 @@ enum ADBTVFileSortOrder: String, CaseIterable, Identifiable {
     }
 }
 
-struct ADBTVFileBrowserQuery {
+struct ADBTVFileBrowserQuery: Equatable {
     var searchText = ""
     var sortOrder = ADBTVFileSortOrder.name
 
@@ -64,6 +64,48 @@ struct ADBTVFileBrowserQuery {
             options: [.caseInsensitive, .diacriticInsensitive, .widthInsensitive],
             locale: locale
         ) != nil
+    }
+}
+
+// Progress and presentation changes read this projection without sorting the
+// directory again. Only its actual inputs can invalidate the cached rows.
+struct ADBTVFileBrowserListing {
+    var query: ADBTVFileBrowserQuery {
+        didSet {
+            if query != oldValue { rebuild() }
+        }
+    }
+    private(set) var items: [ADBSharedStorageItem]
+    private(set) var visibleItems: [ADBSharedStorageItem]
+    private(set) var locale: Locale
+
+    init(items: [ADBSharedStorageItem] = [], query: ADBTVFileBrowserQuery = .init(),
+         locale: Locale = .current) {
+        self.items = items
+        self.query = query
+        self.locale = locale
+        visibleItems = query.apply(to: items, locale: locale)
+    }
+
+    mutating func replaceItems(_ items: [ADBSharedStorageItem]) {
+        self.items = items
+        rebuild()
+    }
+
+    mutating func updateLocale(_ locale: Locale) {
+        guard self.locale != locale else { return }
+        self.locale = locale
+        rebuild()
+    }
+
+    func emptyState(status: ADBTVFileListStatus) -> ADBTVFileEmptyState? {
+        guard status == .ready else { return nil }
+        if items.isEmpty { return .emptyFolder }
+        return visibleItems.isEmpty ? .noMatches : nil
+    }
+
+    private mutating func rebuild() {
+        visibleItems = query.apply(to: items, locale: locale)
     }
 }
 

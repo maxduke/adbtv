@@ -55,6 +55,7 @@ struct InstalledAppsPanel: View {
             : nil
 
     var body: some View {
+        let packages = filteredPackages
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text(adbTVLocalized("Apps"))
@@ -109,9 +110,9 @@ struct InstalledAppsPanel: View {
             activitySnapshotStatus
             detailsLoadingStatus
 
-            if !filteredPackages.isEmpty {
+            if !packages.isEmpty {
                 LazyVStack(spacing: 0) {
-                    ForEach(filteredPackages) { package in
+                    ForEach(packages) { package in
                         installedAppRow(
                             package,
                             details: displayedDetails[package.packageName],
@@ -120,7 +121,7 @@ struct InstalledAppsPanel: View {
                         Divider()
                     }
                 }
-            } else if let emptyState = state.emptyState(matching: searchText) {
+            } else if let emptyState = state.emptyState(filteredPackages: packages) {
                 ContentUnavailableView(
                     emptyState == .noApps ? state.mode.emptyTitle : adbTVLocalized("No Matching Apps"),
                     systemImage: emptyState == .noApps ? "square.grid.2x2" : "magnifyingglass"
@@ -562,7 +563,7 @@ struct InstalledAppsPanel: View {
         guard state.mode == .active else {
             return nil
         }
-        return state.activitySnapshot?.apps.first { $0.package == package }
+        return state.activeAppsByPackage[package.packageName]
     }
 
     private func appKind(for package: ADBTVInstalledPackage) -> ADBTVInstalledAppKind {

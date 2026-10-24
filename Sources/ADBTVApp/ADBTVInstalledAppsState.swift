@@ -49,7 +49,10 @@ struct ADBTVInstalledAppsViewState: Equatable {
     var packages: [ADBTVInstalledPackage]
     var details: [String: ADBTVInstalledAppDetails]
     var systemSnapshot: ADBTVSystemAppSnapshot?
-    var activitySnapshot: ADBTVAppActivitySnapshot?
+    var activitySnapshot: ADBTVAppActivitySnapshot? {
+        didSet { activeAppsByPackage = Self.indexActiveApps(activitySnapshot) }
+    }
+    private(set) var activeAppsByPackage: [String: ADBTVActiveApp]
     var activityDetails: [String: ADBTVInstalledAppDetails]
     var activeSystemSnapshot: ADBTVSystemAppSnapshot?
     var pendingForceStopPackage: ADBTVInstalledPackage?
@@ -79,6 +82,7 @@ struct ADBTVInstalledAppsViewState: Equatable {
         self.details = details
         self.systemSnapshot = systemSnapshot
         self.activitySnapshot = activitySnapshot
+        self.activeAppsByPackage = Self.indexActiveApps(activitySnapshot)
         self.activityDetails = activityDetails
         self.activeSystemSnapshot = activeSystemSnapshot
         self.pendingForceStopPackage = pendingForceStopPackage
@@ -113,11 +117,24 @@ struct ADBTVInstalledAppsViewState: Equatable {
     }
 
     func emptyState(matching search: String) -> ADBTVAppsEmptyState? {
+        guard case .ready = status, hasSnapshot else { return nil }
+        return emptyState(filteredPackages: filteredPackages(matching: search))
+    }
+
+    func emptyState(filteredPackages: [ADBTVInstalledPackage]) -> ADBTVAppsEmptyState? {
         guard case .ready = status, hasSnapshot,
-              filteredPackages(matching: search).isEmpty else {
+              filteredPackages.isEmpty else {
             return nil
         }
         return displayedPackages.isEmpty ? .noApps : .noMatches
+    }
+
+    private static func indexActiveApps(_ snapshot: ADBTVAppActivitySnapshot?) -> [String: ADBTVActiveApp] {
+        var result: [String: ADBTVActiveApp] = [:]
+        for app in snapshot?.apps ?? [] where result[app.package.packageName] == nil {
+            result[app.package.packageName] = app
+        }
+        return result
     }
 
     mutating func prepareListRefresh(mode: ADBTVAppsMode) {

@@ -126,6 +126,10 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Install a build signed by the same team and bundle identifier on a second iOS device using the same Apple Account and confirm the synchronized identity reconnects without pairing again.
 - [ ] If cross-device reconnect does not work, record iCloud Keychain state, signing team, bundle identifier, elapsed sync time, and Diagnostic Detail.
 - [ ] For an entitlement-enabled build, restart Wireless Debugging so its port changes, then reconnect through the saved Bonjour service.
+- [ ] Re-discover or repair a Bonjour connection whose service/domain differs
+  only in case, domain dots, or local interface. Confirm there is one saved TV,
+  its name/UUID and Quick Launch pins are preserved, backup export succeeds,
+  and repair to another saved TV's equivalent endpoint is refused.
 - [ ] For an entitlement-enabled build, restart the Android TV and reconnect after discovery returns.
 - [ ] Add at least two Managed Devices and switch between them without mixing endpoints.
 - [ ] Rename a Managed Device from its current name to `  Family Room  `, confirm it saves as `Family Room`, relaunch, and confirm its identity and connection are unchanged.

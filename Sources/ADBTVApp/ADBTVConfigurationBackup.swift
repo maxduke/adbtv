@@ -57,10 +57,6 @@ struct ADBTVConfigurationBackup: Codable, Equatable, Sendable {
 
     struct Connection: Codable, Equatable, Sendable {
         enum Kind: String, Codable, Sendable { case hostPort, bonjour }
-        enum Endpoint: Hashable, Sendable {
-            case hostPort(String, Int)
-            case bonjour(String, String)
-        }
         var kind: Kind
         var host: String?
         var port: Int?
@@ -81,11 +77,16 @@ struct ADBTVConfigurationBackup: Codable, Equatable, Sendable {
             }
         }
 
-        var endpointKey: Endpoint {
+        var endpointKey: ADBTVDeviceEndpoint {
             switch kind {
-            case .hostPort: return .hostPort(host?.lowercased() ?? "", port ?? 0)
+            case .hostPort:
+                return ADBTVDeviceEndpoint(.hostPort(host: host ?? "", port: port ?? 0))
             case .bonjour:
-                return .bonjour(serviceName?.lowercased() ?? "", domain?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")) ?? "")
+                return ADBTVDeviceEndpoint(.bonjour(ADBDiscoveredService(
+                    serviceName: serviceName ?? "",
+                    serviceType: ADBWirelessDebuggingServiceKind.connect.bonjourType,
+                    domain: domain ?? ""
+                )))
             }
         }
 
@@ -312,7 +313,7 @@ struct ADBTVConfigurationBackupStore {
         guard !result.hasFailures else { throw ADBTVConfigurationBackupError.invalidSavedData }
         guard Set(result.devices.map(\.id)).count == result.devices.count else { throw ADBTVConfigurationBackupError.invalidSavedData }
         // Existing devices need not fit one export, but every connection must be unambiguous.
-        let keys = try result.devices.map { device -> ADBTVConfigurationBackup.Connection.Endpoint in
+        let keys = try result.devices.map { device -> ADBTVDeviceEndpoint in
             let connection = try ADBTVConfigurationBackup.Connection(device.connection)
             try connection.validate()
             return connection.endpointKey
