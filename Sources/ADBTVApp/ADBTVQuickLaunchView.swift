@@ -11,6 +11,7 @@ struct ADBTVQuickLaunchView: View {
     var detailsUserID: Int?
     var details: [String: ADBTVInstalledAppDetails]
     var loadUser: () async throws -> Int
+    var loadDetails: ADBTVQuickLaunchIcons.Loader
     var launch: (ADBTVInstalledPackage, Int) async throws -> Void
     var chooseApps: () -> Void
 
@@ -24,6 +25,7 @@ struct ADBTVQuickLaunchView: View {
     @State private var launchingPackage: String?
     @State private var message: String?
     @State private var failure: DiagnosticDetail?
+    @State private var icons = ADBTVQuickLaunchIcons()
     @State private var isManagePresented = ProcessInfo.processInfo.arguments.contains("--ui-quick-manage")
 
     var body: some View {
@@ -53,7 +55,7 @@ struct ADBTVQuickLaunchView: View {
                         ForEach(apps) { app in
                             Button { launchApp(app) } label: {
                                 HStack(spacing: 8) {
-                                    InstalledAppIconView(icon: detailsUserID == userID ? details[app.packageName]?.icon : nil)
+                                    InstalledAppIconView(icon: icons.icon(for: app.packageName, deviceID: deviceID, userID: userID))
                                     Text(app.title)
                                         .font(.subheadline)
                                         .lineLimit(2)
@@ -90,9 +92,17 @@ struct ADBTVQuickLaunchView: View {
                 Button(adbTVLocalized("Refresh Quick Launch")) { refreshID = UUID() }
                     .disabled(deviceOperationInProgress || launchID != nil)
                 DiagnosticDisclosure(diagnosticDetail: failure)
+            } else if icons.failure != nil {
+                Text(adbTVLocalized("Some app icons could not be refreshed. You can still launch apps."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(adbTVLocalized("Refresh Quick Launch")) { refreshID = UUID() }
+                    .disabled(deviceOperationInProgress || launchID != nil)
             }
         }
         .task(id: refreshID) { await reload() }
+        .task(id: iconRequest) { await loadIcons() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 refreshID = UUID()
@@ -103,7 +113,10 @@ struct ADBTVQuickLaunchView: View {
                 refreshID = UUID()
             }
         }
-        .onDisappear(perform: cancelLaunch)
+        .onDisappear {
+            cancelLaunch()
+            icons.cancel()
+        }
         .onChange(of: isManagePresented) { _, presented in
             guard presented, let userID, !usesPreviewData else { return }
             do {
@@ -129,8 +142,34 @@ struct ADBTVQuickLaunchView: View {
         }
     }
 
+    private var iconRequest: ADBTVQuickLaunchIconRequest {
+        .init(deviceID: deviceID, userID: userID, packages: apps.map(\.packageName),
+              isActive: scenePhase == .active && !deviceOperationInProgress && launchID == nil && !isManagePresented,
+              refreshID: refreshID)
+    }
+
+    private func loadIcons() async {
+        guard !Task.isCancelled else { return }
+        let request = iconRequest
+        guard !usesPreviewData else { return }
+        guard request.isActive, let userID = request.userID else {
+            icons.cancel()
+            return
+        }
+        do {
+            let packages = try request.packages.map { try ADBTVInstalledPackage(packageName: $0) }
+            try await icons.load(packages: packages, deviceID: deviceID, userID: userID,
+                                 knownDetails: detailsUserID == userID ? details : [:], loader: loadDetails)
+        } catch {
+            guard !Task.isCancelled, request == iconRequest else { return }
+            self.userID = nil
+            apps = []
+            present(error, fallback: adbTVLocalized("Could not load Quick Launch. Check the TV connection and refresh."))
+        }
+    }
+
     private func reload() async {
-        guard scenePhase == .active, launchID == nil else { return }
+        guard !Task.isCancelled, scenePhase == .active, launchID == nil else { return }
         let request = refreshID
         userID = nil
         apps = []
@@ -142,6 +181,14 @@ struct ADBTVQuickLaunchView: View {
             if ProcessInfo.processInfo.arguments.contains("--ui-quick-launch") {
                 apps = Self.previewApps
             }
+#if DEBUG
+            // Preview fixtures never read or write the user's icon cache.
+            icons.preview(Dictionary(uniqueKeysWithValues: apps.compactMap { app in
+                (details[app.packageName]?.icon ?? Self.previewIcon).map { (app.packageName, $0) }
+            }), deviceID: deviceID, userID: 0,
+                          failure: ProcessInfo.processInfo.arguments.contains("--ui-quick-icons-failed")
+                            ? DiagnosticDetail(summary: "Preview icon refresh unavailable.") : nil)
+#endif
             if ProcessInfo.processInfo.arguments.contains("--ui-quick-failed") {
                 message = adbTVLocalized("This app is no longer installed for this TV user. Remove it from Quick Launch or reinstall it.")
                 failure = DiagnosticDetail(summary: "Preview package is not installed.")
@@ -271,6 +318,13 @@ struct ADBTVQuickLaunchView: View {
                 }
             }
     }
+
+#if DEBUG
+    private static var previewIcon: ADBTVInstalledAppIcon? {
+        Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAAZklEQVR4nO3U0QkAIAgEUHdpwQZul6IN0juR5AR/vYeINubalW0CCCDAd4Bb5QAmIgxgQWAAiqAAEAQNEIXQAV5ECsCDSAO8QnpuoPQGvPN6/IFoOAWAhEMANBgCsMJDAHYLIIAAB9XtVytvpw/WAAAAAElFTkSuQmCC")
+            .flatMap { try? ADBTVInstalledAppIcon(pngData: $0) }
+    }
+#endif
 
     private var usesPreviewData: Bool {
 #if DEBUG

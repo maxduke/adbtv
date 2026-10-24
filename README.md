@@ -105,7 +105,7 @@ Implemented so far:
 - helper-free Active Apps snapshots with foreground state, grouped process count, bounded proportional memory, manual refresh, and no activity history;
 - guarded active-user system app state, with confirmed Disable and Restore Android Default actions that preserve package data and protect critical Android roles;
 - structured device information for Android version, display resolution, storage, uptime, and build identity;
-- bounded binary-safe Android TV screenshots with PNG validation, preview, native sharing, and clear protected-content/device-blocked failures;
+- bounded binary-safe Android TV screenshots with PNG framing/CRC checks and image decoding, preview, native sharing, and guidance for blank or blocked captures;
 - bounded one-shot ADB shell commands with read-only diagnostic presets, cancellation, timeout, copyable output, and preserved exit status;
 - isolated checked shell execution that preserves explicit exit codes, trailing comments, and background command syntax;
 - unsigned IPA packaging in GitHub Actions;
@@ -246,6 +246,19 @@ when available; the helper is optional and missing metadata falls back to a
 package identifier and generic icon. Remote checks the current Android user
 before showing pins and checks again before launching. If the TV user changes,
 refresh Quick Launch; an uncertain launch is never replayed automatically.
+
+Quick Launch loads its own icons without first opening Apps. Its disposable
+on-device icon cache is bounded to 128 entries (at most 6 MiB), scoped to the saved
+TV and Android user, and excluded from configuration backups. Cached icons remain
+available if a later metadata refresh fails; the TV helper supplies new icons.
+
+Screenshots preserve the exact PNG returned by the TV for preview and sharing.
+PNG framing and checksums are checked before decoding. Images rejected by the
+platform decoder fail clearly; black/transparent captures show a warning while
+remaining shareable. Some TVs and video apps protect playback
+from capture, so a black exported PNG cannot be repaired by changing the preview.
+Capture the TV Home screen or Settings to distinguish playback restrictions from
+a broader TV capture problem. A blank-image warning alone does not prove DRM.
 
 Replacing a helper signed by a different key can still fail if another Android
 user retains the old helper. ADB TV does not remove other users' helper data to

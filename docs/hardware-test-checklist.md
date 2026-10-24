@@ -173,6 +173,12 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
   the order and names persist. Check VoiceOver actions for reorder/removal.
 - [ ] Pin different apps on two TVs and two Android users. Confirm each Remote
   shows only its current user's pins, including after background/resume.
+- [ ] With the helper installed, force-quit ADB TV, reopen Remote without visiting
+  Apps, and confirm pinned icons return. Repeat after selecting Active Apps
+  while a different pinned app is not running.
+- [ ] Reopen with a populated icon cache while metadata is unavailable; confirm
+  cached icons remain and launch still works. Restore connectivity and refresh;
+  confirm missing icons load, with no cross-TV or cross-user icons.
 - [ ] Change the Android user after loading pins and attempt launch; confirm the
   stale action is rejected and Refresh loads the new user's pins.
 - [ ] Launch pinned apps without the helper. Uninstall or disable a pinned app
@@ -334,7 +340,13 @@ Record failed steps with the complete Diagnostic Detail and whether retrying cha
 - [ ] Capture a screenshot and confirm its orientation, dimensions, colors, and visible TV content are correct.
 - [ ] Use Share to save the captured screenshot to Files and Photos; confirm both copies open correctly.
 - [ ] Capture a second screenshot and confirm the preview replaces the first without retaining history.
-- [ ] Open DRM-protected content, capture a screenshot, and confirm a protected-content/device-blocked message appears with Technical Details instead of `invalidScreenshotPNG` as the user-facing error.
+- [ ] During protected playback, compare the preview with saved/shared PNGs.
+  A valid entirely black/transparent capture should remain shareable with guidance
+  to try the TV Home screen or Settings; it must not claim DRM is confirmed.
+  A rejected/text response should show the blocked-capture failure with Technical
+  Details. Return to Home/Settings and verify an ordinary screenshot still works.
+- [ ] Interrupt a screenshot transfer and confirm incomplete/undecodable images
+  cannot replace the last valid capture or be exported as a new successful image.
 - [ ] Run `getprop ro.build.version.release` and confirm the output and exit code are shown.
 - [ ] Run a command that exits nonzero and confirm its output and nonzero exit code remain visible without being reported as success.
 - [ ] Run a command that produces no output and confirm the completed state remains understandable.

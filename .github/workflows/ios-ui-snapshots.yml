@@ -10,6 +10,7 @@ on:
           - full
           - library
           - quick-launch
+          - icons-and-screenshots
           - localization
           - confirmations
           - uploads
@@ -134,6 +135,19 @@ jobs:
                   capture "$udid" "$prefix-clear-data-confirm" --ui-apps --ui-user-app-details --ui-clear-data-confirm
                   capture "$udid" "$prefix-disable-confirm" --ui-apps --ui-active --ui-app-details --ui-disable-confirm
                   capture "$udid" "$prefix-restore-confirm" --ui-apps --ui-active --ui-app-details --ui-restore-confirm
+                  continue
+                fi
+
+                if [ "$SNAPSHOT_SCOPE" = icons-and-screenshots ]; then
+                  quick_focus=()
+                  if [ "$content_size" != large ]; then
+                    quick_focus=(--ui-quick-row)
+                  fi
+                  capture "$udid" "$prefix-quick-icons" --ui-preview --ui-quick-launch "${quick_focus[@]}"
+                  capture "$udid" "$prefix-quick-icons-failed" --ui-preview --ui-quick-launch --ui-quick-icons-failed "${quick_focus[@]}"
+                  for scenario in blank content invalid; do
+                    capture "$udid" "$prefix-screenshot-$scenario" --ui-tools "--ui-screenshot-$scenario"
+                  done
                   continue
                 fi
 

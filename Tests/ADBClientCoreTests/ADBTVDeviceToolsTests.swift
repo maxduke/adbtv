@@ -49,14 +49,14 @@ final class ADBTVDeviceToolsTests: XCTestCase {
     }
 
     func testCapturesAndValidatesPNGUsingRawExecService() async throws {
-        let png = testPNG(width: 1920, height: 1080)
+        let png = testPNG()
         var tools = ADBTVDeviceTools(session: FakeDeviceToolsSession(serviceOutput: png))
 
         let screenshot = try await tools.captureScreenshot()
 
         XCTAssertEqual(screenshot.pngData, Data(png))
-        XCTAssertEqual(screenshot.width, 1920)
-        XCTAssertEqual(screenshot.height, 1080)
+        XCTAssertEqual(screenshot.width, 16)
+        XCTAssertEqual(screenshot.height, 9)
         XCTAssertEqual(tools.session.services, ["exec:screencap -p"])
     }
 
@@ -80,9 +80,59 @@ final class ADBTVDeviceToolsTests: XCTestCase {
         }
     }
 
+    func testReportsTruncatedPNGAsAnInvalidImageInsteadOfABlockedCapture() async {
+        var tools = ADBTVDeviceTools(session: FakeDeviceToolsSession(serviceOutput: Array(testPNG().dropLast())))
+        do {
+            _ = try await tools.captureScreenshot()
+            XCTFail("Expected a truncated screenshot to fail.")
+        } catch {
+            XCTAssertEqual(error as? ADBTVDeviceToolsError, .invalidScreenshotPNG)
+        }
+    }
+
     func testRejectsInvalidScreenshotData() {
         XCTAssertThrowsError(try ADBTVScreenshot(pngData: Data("not a png".utf8))) { error in
             XCTAssertEqual(error as? ADBTVDeviceToolsError, .invalidScreenshotPNG)
+        }
+    }
+
+    func testRejectsEveryTruncatedPrefixOfACompletePNG() {
+        let png = testPNG()
+        for length in 0..<png.count {
+            XCTAssertThrowsError(try ADBTVScreenshot(pngData: Data(png.prefix(length))),
+                                 "Accepted a truncated PNG of \(length) bytes")
+        }
+    }
+
+    func testRejectsMissingImageDataDuplicateHeaderAndTrailingBytes() {
+        let png = testPNG()
+        let withoutImageData = Array(png.prefix(33)) + Array(png.suffix(12))
+        let duplicateHeader = Array(png.prefix(33)) + Array(png[8..<33]) + Array(png.dropFirst(33))
+        for invalid in [withoutImageData, duplicateHeader, png + [0]] {
+            XCTAssertThrowsError(try ADBTVScreenshot(pngData: Data(invalid))) {
+                XCTAssertEqual($0 as? ADBTVDeviceToolsError, .invalidScreenshotPNG)
+            }
+        }
+    }
+
+    func testRejectsChunkLengthsThatExceedTheResponseAndInvalidHeaderLength() {
+        for offset in [8, 33] {
+            var png = testPNG()
+            png.replaceSubrange(offset..<(offset + 4), with: [255, 255, 255, 255])
+            XCTAssertThrowsError(try ADBTVScreenshot(pngData: Data(png))) {
+                XCTAssertEqual($0 as? ADBTVDeviceToolsError, .invalidScreenshotPNG)
+            }
+        }
+    }
+
+    func testRejectsDamagedHeaderPixelsAndEndMarkerChecksums() {
+        let original = testPNG()
+        for offset in [29, 41, original.count - 1] {
+            var png = original
+            png[offset] ^= 1
+            XCTAssertThrowsError(try ADBTVScreenshot(pngData: Data(png))) {
+                XCTAssertEqual($0 as? ADBTVDeviceToolsError, .invalidScreenshotPNG)
+            }
         }
     }
 
@@ -229,21 +279,9 @@ private func checkedOutput(_ value: String, exitCode: Int = 0) -> ADBShellOutput
     ))
 }
 
-private func testPNG(width: UInt32, height: UInt32) -> [UInt8] {
-    [137, 80, 78, 71, 13, 10, 26, 10]
-        + [0, 0, 0, 13]
-        + Array("IHDR".utf8)
-        + bigEndianBytes(width)
-        + bigEndianBytes(height)
-}
-
-private func bigEndianBytes(_ value: UInt32) -> [UInt8] {
-    [
-        UInt8((value >> 24) & 0xff),
-        UInt8((value >> 16) & 0xff),
-        UInt8((value >> 8) & 0xff),
-        UInt8(value & 0xff)
-    ]
+private func testPNG() -> [UInt8] {
+    Array(Data(base64Encoded:
+        "iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAYAAAA7KqwyAAAAFklEQVR4nGNQLrjznxLMMGrAqAFADAAEGl3wf2IiSgAAAABJRU5ErkJggg==")!)
 }
 
 private enum TestError: Error {

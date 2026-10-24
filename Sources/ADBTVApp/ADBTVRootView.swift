@@ -297,6 +297,9 @@ public struct ADBTVRootView: View {
                             runInstalledAppCommand(.launch(package), on: device)
                         },
                         loadQuickLaunchUser: { try await Self.loadQuickLaunchUser(on: device) },
+                        loadQuickLaunchDetails: { packages, userID in
+                            try await Self.loadInstalledAppDetails(packages, userID: userID, on: device)
+                        },
                         launchQuickApp: { package, userID in
                             try await launchQuickApp(package, userID: userID, on: device)
                         },
@@ -763,6 +766,7 @@ public struct ADBTVRootView: View {
         if saveDevices() {
             for id in ids where !model.devices.contains(where: { $0.id == id }) {
                 ADBTVQuickLaunchStore().removeDevice(id)
+                ADBTVQuickLaunchIconCache().removeDevice(id)
             }
         }
     }
@@ -2385,7 +2389,9 @@ public struct ADBTVRootView: View {
                     try await tools.loadInformation(systemIdentity: "host::adbtv")
                 )
             case .screenshot:
-                return .screenshot(try await tools.captureScreenshot())
+                let screenshot = try await tools.captureScreenshot()
+                let assessment = try ADBTVScreenshotAssessment.assess(screenshot)
+                return .screenshot(screenshot, assessment: assessment)
             case .shell(let command):
                 return .shell(try await tools.runShellCommand(command))
             }
@@ -2634,6 +2640,10 @@ public struct ADBTVRootView: View {
         for operation: ADBTVDeviceToolOperation,
         error: Error
     ) -> String {
+        if case .screenshot = operation,
+           error is ADBTVScreenshotValidationError || (error as? ADBTVDeviceToolsError) == .invalidScreenshotPNG {
+            return adbTVLocalized("The TV returned an image that could not be decoded safely. Try capturing the TV Home screen again.")
+        }
         if case .screenshot = operation,
            let toolsError = error as? ADBTVDeviceToolsError,
            case .screenshotUnavailable = toolsError {

@@ -383,6 +383,9 @@
 "Scan Pairing QR Code" = "扫描配对二维码";
 "Screenshot" = "截图";
 "Screenshot unavailable. The current app or TV may block screen capture." = "无法截图，当前应用或电视可能限制了屏幕截取。";
+"The TV returned a black or transparent image. Some video apps or TVs block screen capture. Try the TV Home screen or Settings, then capture again." = "电视返回了黑色或透明图片。部分视频应用或电视会限制截图。请回到电视桌面或设置页面后，再次截图。";
+"The TV returned an image that could not be decoded safely. Try capturing the TV Home screen again." = "电视返回的图片无法安全解码。请回到电视桌面后重新截图。";
+"Some app icons could not be refreshed. You can still launch apps." = "部分应用图标未能刷新，仍可正常启动应用。";
 "Search This Folder" = "搜索此文件夹";
 "Search apps or packages" = "搜索应用名称或包名";
 "Searching local network" = "正在搜索本地网络";

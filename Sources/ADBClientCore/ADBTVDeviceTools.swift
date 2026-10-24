@@ -56,6 +56,9 @@ public struct ADBTVDeviceTools<Session: ADBDeviceToolsSession>: Sendable {
         do {
             return try ADBTVScreenshot(pngData: Data(output.bytes))
         } catch ADBTVDeviceToolsError.invalidScreenshotPNG {
+            if output.bytes.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) {
+                throw ADBTVDeviceToolsError.invalidScreenshotPNG
+            }
             throw ADBTVDeviceToolsError.screenshotUnavailable(
                 outputByteCount: output.bytes.count,
                 deviceMessage: Self.textPreview(output.bytes)
@@ -266,6 +269,9 @@ public struct ADBTVScreenshot: Equatable, Sendable {
         guard (1 ... 16_384).contains(width), (1 ... 16_384).contains(height) else {
             throw ADBTVDeviceToolsError.invalidScreenshotDimensions(width: width, height: height)
         }
+        guard Self.hasCompletePNGChunks(pngData) else {
+            throw ADBTVDeviceToolsError.invalidScreenshotPNG
+        }
 
         self.pngData = pngData
         self.width = width
@@ -274,6 +280,48 @@ public struct ADBTVScreenshot: Equatable, Sendable {
 
     private static func pngDimension(_ bytes: ArraySlice<UInt8>) -> Int {
         bytes.reduce(0) { ($0 << 8) | Int($1) }
+    }
+
+    // Check framing and CRCs before passing device output to the platform decoder,
+    // which can tolerate damaged PNG data instead of reporting a decode failure.
+    // Image decoding (including compressed pixel data) remains the app's responsibility.
+    private static func hasCompletePNGChunks(_ data: Data) -> Bool {
+        data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            var offset = 8
+            var hasImageData = false
+            while offset <= bytes.count - 12 {
+                let length = (0..<4).reduce(0) { ($0 << 8) | Int(bytes[offset + $1]) }
+                guard length <= bytes.count - offset - 12 else { return false }
+                var crc = UInt32.max
+                for byte in bytes[(offset + 4)..<(offset + 8 + length)] {
+                    crc = pngCRCTable[Int((crc ^ UInt32(byte)) & 0xff)] ^ (crc >> 8)
+                }
+                let expectedCRC = (0..<4).reduce(UInt32(0)) {
+                    ($0 << 8) | UInt32(bytes[offset + 8 + length + $1])
+                }
+                guard ~crc == expectedCRC else { return false }
+                let type = Array(bytes[(offset + 4)..<(offset + 8)])
+                if offset == 8 {
+                    guard type == Array("IHDR".utf8), length == 13 else { return false }
+                } else if type == Array("IHDR".utf8) {
+                    return false
+                }
+                if type == Array("IDAT".utf8), length > 0 { hasImageData = true }
+                if type == Array("IEND".utf8) {
+                    return length == 0 && hasImageData && offset + 12 == bytes.count
+                }
+                offset += length + 12
+            }
+            return false
+        }
+    }
+
+    private static let pngCRCTable: [UInt32] = (0..<256).map { index in
+        var value = UInt32(index)
+        for _ in 0..<8 {
+            value = value & 1 == 1 ? 0xedb88320 ^ (value >> 1) : value >> 1
+        }
+        return value
     }
 }
 
