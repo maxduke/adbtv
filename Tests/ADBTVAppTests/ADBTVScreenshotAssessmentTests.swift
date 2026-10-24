@@ -26,9 +26,9 @@ final class ADBTVScreenshotAssessmentTests: XCTestCase {
     }
 
     func testRejectsFramedPNGWithUndecodableImageData() throws {
-        var data = try XCTUnwrap(Data(base64Encoded: colorPNG))
-        // Preserve chunk lengths and the complete PNG envelope, but destroy the zlib stream.
-        data.replaceSubrange(41..<45, with: [0, 0, 0, 0])
+        // Complete framing and valid CRCs, but an unsupported IHDR color type.
+        let data = try XCTUnwrap(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAcAAACDlstXAAAAFklEQVR4nGNQLrjznxLMMGrAqAFADAAEGl3wf2IiSgAAAABJRU5ErkJggg=="))
         let screenshot = try ADBTVScreenshot(pngData: data)
         XCTAssertThrowsError(try ADBTVScreenshotAssessment.assess(screenshot)) {
             XCTAssertEqual($0 as? ADBTVScreenshotValidationError, .undecodableImage)
@@ -36,8 +36,7 @@ final class ADBTVScreenshotAssessmentTests: XCTestCase {
     }
 
     func testPixelBudgetIsCheckedBeforeDecodingAnOversizedBitmap() throws {
-        var data = try XCTUnwrap(Data(base64Encoded: colorPNG))
-        data.replaceSubrange(16..<24, with: [0, 0, 64, 0, 0, 0, 64, 0])
+        let data = try XCTUnwrap(Data(base64Encoded: oversizedPNG))
         let screenshot = try ADBTVScreenshot(pngData: data)
         XCTAssertThrowsError(try ADBTVScreenshotAssessment.assess(screenshot)) {
             XCTAssertEqual($0 as? ADBTVScreenshotValidationError, .tooManyPixels)
@@ -47,5 +46,6 @@ final class ADBTVScreenshotAssessmentTests: XCTestCase {
     private let blackPNG = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAYAAAA7KqwyAAAAFElEQVR4nGNgYGD4TyEeNWDUgP8AGCaPcSyJNrgAAAAASUVORK5CYII="
     private let colorPNG = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAYAAAA7KqwyAAAAFklEQVR4nGNQLrjznxLMMGrAqAFADAAEGl3wf2IiSgAAAABJRU5ErkJggg=="
     private let transparentPNG = "iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAYAAAA7KqwyAAAAD0lEQVR4nGNgGAWjgAoAAAJJAAHZX3+dAAAAAElFTkSuQmCC"
+    private let oversizedPNG = "iVBORw0KGgoAAAANSUhEUgAAQAAAAEAACAYAAACpyBCEAAAAFklEQVR4nGNQLrjznxLMMGrAqAFADAAEGl3wf2IiSgAAAABJRU5ErkJggg=="
 #endif
 }

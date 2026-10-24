@@ -2640,7 +2640,8 @@ public struct ADBTVRootView: View {
         for operation: ADBTVDeviceToolOperation,
         error: Error
     ) -> String {
-        if case .screenshot = operation, error is ADBTVScreenshotValidationError {
+        if case .screenshot = operation,
+           error is ADBTVScreenshotValidationError || (error as? ADBTVDeviceToolsError) == .invalidScreenshotPNG {
             return adbTVLocalized("The TV returned an image that could not be decoded safely. Try capturing the TV Home screen again.")
         }
         if case .screenshot = operation,

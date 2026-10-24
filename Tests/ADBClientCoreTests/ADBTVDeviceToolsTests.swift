@@ -80,6 +80,16 @@ final class ADBTVDeviceToolsTests: XCTestCase {
         }
     }
 
+    func testReportsTruncatedPNGAsAnInvalidImageInsteadOfABlockedCapture() async {
+        var tools = ADBTVDeviceTools(session: FakeDeviceToolsSession(serviceOutput: Array(testPNG().dropLast())))
+        do {
+            _ = try await tools.captureScreenshot()
+            XCTFail("Expected a truncated screenshot to fail.")
+        } catch {
+            XCTAssertEqual(error as? ADBTVDeviceToolsError, .invalidScreenshotPNG)
+        }
+    }
+
     func testRejectsInvalidScreenshotData() {
         XCTAssertThrowsError(try ADBTVScreenshot(pngData: Data("not a png".utf8))) { error in
             XCTAssertEqual(error as? ADBTVDeviceToolsError, .invalidScreenshotPNG)
@@ -109,6 +119,17 @@ final class ADBTVDeviceToolsTests: XCTestCase {
         for offset in [8, 33] {
             var png = testPNG()
             png.replaceSubrange(offset..<(offset + 4), with: [255, 255, 255, 255])
+            XCTAssertThrowsError(try ADBTVScreenshot(pngData: Data(png))) {
+                XCTAssertEqual($0 as? ADBTVDeviceToolsError, .invalidScreenshotPNG)
+            }
+        }
+    }
+
+    func testRejectsDamagedHeaderPixelsAndEndMarkerChecksums() {
+        let original = testPNG()
+        for offset in [29, 41, original.count - 1] {
+            var png = original
+            png[offset] ^= 1
             XCTAssertThrowsError(try ADBTVScreenshot(pngData: Data(png))) {
                 XCTAssertEqual($0 as? ADBTVDeviceToolsError, .invalidScreenshotPNG)
             }

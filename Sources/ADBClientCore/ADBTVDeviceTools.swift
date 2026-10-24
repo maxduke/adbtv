@@ -56,6 +56,9 @@ public struct ADBTVDeviceTools<Session: ADBDeviceToolsSession>: Sendable {
         do {
             return try ADBTVScreenshot(pngData: Data(output.bytes))
         } catch ADBTVDeviceToolsError.invalidScreenshotPNG {
+            if output.bytes.starts(with: [137, 80, 78, 71, 13, 10, 26, 10]) {
+                throw ADBTVDeviceToolsError.invalidScreenshotPNG
+            }
             throw ADBTVDeviceToolsError.screenshotUnavailable(
                 outputByteCount: output.bytes.count,
                 deviceMessage: Self.textPreview(output.bytes)
@@ -279,7 +282,8 @@ public struct ADBTVScreenshot: Equatable, Sendable {
         bytes.reduce(0) { ($0 << 8) | Int($1) }
     }
 
-    // Check framing before passing untrusted device output to the platform decoder.
+    // Check framing and CRCs before passing device output to the platform decoder,
+    // which can tolerate damaged PNG data instead of reporting a decode failure.
     // Image decoding (including compressed pixel data) remains the app's responsibility.
     private static func hasCompletePNGChunks(_ data: Data) -> Bool {
         data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
@@ -288,6 +292,14 @@ public struct ADBTVScreenshot: Equatable, Sendable {
             while offset <= bytes.count - 12 {
                 let length = (0..<4).reduce(0) { ($0 << 8) | Int(bytes[offset + $1]) }
                 guard length <= bytes.count - offset - 12 else { return false }
+                var crc = UInt32.max
+                for byte in bytes[(offset + 4)..<(offset + 8 + length)] {
+                    crc = pngCRCTable[Int((crc ^ UInt32(byte)) & 0xff)] ^ (crc >> 8)
+                }
+                let expectedCRC = (0..<4).reduce(UInt32(0)) {
+                    ($0 << 8) | UInt32(bytes[offset + 8 + length + $1])
+                }
+                guard ~crc == expectedCRC else { return false }
                 let type = Array(bytes[(offset + 4)..<(offset + 8)])
                 if offset == 8 {
                     guard type == Array("IHDR".utf8), length == 13 else { return false }
@@ -302,6 +314,14 @@ public struct ADBTVScreenshot: Equatable, Sendable {
             }
             return false
         }
+    }
+
+    private static let pngCRCTable: [UInt32] = (0..<256).map { index in
+        var value = UInt32(index)
+        for _ in 0..<8 {
+            value = value & 1 == 1 ? 0xedb88320 ^ (value >> 1) : value >> 1
+        }
+        return value
     }
 }
 

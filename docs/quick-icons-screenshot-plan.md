@@ -8,8 +8,8 @@
   must not publish or write stale data, and a changed Android user must invalidate
   the visible icons. Use existing checked/bounded app metadata requests.
 - Keep binary-safe `exec:screencap -p` and unchanged PNG export. Reject incomplete
-  PNG framing and unreadable Apple-platform image data. Inspect a bounded decoded
-  thumbnail and advise when the returned capture appears blank; do not treat that
+  PNG framing, failed chunk CRCs and unreadable Apple-platform image data. Inspect
+  a bounded decoded thumbnail and advise when the returned capture appears blank; do not treat that
   as proof of DRM, automatically change the TV screen, or alter captured pixels.
 - User reports black captures mainly during video, including exported PNGs.
   Android secure content can produce blank screenshots; this does not establish
