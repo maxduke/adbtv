@@ -11,12 +11,12 @@ import AppKit
 @MainActor
 struct ADBTVFileBrowserView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.locale) private var locale
 
     var device: ADBTVDeviceSummary
     var directory: ADBSharedStoragePath = .root
 
-    @State private var items: [ADBSharedStorageItem] = []
-    @State private var query = ADBTVFileBrowserQuery()
+    @State private var listing = ADBTVFileBrowserListing()
     @State private var status = ADBTVFileListStatus.idle
     @State private var operationTask: Task<Void, Never>?
     @State private var operationID: UUID?
@@ -44,7 +44,7 @@ struct ADBTVFileBrowserView: View {
                 }
             }
 
-            if items.isEmpty {
+            if listing.items.isEmpty {
                 switch status {
                 case .idle, .loading:
                     Section {
@@ -63,17 +63,17 @@ struct ADBTVFileBrowserView: View {
                 case .failed:
                     EmptyView()
                 }
-            } else if query.emptyState(items: items, status: status) == .noMatches {
+            } else if listing.emptyState(status: status) == .noMatches {
                 ContentUnavailableView {
                     Label(adbTVLocalized("No Matching Files"), systemImage: "magnifyingglass")
                 } description: {
                     Text(adbTVLocalized("Try a different file name in this folder."))
                 } actions: {
-                    Button(adbTVLocalized("Clear Search")) { query.searchText = "" }
+                    Button(adbTVLocalized("Clear Search")) { listing.query.searchText = "" }
                 }
             } else {
                 Section {
-                    ForEach(query.apply(to: items)) { item in
+                    ForEach(listing.visibleItems) { item in
                         itemRow(item)
                     }
                 }
@@ -81,10 +81,10 @@ struct ADBTVFileBrowserView: View {
         }
         .navigationTitle(directory.adbTVDisplayName)
 #if os(iOS)
-        .searchable(text: $query.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: adbTVLocalized("Search This Folder"))
+        .searchable(text: $listing.query.searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: adbTVLocalized("Search This Folder"))
         .navigationBarTitleDisplayMode(.inline)
 #else
-        .searchable(text: $query.searchText, prompt: adbTVLocalized("Search This Folder"))
+        .searchable(text: $listing.query.searchText, prompt: adbTVLocalized("Search This Folder"))
 #endif
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
@@ -100,7 +100,7 @@ struct ADBTVFileBrowserView: View {
                 .disabled(isBusy)
 
                 Menu {
-                    Picker(adbTVLocalized("Sort Files"), selection: $query.sortOrder) {
+                    Picker(adbTVLocalized("Sort Files"), selection: $listing.query.sortOrder) {
                         ForEach(ADBTVFileSortOrder.allCases) { order in
                             Text(order.title).tag(order)
                         }
@@ -108,7 +108,7 @@ struct ADBTVFileBrowserView: View {
                 } label: {
                     Label(adbTVLocalized("Sort Files"), systemImage: "arrow.up.arrow.down")
                 }
-                .accessibilityValue(query.sortOrder.title)
+                .accessibilityValue(listing.query.sortOrder.title)
 
                 Menu {
                     Button {
@@ -140,7 +140,11 @@ struct ADBTVFileBrowserView: View {
         .task(id: directory.rawValue) {
             await refreshContentsAndWait()
         }
-        .onAppear { isVisible = true }
+        .onAppear {
+            isVisible = true
+            listing.updateLocale(locale)
+        }
+        .onChange(of: locale) { _, locale in listing.updateLocale(locale) }
         .onDisappear {
             isVisible = false
             uploadQueue?.cancel()
@@ -407,14 +411,14 @@ struct ADBTVFileBrowserView: View {
         guard operationID == id, !Task.isCancelled else { return }
         status = .loading
         if ProcessInfo.processInfo.arguments.contains("--ui-files") {
-            items = Self.previewItems(in: directory)
+            listing.replaceItems(Self.previewItems(in: directory))
             if ProcessInfo.processInfo.arguments.contains("--ui-files-search") {
-                query.searchText = ".apk"
+                listing.query.searchText = ".apk"
             } else if ProcessInfo.processInfo.arguments.contains("--ui-files-no-matches") {
-                query.searchText = "missing-file"
+                listing.query.searchText = "missing-file"
             }
             if ProcessInfo.processInfo.arguments.contains("--ui-files-largest") {
-                query.sortOrder = .largest
+                listing.query.sortOrder = .largest
             }
             status = .ready
             let arguments = ProcessInfo.processInfo.arguments
@@ -429,7 +433,7 @@ struct ADBTVFileBrowserView: View {
         do {
             let contents = try await Self.contents(of: directory, on: device)
             guard operationID == id, !Task.isCancelled else { return }
-            items = contents
+            listing.replaceItems(contents)
             status = .ready
         } catch {
             guard operationID == id else { return }
