@@ -139,8 +139,12 @@ jobs:
                 fi
 
                 if [ "$SNAPSHOT_SCOPE" = icons-and-screenshots ]; then
-                  capture "$udid" "$prefix-quick-icons" --ui-preview --ui-quick-launch
-                  capture "$udid" "$prefix-quick-icons-failed" --ui-preview --ui-quick-launch --ui-quick-icons-failed
+                  quick_focus=()
+                  if [ "$content_size" != large ]; then
+                    quick_focus=(--ui-quick-row)
+                  fi
+                  capture "$udid" "$prefix-quick-icons" --ui-preview --ui-quick-launch "${quick_focus[@]}"
+                  capture "$udid" "$prefix-quick-icons-failed" --ui-preview --ui-quick-launch --ui-quick-icons-failed "${quick_focus[@]}"
                   for scenario in blank content invalid; do
                     capture "$udid" "$prefix-screenshot-$scenario" --ui-tools "--ui-screenshot-$scenario"
                   done

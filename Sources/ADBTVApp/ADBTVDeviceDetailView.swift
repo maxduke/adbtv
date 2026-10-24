@@ -65,27 +65,29 @@ struct DeviceDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                DeviceHeader(
-                    device: device,
-                    repair: repair,
-                    rename: rename,
-                    actionsDisabled: deviceOperationInProgress
-                )
+                if !isQuickLaunchPreview {
+                    DeviceHeader(
+                        device: device,
+                        repair: repair,
+                        rename: rename,
+                        actionsDisabled: deviceOperationInProgress
+                    )
 
-                Picker(adbTVLocalized("Device Tool"), selection: $selectedTool) {
-                    ForEach(DeviceTool.allCases) { tool in
-                        Text(tool.title).tag(tool)
+                    Picker(adbTVLocalized("Device Tool"), selection: $selectedTool) {
+                        ForEach(DeviceTool.allCases) { tool in
+                            Text(tool.title).tag(tool)
+                        }
                     }
+                    .pickerStyle(.segmented)
+                    .disabled(
+                        deviceOperationInProgress
+                            && !installedAppReadOnlyRefreshInProgress
+                    )
                 }
-                .pickerStyle(.segmented)
-                .disabled(
-                    deviceOperationInProgress
-                        && !installedAppReadOnlyRefreshInProgress
-                )
 
                 switch selectedTool {
                 case .remote:
-                    remotePanel
+                    remoteContent
                 case .apps:
                     appsPanel
                 case .tools:
@@ -118,6 +120,36 @@ struct DeviceDetailView: View {
         .onDisappear(perform: cancelActivityRefresh)
     }
 
+    private var isQuickLaunchPreview: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--ui-quick-row")
+#else
+        false
+#endif
+    }
+
+    @ViewBuilder
+    private var remoteContent: some View {
+        if isQuickLaunchPreview {
+            quickLaunchView
+        } else {
+            remotePanel
+        }
+    }
+
+    private var quickLaunchView: some View {
+        ADBTVQuickLaunchView(
+            deviceID: device.id,
+            deviceOperationInProgress: deviceOperationInProgress,
+            detailsUserID: installedAppsState.userID,
+            details: installedAppsState.displayedDetails,
+            loadUser: loadQuickLaunchUser,
+            loadDetails: loadQuickLaunchDetails,
+            launch: launchQuickApp,
+            chooseApps: { selectedTool = .apps }
+        )
+    }
+
     private var remotePanel: some View {
         RemoteActionsPanel(
             status: remoteStatus,
@@ -135,16 +167,7 @@ struct DeviceDetailView: View {
             cancelRemoteOperation: cancelRemoteOperation,
             installUnicodeInputHelper: installUnicodeInputHelper
         ) {
-            ADBTVQuickLaunchView(
-                deviceID: device.id,
-                deviceOperationInProgress: deviceOperationInProgress,
-                detailsUserID: installedAppsState.userID,
-                details: installedAppsState.displayedDetails,
-                loadUser: loadQuickLaunchUser,
-                loadDetails: loadQuickLaunchDetails,
-                launch: launchQuickApp,
-                chooseApps: { selectedTool = .apps }
-            )
+            quickLaunchView
         }
     }
 

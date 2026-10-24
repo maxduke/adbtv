@@ -491,32 +491,20 @@ struct ADBTVDeviceToolsPanel: View {
 
     private var screenshotSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 10) {
-                Label(adbTVLocalized("Screenshot"), systemImage: "photo")
-                    .font(.headline)
-                Spacer()
-
-                if let screenshot = state.screenshot,
-                   let image = platformImage(from: screenshot.pngData) {
-                    ShareLink(
-                        item: ADBTVScreenshotShareItem(pngData: screenshot.pngData),
-                        preview: SharePreview(adbTVLocalized("Android TV Screenshot"), image: image)
-                    ) {
-                        Label(adbTVLocalized("Share Screenshot"), systemImage: "square.and.arrow.up")
-                            .labelStyle(.iconOnly)
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    screenshotTitle
+                    HStack {
+                        Spacer()
+                        screenshotActions
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(deviceOperationInProgress)
-                    .help(adbTVLocalized("Share Screenshot"))
                 }
-
-                Button(action: captureScreenshot) {
-                    Label(adbTVLocalized("Capture Screenshot"), systemImage: "camera.viewfinder")
-                        .labelStyle(.iconOnly)
+            } else {
+                HStack(spacing: 10) {
+                    screenshotTitle
+                    Spacer()
+                    screenshotActions
                 }
-                .adbTVProminentButton()
-                .disabled(deviceOperationInProgress)
-                .help(adbTVLocalized("Capture Screenshot"))
             }
 
             if state.screenshotAssessment == .appearsBlank {
@@ -538,6 +526,38 @@ struct ADBTVDeviceToolsPanel: View {
             case .idle, .ready:
                 EmptyView()
             }
+        }
+    }
+
+    private var screenshotTitle: some View {
+        Label(adbTVLocalized("Screenshot"), systemImage: "photo")
+            .font(.headline)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var screenshotActions: some View {
+        HStack(spacing: 10) {
+            if let screenshot = state.screenshot,
+               let image = platformImage(from: screenshot.pngData) {
+                ShareLink(
+                    item: ADBTVScreenshotShareItem(pngData: screenshot.pngData),
+                    preview: SharePreview(adbTVLocalized("Android TV Screenshot"), image: image)
+                ) {
+                    Label(adbTVLocalized("Share Screenshot"), systemImage: "square.and.arrow.up")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.bordered)
+                .disabled(deviceOperationInProgress)
+                .help(adbTVLocalized("Share Screenshot"))
+            }
+            Button(action: captureScreenshot) {
+                Label(adbTVLocalized("Capture Screenshot"), systemImage: "camera.viewfinder")
+                    .labelStyle(.iconOnly)
+            }
+            .adbTVProminentButton()
+            .disabled(deviceOperationInProgress)
+            .help(adbTVLocalized("Capture Screenshot"))
         }
     }
 
