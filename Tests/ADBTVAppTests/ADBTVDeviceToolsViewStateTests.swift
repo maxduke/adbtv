@@ -43,8 +43,27 @@ final class ADBTVDeviceToolsViewStateTests: XCTestCase {
         XCTAssertEqual(secondState.deviceID, secondID)
         XCTAssertNil(secondState.information)
         XCTAssertNil(secondState.screenshot)
+        XCTAssertNil(secondState.screenshotAssessment)
         XCTAssertNil(secondState.shellResult)
         XCTAssertNil(secondState.submittedShellCommand)
+    }
+
+    func testBlankScreenshotIsKeptForSharingAndReplacedWithTheNextSuccessfulCapture() throws {
+        let png = try XCTUnwrap(Data(base64Encoded:
+            "iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAYAAAA7KqwyAAAAFElEQVR4nGNgYGD4TyEeNWDUgP8AGCaPcSyJNrgAAAAASUVORK5CYII="))
+        let screenshot = try ADBTVScreenshot(pngData: png)
+        var state = ADBTVDeviceToolsViewState(deviceID: UUID())
+        state.start(.screenshot)
+        state.finish(.screenshot(screenshot, assessment: .appearsBlank))
+        XCTAssertEqual(state.screenshot?.pngData, png)
+        XCTAssertEqual(state.screenshotAssessment, .appearsBlank)
+        XCTAssertEqual(state.screenshotStatus, .ready)
+        state.start(.screenshot)
+        state.cancel()
+        XCTAssertEqual(state.screenshotAssessment, .appearsBlank)
+        state.finish(.screenshot(screenshot, assessment: .content))
+        XCTAssertEqual(state.screenshotAssessment, .content)
+        XCTAssertNil(state.forDevice(UUID()).screenshotAssessment)
     }
 
     func testShellPresetsUseExpectedReadOnlyCommands() {

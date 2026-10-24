@@ -37,7 +37,7 @@ enum ADBTVDeviceToolOperation: Equatable, Sendable {
 enum ADBTVDeviceToolResult: Equatable, Sendable {
     case information(ADBTVDeviceInformation)
     case cacheCleanup(ADBTVDeviceInformation)
-    case screenshot(ADBTVScreenshot)
+    case screenshot(ADBTVScreenshot, assessment: ADBTVScreenshotAssessment)
     case shell(ADBCheckedShellResult)
 }
 
@@ -45,6 +45,7 @@ struct ADBTVDeviceToolsViewState: Equatable {
     var deviceID: ADBTVDeviceSummary.ID?
     var information: ADBTVDeviceInformation?
     var screenshot: ADBTVScreenshot?
+    var screenshotAssessment: ADBTVScreenshotAssessment?
     var shellResult: ADBCheckedShellResult?
     var submittedShellCommand: String?
     var informationStatus = ADBTVDeviceInformationStatus.idle
@@ -87,8 +88,9 @@ struct ADBTVDeviceToolsViewState: Equatable {
             information = value
             informationStatus = .ready
             cacheCleanupStatus = .finished
-        case .screenshot(let value):
+        case .screenshot(let value, let assessment):
             screenshot = value
+            screenshotAssessment = assessment
             screenshotStatus = .ready
         case .shell(let value):
             shellResult = value
@@ -175,6 +177,19 @@ struct ADBTVDeviceToolsViewState: Equatable {
         )
         state.submittedShellCommand = "getprop ro.build.version.release"
         state.shellStatus = .finished
+#if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--ui-screenshot-blank") {
+            let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAYAAAA7KqwyAAAAFElEQVR4nGNgYGD4TyEeNWDUgP8AGCaPcSyJNrgAAAAASUVORK5CYII=")!
+            state.finish(.screenshot(try! ADBTVScreenshot(pngData: data), assessment: .appearsBlank))
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-screenshot-content") {
+            let data = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAABAAAAAJCAYAAAA7KqwyAAAAFklEQVR4nGNQLrjznxLMMGrAqAFADAAEGl3wf2IiSgAAAABJRU5ErkJggg==")!
+            state.finish(.screenshot(try! ADBTVScreenshot(pngData: data), assessment: .content))
+        } else if ProcessInfo.processInfo.arguments.contains("--ui-screenshot-invalid") {
+            state.fail(.screenshot,
+                       userMessage: adbTVLocalized("The TV returned an image that could not be decoded safely. Try capturing the TV Home screen again."),
+                       diagnosticDetail: DiagnosticDetail(summary: "Preview undecodable PNG."))
+        }
+#endif
         return state
     }
 }
@@ -240,15 +255,27 @@ struct ADBTVDeviceToolsPanel: View {
     @State private var isInformationExpanded = false
     @State private var isShellExpanded = false
 
+    private var isScreenshotPreview: Bool {
+#if DEBUG
+        ProcessInfo.processInfo.arguments.contains { $0.hasPrefix("--ui-screenshot-") }
+#else
+        false
+#endif
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            storageManagementSection
-            Divider()
-            informationSection
-            Divider()
+            if !isScreenshotPreview {
+                storageManagementSection
+                Divider()
+                informationSection
+                Divider()
+            }
             screenshotSection
-            Divider()
-            shellSection
+            if !isScreenshotPreview {
+                Divider()
+                shellSection
+            }
         }
         .onAppear {
             if state.informationStatus == .idle {
@@ -492,6 +519,13 @@ struct ADBTVDeviceToolsPanel: View {
                 .help(adbTVLocalized("Capture Screenshot"))
             }
 
+            if state.screenshotAssessment == .appearsBlank {
+                Label(adbTVLocalized("The TV returned a black or transparent image. Some video apps or TVs block screen capture. Try the TV Home screen or Settings, then capture again."),
+                      systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if state.screenshot != nil {
                 screenshotPreview
             }

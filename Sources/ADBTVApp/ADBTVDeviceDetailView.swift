@@ -37,6 +37,7 @@ struct DeviceDetailView: View {
     var loadActiveSystemSnapshot: (Int) -> Void
     var launchInstalledApp: (ADBTVInstalledPackage) -> Void
     var loadQuickLaunchUser: () async throws -> Int
+    var loadQuickLaunchDetails: ADBTVQuickLaunchIcons.Loader
     var launchQuickApp: (ADBTVInstalledPackage, Int) async throws -> Void
     var forceStopInstalledApp: (ADBTVInstalledPackage) -> Void
     var uninstallInstalledApp: (ADBTVInstalledPackage) -> Void
@@ -140,6 +141,7 @@ struct DeviceDetailView: View {
                 detailsUserID: installedAppsState.userID,
                 details: installedAppsState.displayedDetails,
                 loadUser: loadQuickLaunchUser,
+                loadDetails: loadQuickLaunchDetails,
                 launch: launchQuickApp,
                 chooseApps: { selectedTool = .apps }
             )

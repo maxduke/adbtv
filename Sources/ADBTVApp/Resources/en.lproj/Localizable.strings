@@ -383,6 +383,9 @@
 "Scan Pairing QR Code" = "Scan Pairing QR Code";
 "Screenshot" = "Screenshot";
 "Screenshot unavailable. The current app or TV may block screen capture." = "Screenshot unavailable. The current app or TV may block screen capture.";
+"The TV returned a black or transparent image. Some video apps or TVs block screen capture. Try the TV Home screen or Settings, then capture again." = "The TV returned a black or transparent image. Some video apps or TVs block screen capture. Try the TV Home screen or Settings, then capture again.";
+"The TV returned an image that could not be decoded safely. Try capturing the TV Home screen again." = "The TV returned an image that could not be decoded safely. Try capturing the TV Home screen again.";
+"Some app icons could not be refreshed. You can still launch apps." = "Some app icons could not be refreshed. You can still launch apps.";
 "Search This Folder" = "Search This Folder";
 "Search apps or packages" = "Search apps or packages";
 "Searching local network" = "Searching local network";

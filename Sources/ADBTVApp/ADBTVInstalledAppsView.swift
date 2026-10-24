@@ -552,6 +552,10 @@ struct InstalledAppsPanel: View {
                     package, displayName: displayedDetails[package.packageName]?.displayName,
                     deviceID: deviceID, userID: userID
                 )
+                if let icon = displayedDetails[package.packageName]?.icon {
+                    ADBTVQuickLaunchIconCache().save([package.packageName: icon], packages: [package],
+                                                   deviceID: deviceID, userID: userID)
+                }
             }
         } catch {
             pinFailure = DiagnosticDetail(summary: (error as? ADBTVQuickLaunchError)?.userMessage

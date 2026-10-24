@@ -266,6 +266,9 @@ public struct ADBTVScreenshot: Equatable, Sendable {
         guard (1 ... 16_384).contains(width), (1 ... 16_384).contains(height) else {
             throw ADBTVDeviceToolsError.invalidScreenshotDimensions(width: width, height: height)
         }
+        guard Self.hasCompletePNGChunks(pngData) else {
+            throw ADBTVDeviceToolsError.invalidScreenshotPNG
+        }
 
         self.pngData = pngData
         self.width = width
@@ -274,6 +277,31 @@ public struct ADBTVScreenshot: Equatable, Sendable {
 
     private static func pngDimension(_ bytes: ArraySlice<UInt8>) -> Int {
         bytes.reduce(0) { ($0 << 8) | Int($1) }
+    }
+
+    // Check framing before passing untrusted device output to the platform decoder.
+    // Image decoding (including compressed pixel data) remains the app's responsibility.
+    private static func hasCompletePNGChunks(_ data: Data) -> Bool {
+        data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            var offset = 8
+            var hasImageData = false
+            while offset <= bytes.count - 12 {
+                let length = (0..<4).reduce(0) { ($0 << 8) | Int(bytes[offset + $1]) }
+                guard length <= bytes.count - offset - 12 else { return false }
+                let type = Array(bytes[(offset + 4)..<(offset + 8)])
+                if offset == 8 {
+                    guard type == Array("IHDR".utf8), length == 13 else { return false }
+                } else if type == Array("IHDR".utf8) {
+                    return false
+                }
+                if type == Array("IDAT".utf8), length > 0 { hasImageData = true }
+                if type == Array("IEND".utf8) {
+                    return length == 0 && hasImageData && offset + 12 == bytes.count
+                }
+                offset += length + 12
+            }
+            return false
+        }
     }
 }
 
