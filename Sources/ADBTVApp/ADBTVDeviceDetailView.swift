@@ -236,7 +236,7 @@ private enum DeviceTool: String, CaseIterable, Identifiable {
 
 }
 
-private struct DeviceHeader: View {
+struct DeviceHeader: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var device: ADBTVDeviceSummary

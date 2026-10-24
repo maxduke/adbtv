@@ -118,7 +118,7 @@ struct APKInstallPanel: View {
     }
 }
 
-private struct InstallStatusView: View {
+struct InstallStatusView: View {
     var status: ADBTVInstallStatus
 
     var body: some View {
